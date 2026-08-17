@@ -11,36 +11,36 @@ export type Database = {
     Tables: {
       TemplatesEngenharia: {
         Row: {
-          id: string
-          nome_template: string
           categoria: string | null
-          dimensoes: string | null
-          material: string | null
-          descricao: string | null
-          icon_type: string | null
           created_at: string
+          descricao: string | null
+          dimensoes: string | null
+          icon_type: string
+          id: string
+          material: string | null
+          nome_template: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          nome_template: string
           categoria?: string | null
-          dimensoes?: string | null
-          material?: string | null
-          descricao?: string | null
-          icon_type?: string | null
           created_at?: string
+          descricao?: string | null
+          dimensoes?: string | null
+          icon_type?: string
+          id?: string
+          material?: string | null
+          nome_template: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          nome_template?: string
           categoria?: string | null
-          dimensoes?: string | null
-          material?: string | null
-          descricao?: string | null
-          icon_type?: string | null
           created_at?: string
+          descricao?: string | null
+          dimensoes?: string | null
+          icon_type?: string
+          id?: string
+          material?: string | null
+          nome_template?: string
           updated_at?: string
         }
         Relationships: []

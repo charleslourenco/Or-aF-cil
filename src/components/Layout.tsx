@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard,
-  FileSpreadsheet,
   Users,
   Layers,
   Settings,
@@ -14,7 +13,8 @@ import {
   LogOut,
   FolderGit2,
   Bell,
-  Sparkles,
+  BookOpen,
+  Wallet,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -38,17 +38,13 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { name: 'Visão Geral', href: '/orcamentos', icon: LayoutDashboard },
-  {
-    name: 'Novo Orçamento',
-    href: '/',
-    icon: PlusCircle,
-    isPrimaryAction: true,
-  },
-  { name: 'Orçamentos', href: '/orcamentos', icon: FileSpreadsheet, badge: '3' },
-  { name: 'Clientes', href: '/orcamentos', icon: Users },
-  { name: 'Módulos / Biblioteca', href: '/biblioteca', icon: Layers },
-  { name: 'Configurações', href: '/orcamentos', icon: Settings },
+  { name: 'Painel de Orçamentos', href: '/', icon: LayoutDashboard },
+  { name: 'Novo Orçamento', href: '/novo-orcamento', icon: PlusCircle },
+  { name: 'Biblioteca de Módulos', href: '/biblioteca', icon: Layers },
+  { name: 'Catálogo de Materiais', href: '/catalogo', icon: BookOpen },
+  { name: 'Engenharia Financeira', href: '/engenharia-financeira', icon: Wallet },
+  { name: 'Configurações', href: '/configuracoes', icon: Settings },
+  { name: 'Usuários', href: '/usuarios', icon: Users },
 ]
 
 export default function Layout() {
@@ -153,7 +149,7 @@ export default function Layout() {
           {/* Quick Action Banner */}
           <div className="p-4 pb-2">
             <Link
-              to="/"
+              to="/novo-orcamento"
               onClick={() => setMobileMenuOpen(false)}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all hover:shadow-lg hover:shadow-emerald-600/30 active:scale-[0.98]"
             >
@@ -209,19 +205,6 @@ export default function Layout() {
                 </Link>
               )
             })}
-
-            <div className="pt-4 px-3 py-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-              Biblioteca & Materiais
-            </div>
-
-            <Link
-              to="/biblioteca"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 transition-all"
-            >
-              <Sparkles className="w-4 h-4 text-emerald-600" />
-              <span>Padrões MDF 18mm</span>
-            </Link>
           </nav>
 
           {/* User Footer inside Sidebar */}
