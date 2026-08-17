@@ -48,6 +48,12 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
     setInternalError(null)
     if (onClearError) onClearError()
 
+    // Libera a URL de preview anterior (blob) quando o arquivo é substituído,
+    // evitando vazamento de memória.
+    if (uploadedFile?.previewUrl && uploadedFile.previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(uploadedFile.previewUrl)
+    }
+
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf']
     const isImage = file.type.startsWith('image/')
     const isPdf = file.type === 'application/pdf'
@@ -195,13 +201,13 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
             {/* Preview Area */}
             <div className="my-auto py-4 w-full flex flex-col items-center justify-center">
               {uploadedFile.previewUrl ? (
-                <div className="relative group w-full max-w-[280px] aspect-[4/3] rounded-xl overflow-hidden shadow-md border border-slate-200 bg-slate-100">
+                <div className="relative group w-full h-full min-h-[240px] rounded-xl overflow-hidden shadow-md border border-slate-200 bg-slate-100 flex items-center justify-center">
                   <img
                     src={uploadedFile.previewUrl}
                     alt="Preview do projeto do cliente"
-                    className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
+                    className="w-full h-full max-h-[340px] object-contain transition-transform group-hover:scale-105 duration-300"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3 pointer-events-none">
                     <span className="text-white text-[11px] font-medium flex items-center gap-1">
                       <ImageIcon className="w-3.5 h-3.5" /> Croqui / Foto Original
                     </span>

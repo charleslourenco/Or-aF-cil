@@ -1,31 +1,21 @@
 import React from 'react'
-import {
-  Sparkles,
-  CheckCircle,
-  HelpCircle,
-  Maximize2,
-  Box,
-  Layers,
-  Ruler,
-  FileCheck,
-} from 'lucide-react'
+import { CheckCircle, HelpCircle, Maximize2, Box, Layers, Ruler, FileCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ModuleBlueprint } from './ModuleBlueprint'
-import { LIBRARY_MODULES, LibraryModule } from '@/data/mockData'
+import { TemplateEngenharia, normalizeIconType } from '@/services/templates'
 import { cn } from '@/lib/utils'
 
 interface LibraryMatchCardProps {
-  selectedModuleId: string
+  /** Módulo selecionado dinamicamente (do Supabase). `null` = estado padrão. */
+  selectedModule: TemplateEngenharia | null
   onOpenLibraryModal?: () => void
 }
 
 export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
-  selectedModuleId,
+  selectedModule,
   onOpenLibraryModal,
 }) => {
-  const currentModule: LibraryModule | undefined = LIBRARY_MODULES[selectedModuleId]
-
-  const isMatched = !!currentModule
+  const isMatched = !!selectedModule
 
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl border border-slate-200 p-6 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
@@ -61,28 +51,34 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
         )}
       </div>
 
-      {/* Visual Blueprint Representation */}
-      <div className="my-4 w-full">
-        <ModuleBlueprint
-          type={currentModule ? currentModule.iconType : 'empty'}
-          className="shadow-inner"
-        />
-      </div>
-
-      {/* Module Technical Metadata */}
       {isMatched ? (
-        <div className="flex-1 flex flex-col justify-between space-y-4 animate-fade-in">
+        <div className="flex-1 flex flex-col justify-between space-y-4 pt-4 animate-fade-in">
+          {/* Visual Blueprint Representation — placeholder visual do módulo base */}
+          <div className="w-full">
+            <ModuleBlueprint
+              type={normalizeIconType(selectedModule?.icon_type)}
+              className="shadow-inner"
+            />
+          </div>
+
+          {/* Nome do template selecionado no topo da área de detalhes */}
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-base font-bold text-slate-900">{currentModule.name}</h4>
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700">
-                {currentModule.category}
-              </span>
+              <h4 className="text-base font-bold text-slate-900">
+                {selectedModule?.nome_template}
+              </h4>
+              {selectedModule?.categoria && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700">
+                  {selectedModule.categoria}
+                </span>
+              )}
             </div>
 
-            <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              {currentModule.description}
-            </p>
+            {selectedModule?.descricao && (
+              <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                {selectedModule.descricao}
+              </p>
+            )}
           </div>
 
           {/* Technical Specs Pill Grid */}
@@ -94,7 +90,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                   Dimensões (AxLxP)
                 </span>
                 <span className="font-mono font-bold text-slate-800 text-[11px] truncate block">
-                  {currentModule.dimensions}
+                  {selectedModule?.dimensoes || '—'}
                 </span>
               </div>
             </div>
@@ -107,9 +103,9 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                 </span>
                 <span
                   className="font-medium text-slate-800 text-[11px] truncate block"
-                  title={currentModule.material}
+                  title={selectedModule?.material || ''}
                 >
-                  {currentModule.material}
+                  {selectedModule?.material || '—'}
                 </span>
               </div>
             </div>
@@ -120,6 +116,17 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
             <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>Inclui plano de corte paramétrico e cálculo automático de fita de borda.</span>
           </div>
+
+          {onOpenLibraryModal && (
+            <button
+              type="button"
+              onClick={onOpenLibraryModal}
+              className="self-start inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              Ver biblioteca completa
+            </button>
+          )}
         </div>
       ) : (
         /* Unmatched / Placeholder state */
@@ -131,8 +138,8 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
             Selecione um módulo para identificar o match
           </h4>
           <p className="text-xs text-slate-400 max-w-[260px] mt-1">
-            Escolha no cabeçalho acima (Ex: Roupeiro 2 Portas, Balcão ou Aéreo) para carregar os
-            parâmetros técnicos.
+            Escolha um módulo no cabeçalho acima para carregar os parâmetros técnicos da biblioteca
+            de engenharia.
           </p>
         </div>
       )}

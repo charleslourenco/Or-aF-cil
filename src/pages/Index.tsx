@@ -4,7 +4,6 @@ import {
   User,
   Home,
   Box,
-  Layers,
   Sparkles,
   ArrowDown,
   ArrowRight,
@@ -29,9 +28,13 @@ import { CustomerDropzone, UploadedFileState } from '@/components/CustomerDropzo
 import { LibraryMatchCard } from '@/components/LibraryMatchCard'
 import { PricingTable } from '@/components/PricingTable'
 import { FinalizeQuoteModal } from '@/components/FinalizeQuoteModal'
-import { LIBRARY_MODULES, BudgetItem } from '@/data/mockData'
+import { BudgetItem } from '@/data/mockData'
+import { fetchTemplatesEngenharia, TemplateEngenharia } from '@/services/templates'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+
+// Ambientes permitidos no Select (array estático conforme especificação).
+const AMBIENTES = ['Cozinha', 'Quarto', 'Sala', 'Banheiro']
 
 export default function Index() {
   const [searchParams] = useSearchParams()
@@ -40,7 +43,11 @@ export default function Index() {
   // Form Identification Header state
   const [clientName, setClientName] = useState('')
   const [room, setRoom] = useState('')
-  const [selectedModule, setSelectedModule] = useState<string>('')
+  const [selectedModuleId, setSelectedModuleId] = useState<string>('')
+
+  // Módulos disponíveis — fetch 100% dinâmico do Supabase (tabela TemplatesEngenharia)
+  const [modulosDisponiveis, setModulosDisponiveis] = useState<TemplateEngenharia[]>([])
+  const [loadingModulos, setLoadingModulos] = useState<boolean>(true)
 
   // Upload state
   const [uploadedFile, setUploadedFile] = useState<UploadedFileState | null>(null)
@@ -58,7 +65,7 @@ export default function Index() {
   const [showResults, setShowResults] = useState(false)
 
   // Pricing Table Items state
-  // Pre-load default 2 mock rows as requested by user specification
+  // Pre-load default 2 mock rows as requested by user specification (mantida estática).
   const [pricingItems, setPricingItems] = useState<BudgetItem[]>([
     {
       id: 'item-1',
@@ -85,16 +92,41 @@ export default function Index() {
   const topRef = useRef<HTMLDivElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
 
-  // Query parameter pre-fill support (e.g. ?modulo=roupeiro-2-portas)
+  // FETCH REAL DO SUPABASE — carrega os módulos da tabela TemplatesEngenharia.
   useEffect(() => {
-    const modParam = searchParams.get('modulo')
-    if (modParam && LIBRARY_MODULES[modParam]) {
-      setSelectedModule(modParam)
-      if (modParam === 'roupeiro-2-portas') setRoom('Quarto')
-      if (modParam === 'balcao') setRoom('Cozinha')
-      if (modParam === 'aereo') setRoom('Cozinha')
+    let active = true
+    setLoadingModulos(true)
+
+    fetchTemplatesEngenharia()
+      .then((modulos) => {
+        if (!active) return
+        setModulosDisponiveis(modulos)
+
+        // Suporte a pré-preenchimento via query param ?modulo=<id>
+        const modParam = searchParams.get('modulo')
+        if (modParam) {
+          const encontrado = modulos.find((m) => m.id === modParam)
+          if (encontrado) {
+            setSelectedModuleId(encontrado.id)
+          }
+        }
+      })
+      .catch((err) => {
+        // Erro de fetch já é logado via console.error no serviço.
+        console.error('Falha ao carregar módulos disponíveis:', err)
+      })
+      .finally(() => {
+        if (active) setLoadingModulos(false)
+      })
+
+    return () => {
+      active = false
     }
   }, [searchParams])
+
+  // Objeto do módulo selecionado (id + nome_template) derivado do estado dinâmico.
+  const selectedModuleObj: TemplateEngenharia | null =
+    modulosDisponiveis.find((m) => m.id === selectedModuleId) ?? null
 
   // Clear errors when fields update
   const handleClientNameChange = (val: string) => {
@@ -112,33 +144,19 @@ export default function Index() {
   }
 
   const handleModuleChange = (val: string) => {
-    setSelectedModule(val)
+    setSelectedModuleId(val)
     if (errors.selectedModule) {
       setErrors((prev) => ({ ...prev, selectedModule: undefined }))
     }
 
-    // Auto update room if empty based on module default
-    if (!room) {
-      if (val === 'roupeiro-2-portas') setRoom('Quarto')
-      if (val === 'balcao') setRoom('Cozinha')
-      if (val === 'aereo') setRoom('Cozinha')
-    }
-
-    // If results are already showing, reload parts for selected module
-    if (showResults && LIBRARY_MODULES[val]) {
-      const parts = LIBRARY_MODULES[val].defaultParts.map((p, idx) => {
-        const totalCost = p.unitCost * p.quantity
-        const salePrice = totalCost * (1 + p.markup / 100)
-        return {
-          id: `part-${Date.now()}-${idx}`,
-          description: p.description,
-          unitCost: p.unitCost,
-          totalCost: totalCost,
-          markup: p.markup,
-          salePrice: Number(salePrice.toFixed(2)),
-        }
-      })
-      setPricingItems(parts)
+    // Auto-preenche o ambiente quando vazio, com base na categoria do módulo.
+    const modulo = modulosDisponiveis.find((m) => m.id === val)
+    if (!room && modulo?.categoria) {
+      const cat = modulo.categoria.toLowerCase()
+      if (cat.includes('quarto')) setRoom('Quarto')
+      else if (cat.includes('cozinha')) setRoom('Cozinha')
+      else if (cat.includes('sala')) setRoom('Sala')
+      else if (cat.includes('banheiro')) setRoom('Banheiro')
     }
   }
 
@@ -166,7 +184,7 @@ export default function Index() {
       newErrors.room = 'Selecione o ambiente do projeto'
     }
 
-    if (!selectedModule) {
+    if (!selectedModuleId) {
       newErrors.selectedModule = 'Selecione um módulo da biblioteca'
     }
 
@@ -191,23 +209,6 @@ export default function Index() {
     setTimeout(() => {
       setIsGenerating(false)
       setShowResults(true)
-
-      // If user selected a specific module, update the table parts or keep mock
-      if (selectedModule && LIBRARY_MODULES[selectedModule]) {
-        const parts = LIBRARY_MODULES[selectedModule].defaultParts.map((p, idx) => {
-          const totalCost = p.unitCost * p.quantity
-          const salePrice = totalCost * (1 + p.markup / 100)
-          return {
-            id: `part-${Date.now()}-${idx}`,
-            description: p.description,
-            unitCost: p.unitCost,
-            totalCost: totalCost,
-            markup: p.markup,
-            salePrice: Number(salePrice.toFixed(2)),
-          }
-        })
-        setPricingItems(parts)
-      }
 
       toast({
         title: 'Orçamento Gerado com Sucesso!',
@@ -269,7 +270,7 @@ export default function Index() {
 
   // Action: "+ Adicionar Outro Módulo"
   const handleAddAnotherModule = () => {
-    setSelectedModule('')
+    setSelectedModuleId('')
     setUploadedFile(null)
     setErrors({})
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -304,8 +305,7 @@ export default function Index() {
     navigate('/orcamentos')
   }
 
-  const currentModuleName =
-    LIBRARY_MODULES[selectedModule]?.name || (selectedModule ? selectedModule : 'Módulo Padrão')
+  const currentModuleName = selectedModuleObj?.nome_template || 'Módulo Padrão'
 
   return (
     <div ref={topRef} className="space-y-8 pb-20">
@@ -396,12 +396,11 @@ export default function Index() {
                   <SelectValue placeholder="Selecione o ambiente" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl">
-                  <SelectItem value="Cozinha">Cozinha</SelectItem>
-                  <SelectItem value="Quarto">Quarto</SelectItem>
-                  <SelectItem value="Sala">Sala de Estar / Jantar</SelectItem>
-                  <SelectItem value="Banheiro">Banheiro</SelectItem>
-                  <SelectItem value="Home Office">Home Office</SelectItem>
-                  <SelectItem value="Lavanderia">Lavanderia</SelectItem>
+                  {AMBIENTES.map((amb) => (
+                    <SelectItem key={amb} value={amb}>
+                      {amb}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               {errors.room && (
@@ -412,7 +411,7 @@ export default function Index() {
               )}
             </div>
 
-            {/* Select: Módulo */}
+            {/* Select: Módulo — 100% dinâmico do Supabase */}
             <div className="space-y-1.5">
               <label
                 htmlFor="moduleSelect"
@@ -421,7 +420,7 @@ export default function Index() {
                 <Box className="w-3.5 h-3.5 text-emerald-600" />
                 Módulo da Biblioteca <span className="text-rose-500">*</span>
               </label>
-              <Select value={selectedModule} onValueChange={handleModuleChange}>
+              <Select value={selectedModuleId} onValueChange={handleModuleChange}>
                 <SelectTrigger
                   id="moduleSelect"
                   className={cn(
@@ -431,14 +430,21 @@ export default function Index() {
                       : 'border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20',
                   )}
                 >
-                  <SelectValue placeholder="Selecione o módulo" />
+                  <SelectValue
+                    placeholder={loadingModulos ? 'Carregando módulos...' : 'Selecione o módulo'}
+                  />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl">
-                  <SelectItem value="roupeiro-2-portas">
-                    Roupeiro 2 Portas (Linha Clássica)
-                  </SelectItem>
-                  <SelectItem value="balcao">Balcão de Cozinha 2 Portas e Gavetas</SelectItem>
-                  <SelectItem value="aereo">Armário Aéreo Basculante 1 Porta</SelectItem>
+                  {modulosDisponiveis.length === 0 && !loadingModulos && (
+                    <div className="px-3 py-2 text-xs text-slate-500">
+                      Nenhum módulo disponível na biblioteca.
+                    </div>
+                  )}
+                  {modulosDisponiveis.map((modulo) => (
+                    <SelectItem key={modulo.id} value={modulo.id}>
+                      {modulo.nome_template}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               {errors.selectedModule && (
@@ -504,7 +510,7 @@ export default function Index() {
           {/* Right Column: Match da Biblioteca */}
           <div className="flex flex-col h-full">
             <LibraryMatchCard
-              selectedModuleId={selectedModule}
+              selectedModule={selectedModuleObj}
               onOpenLibraryModal={() => navigate('/biblioteca')}
             />
           </div>
