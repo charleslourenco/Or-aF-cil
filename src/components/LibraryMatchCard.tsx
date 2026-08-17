@@ -1,5 +1,16 @@
 import React from 'react'
-import { CheckCircle, HelpCircle, Maximize2, Box, Layers, Ruler, FileCheck } from 'lucide-react'
+import {
+  CheckCircle,
+  HelpCircle,
+  Maximize2,
+  Box,
+  Layers,
+  Ruler,
+  FileCheck,
+  Loader2,
+  Eye,
+  Sparkles,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ModuleBlueprint } from './ModuleBlueprint'
 import { TemplateEngenharia, normalizeIconType } from '@/services/templates'
@@ -8,11 +19,14 @@ import { cn } from '@/lib/utils'
 interface LibraryMatchCardProps {
   /** Módulo selecionado dinamicamente (do Supabase). `null` = estado padrão. */
   selectedModule: TemplateEngenharia | null
+  /** Quando true, exibe o esqueleto de análise da Lupa Lu em vez do conteúdo. */
+  isAnalyzing?: boolean
   onOpenLibraryModal?: () => void
 }
 
 export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
   selectedModule,
+  isAnalyzing = false,
   onOpenLibraryModal,
 }) => {
   const isMatched = !!selectedModule
@@ -34,7 +48,15 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
         </div>
 
         {/* Match Status Badge */}
-        {isMatched ? (
+        {isAnalyzing ? (
+          <Badge
+            variant="outline"
+            className="bg-violet-50 text-violet-700 border-violet-300 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0 shadow-2xs animate-fade-in"
+          >
+            <Loader2 className="w-3.5 h-3.5 text-violet-600 animate-spin" />
+            Analisando...
+          </Badge>
+        ) : isMatched ? (
           <Badge
             variant="outline"
             className="bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0 shadow-2xs animate-fade-in"
@@ -51,7 +73,42 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
         )}
       </div>
 
-      {isMatched ? (
+      {/* ESTADO DE ANÁLISE — esqueleto pulsante da Lupa Lu */}
+      {isAnalyzing ? (
+        <div className="flex-1 flex flex-col items-center justify-center text-center py-8 px-4">
+          {/* Ícone da lupa girando com halo */}
+          <div className="relative w-20 h-20 flex items-center justify-center mb-5">
+            <div className="absolute inset-0 rounded-full bg-violet-100 animate-ping opacity-60" />
+            <div className="absolute inset-2 rounded-full bg-violet-200/60 animate-pulse" />
+            <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
+              <Eye className="w-7 h-7 text-white" />
+            </div>
+          </div>
+
+          {/* Texto brilhante */}
+          <h4 className="text-sm sm:text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-emerald-600 to-violet-600 bg-[length:200%_auto] animate-[shimmer_2s_linear_infinite] flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-violet-500" />
+            👁️ Lupa Lu analisando perspectivas e buscando gabarito na biblioteca...
+          </h4>
+
+          <p className="text-xs text-slate-500 mt-2 max-w-[280px]">
+            Cruzando dimensões, materiais e perspectivas enviadas com os módulos cadastrados.
+          </p>
+
+          {/* Skeleton do conteúdo futuro */}
+          <div className="w-full mt-6 space-y-3">
+            <div className="h-28 rounded-xl bg-slate-100 animate-pulse" />
+            <div className="flex gap-2">
+              <div className="h-3 flex-1 rounded-full bg-slate-100 animate-pulse" />
+              <div className="h-3 flex-1 rounded-full bg-slate-100 animate-pulse" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="h-12 rounded-lg bg-slate-100 animate-pulse" />
+              <div className="h-12 rounded-lg bg-slate-100 animate-pulse" />
+            </div>
+          </div>
+        </div>
+      ) : isMatched ? (
         <div className="flex-1 flex flex-col justify-between space-y-4 pt-4 animate-fade-in">
           {/* Visual Blueprint Representation — placeholder visual do módulo base */}
           <div className="w-full">

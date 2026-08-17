@@ -5,7 +5,6 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
-  HelpCircle,
   Sparkles,
   Info,
   Image as ImageIcon,
@@ -22,20 +21,30 @@ export interface UploadedFileState {
 }
 
 interface CustomerDropzoneProps {
-  uploadedFile: UploadedFileState | null
-  onFileSelect: (fileState: UploadedFileState | null) => void
+  /** Múltiplas imagens enviadas pelo cliente. */
+  uploadedFiles: UploadedFileState[]
+  onFilesSelect: (files: UploadedFileState[] | null) => void
   error?: string | null
   onClearError?: () => void
 }
 
+const PERSPECTIVE_LABELS = [
+  { index: 0, label: 'Frente' },
+  { index: 1, label: 'Interno' },
+  { index: 2, label: 'Detalhe' },
+  { index: 3, label: 'Detalhe 2' },
+  { index: 4, label: 'Detalhe 3' },
+]
+
 export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
-  uploadedFile,
-  onFileSelect,
+  uploadedFiles,
+  onFilesSelect,
   error,
   onClearError,
 }) => {
   const [isDragOver, setIsDragOver] = useState(false)
   const [internalError, setInternalError] = useState<string | null>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const formatFileSize = (bytes: number): string => {
@@ -44,28 +53,19 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   }
 
-  const handleProcessFile = (file: File) => {
-    setInternalError(null)
-    if (onClearError) onClearError()
-
-    // Libera a URL de preview anterior (blob) quando o arquivo é substituído,
-    // evitando vazamento de memória.
-    if (uploadedFile?.previewUrl && uploadedFile.previewUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(uploadedFile.previewUrl)
-    }
-
+  const buildFileState = (file: File): UploadedFileState | null => {
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf']
     const isImage = file.type.startsWith('image/')
     const isPdf = file.type === 'application/pdf'
 
     if (!validTypes.includes(file.type) && !file.name.match(/\.(png|jpe?g|webp|pdf)$/i)) {
-      setInternalError('Formato de arquivo não suportado. Use PNG, JPG ou PDF.')
-      return
+      setInternalError(`Formato não suportado: ${file.name}. Use PNG, JPG, WEBP ou PDF.`)
+      return null
     }
 
     if (file.size > 25 * 1024 * 1024) {
-      setInternalError('Arquivo muito grande. O limite máximo é de 25MB.')
-      return
+      setInternalError(`Arquivo muito grande: ${file.name}. O limite máximo é de 25MB.`)
+      return null
     }
 
     let previewUrl: string | null = null
@@ -73,13 +73,39 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
       previewUrl = URL.createObjectURL(file)
     }
 
-    onFileSelect({
+    return {
       file,
       previewUrl,
       name: file.name,
       sizeFormatted: formatFileSize(file.size),
       isPdf,
+    }
+  }
+
+  const handleProcessFiles = (fileList: FileList | File[]) => {
+    setInternalError(null)
+    if (onClearError) onClearError()
+
+    const incoming = Array.from(fileList)
+    const valid: UploadedFileState[] = []
+
+    // Libera blobs antigos antes de substituir
+    uploadedFiles.forEach((f) => {
+      if (f.previewUrl && f.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(f.previewUrl)
+      }
     })
+
+    for (const file of incoming) {
+      const state = buildFileState(file)
+      if (state) valid.push(state)
+    }
+
+    if (valid.length > 0) {
+      onFilesSelect(valid)
+      setActiveIndex(0)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
   }
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
@@ -104,179 +130,293 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
     e.preventDefault()
     e.stopPropagation()
     setIsDragOver(false)
-
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleProcessFile(e.dataTransfer.files[0])
+      handleProcessFiles(e.dataTransfer.files)
     }
   }
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      handleProcessFile(e.target.files[0])
+      handleProcessFiles(e.target.files)
     }
   }
 
-  const handleRemove = (e: React.MouseEvent) => {
+  const handleRemoveAll = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (uploadedFile?.previewUrl) {
-      URL.revokeObjectURL(uploadedFile.previewUrl)
-    }
-    onFileSelect(null)
+    uploadedFiles.forEach((f) => {
+      if (f.previewUrl && f.previewUrl.startsWith('blob:')) URL.revokeObjectURL(f.previewUrl)
+    })
+    onFilesSelect(null)
+    setActiveIndex(0)
     setInternalError(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // Sample quick test image loader
+  const handleRemoveOne = (e: React.MouseEvent, index: number) => {
+    e.stopPropagation()
+    const target = uploadedFiles[index]
+    if (target?.previewUrl && target.previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(target.previewUrl)
+    }
+    const next = uploadedFiles.filter((_, idx) => idx !== index)
+    onFilesSelect(next.length > 0 ? next : null)
+    setActiveIndex((prev) => (prev >= next.length ? Math.max(0, next.length - 1) : prev))
+  }
+
+  const handleAddMore = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    fileInputRef.current?.click()
+  }
+
+  // Sample quick test image loader (múltiplas perspectivas)
   const handleLoadSample = (e: React.MouseEvent) => {
     e.stopPropagation()
     setInternalError(null)
     if (onClearError) onClearError()
-    onFileSelect({
-      file: null,
-      previewUrl: 'https://img.usecurling.com/p/800/600?q=wardrobe%20closet%20wood',
-      name: 'croqui_projeto_cliente_quarto.jpg',
-      sizeFormatted: '1.4 MB',
-      isPdf: false,
-    })
+
+    const samples: UploadedFileState[] = [
+      {
+        file: null,
+        previewUrl: 'https://img.usecurling.com/p/800/600?q=wardrobe%20closet%20wood',
+        name: 'frente_closet.jpg',
+        sizeFormatted: '1.4 MB',
+        isPdf: false,
+      },
+      {
+        file: null,
+        previewUrl: 'https://img.usecurling.com/p/600/600?q=wardrobe%20interior%20shelf',
+        name: 'interno_prateleiras.jpg',
+        sizeFormatted: '1.1 MB',
+        isPdf: false,
+      },
+      {
+        file: null,
+        previewUrl: 'https://img.usecurling.com/p/600/600?q=wood%20drawer%20detail',
+        name: 'detalhe_gaveta.jpg',
+        sizeFormatted: '0.9 MB',
+        isPdf: false,
+      },
+    ]
+
+    onFilesSelect(samples)
+    setActiveIndex(0)
   }
 
   const activeError = internalError || error
+  const hasFiles = uploadedFiles.length > 0
+  const mainFile = hasFiles ? uploadedFiles[Math.min(activeIndex, uploadedFiles.length - 1)] : null
 
   return (
     <div className="flex flex-col h-full">
-      {/* Hidden native input */}
+      {/* Hidden native input — agora aceita múltiplos arquivos */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+        multiple
         className="hidden"
         onChange={handleFileInputChange}
       />
 
       {/* Main Dropzone Box */}
       <div
-        onClick={() => !uploadedFile && fileInputRef.current?.click()}
+        onClick={() => !hasFiles && fileInputRef.current?.click()}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={cn(
-          'relative flex-1 min-h-[280px] rounded-2xl p-6 transition-all duration-200 flex flex-col items-center justify-center text-center cursor-pointer select-none',
+          'relative rounded-2xl p-6 transition-all duration-200 flex flex-col items-center justify-center text-center select-none',
           'border-2 border-dashed',
-          !uploadedFile &&
+          !hasFiles &&
             !isDragOver &&
             !activeError &&
-            'border-slate-300 bg-slate-50/50 hover:bg-slate-50 hover:border-emerald-500 hover:shadow-md',
+            'border-slate-300 bg-slate-50/50 hover:bg-slate-50 hover:border-emerald-500 hover:shadow-md cursor-pointer min-h-[280px]',
           isDragOver &&
-            'border-emerald-500 bg-emerald-50/70 shadow-lg scale-[1.01] ring-4 ring-emerald-500/20',
-          uploadedFile && 'border-emerald-500/50 bg-white cursor-default shadow-sm',
+            'border-emerald-500 bg-emerald-50/70 shadow-lg scale-[1.01] ring-4 ring-emerald-500/20 cursor-pointer',
+          hasFiles && 'border-emerald-500/50 bg-white cursor-default shadow-sm',
           activeError && 'border-rose-500 bg-rose-50/40 animate-[shake_0.3s_ease-in-out]',
         )}
       >
-        {/* With File state */}
-        {uploadedFile ? (
-          <div className="w-full h-full flex flex-col items-center justify-between animate-fade-in">
-            {/* Top Bar with Status and Remove Button */}
+        {hasFiles && mainFile ? (
+          <div className="w-full h-full flex flex-col animate-fade-in">
+            {/* Top Bar */}
             <div className="w-full flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <span className="flex h-2 w-2 rounded-full bg-emerald-500" />
                 <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
-                  Arquivo Carregado
+                  {uploadedFiles.length}{' '}
+                  {uploadedFiles.length === 1 ? 'imagem carregada' : 'imagens carregadas'}
                 </span>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handleRemove}
-                className="h-8 px-2.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-medium rounded-lg"
-              >
-                <X className="w-3.5 h-3.5 mr-1" />
-                Remover
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleAddMore}
+                  className="h-8 px-2.5 text-xs text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 font-medium rounded-lg"
+                >
+                  <UploadCloud className="w-3.5 h-3.5 mr-1" />
+                  Adicionar mais
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRemoveAll}
+                  className="h-8 px-2.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-medium rounded-lg"
+                >
+                  <X className="w-3.5 h-3.5 mr-1" />
+                  Limpar
+                </Button>
+              </div>
             </div>
 
-            {/* Preview Area */}
-            <div className="my-auto py-4 w-full flex flex-col items-center justify-center">
-              {uploadedFile.previewUrl ? (
-                <div className="relative group w-full h-full min-h-[240px] rounded-xl overflow-hidden shadow-md border border-slate-200 bg-slate-100 flex items-center justify-center">
+            {/* Preview principal em destaque */}
+            <div className="py-4 w-full">
+              <div className="relative group w-full rounded-xl overflow-hidden shadow-md border border-slate-200 bg-slate-100 flex items-center justify-center">
+                {mainFile.previewUrl ? (
                   <img
-                    src={uploadedFile.previewUrl}
-                    alt="Preview do projeto do cliente"
-                    className="w-full h-full max-h-[340px] object-contain transition-transform group-hover:scale-105 duration-300"
+                    src={mainFile.previewUrl}
+                    alt={`Preview ${activeIndex + 1}`}
+                    className="w-full max-h-[320px] object-contain transition-transform group-hover:scale-105 duration-300"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3 pointer-events-none">
-                    <span className="text-white text-[11px] font-medium flex items-center gap-1">
-                      <ImageIcon className="w-3.5 h-3.5" /> Croqui / Foto Original
-                    </span>
+                ) : mainFile.isPdf ? (
+                  <div className="w-24 h-28 rounded-xl bg-rose-50 border border-rose-200 flex flex-col items-center justify-center text-rose-600 shadow-sm my-6">
+                    <FileText className="w-10 h-10" />
+                    <span className="text-[11px] font-bold mt-1">PDF DOC</span>
                   </div>
-                </div>
-              ) : uploadedFile.isPdf ? (
-                <div className="w-24 h-28 rounded-xl bg-rose-50 border border-rose-200 flex flex-col items-center justify-center text-rose-600 shadow-sm">
-                  <FileText className="w-10 h-10" />
-                  <span className="text-[11px] font-bold mt-1">PDF DOC</span>
-                </div>
-              ) : (
-                <div className="w-24 h-28 rounded-xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center text-slate-600 shadow-sm">
-                  <ImageIcon className="w-10 h-10" />
-                  <span className="text-[11px] font-bold mt-1">IMAGEM</span>
-                </div>
-              )}
+                ) : (
+                  <div className="w-24 h-28 rounded-xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center text-slate-600 shadow-sm my-6">
+                    <ImageIcon className="w-10 h-10" />
+                    <span className="text-[11px] font-bold mt-1">IMAGEM</span>
+                  </div>
+                )}
 
-              {/* File Info */}
-              <div className="mt-3 text-center max-w-full px-2">
-                <p
-                  className="text-sm font-semibold text-slate-800 truncate max-w-[260px] mx-auto"
-                  title={uploadedFile.name}
-                >
-                  {uploadedFile.name}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Tamanho: {uploadedFile.sizeFormatted} • Pronto para análise
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3 pointer-events-none">
+                  <span className="text-white text-[11px] font-medium flex items-center gap-1">
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    {PERSPECTIVE_LABELS[activeIndex]?.label ||
+                      `Perspectiva ${activeIndex + 1}`} •{' '}
+                    {mainFile.name}
+                  </span>
+                </div>
+
+                {/* Badge de índice */}
+                <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold">
+                  {activeIndex + 1} / {uploadedFiles.length}
+                </div>
+              </div>
+
+              {/* File info do ativo */}
+              <div className="mt-2 text-center">
+                <p className="text-xs text-slate-500">
+                  <span className="font-semibold text-slate-700">
+                    {PERSPECTIVE_LABELS[activeIndex]?.label || `Perspectiva ${activeIndex + 1}`}
+                  </span>
+                  {' • '}
+                  {mainFile.sizeFormatted}
                 </p>
               </div>
             </div>
+
+            {/* Grid de thumbnails */}
+            {uploadedFiles.length > 1 && (
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 pb-3">
+                {uploadedFiles.map((file, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveIndex(idx)
+                    }}
+                    className={cn(
+                      'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group/thumb',
+                      idx === activeIndex
+                        ? 'border-emerald-500 ring-2 ring-emerald-500/30 scale-[1.02]'
+                        : 'border-slate-200 hover:border-emerald-400 opacity-80 hover:opacity-100',
+                    )}
+                    title={`${PERSPECTIVE_LABELS[idx]?.label || `Perspectiva ${idx + 1}`} — ${file.name}`}
+                  >
+                    {file.previewUrl ? (
+                      <img
+                        src={file.previewUrl}
+                        alt={file.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-500">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                    )}
+
+                    {/* Label da perspectiva */}
+                    <span className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent text-white text-[9px] font-semibold py-0.5 px-1 truncate">
+                      {PERSPECTIVE_LABELS[idx]?.label || `P${idx + 1}`}
+                    </span>
+
+                    {/* Remover individual */}
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => handleRemoveOne(e, idx)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          handleRemoveOne(e as unknown as React.MouseEvent, idx)
+                        }
+                      }}
+                      className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity hover:bg-rose-700 cursor-pointer"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Ready Badge Footer */}
             <div className="w-full pt-2 flex items-center justify-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 py-2 rounded-lg border border-emerald-100 font-medium">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>Pronto para comparar com a biblioteca</span>
+              <span>
+                {uploadedFiles.length}{' '}
+                {uploadedFiles.length === 1 ? 'perspectiva pronta' : 'perspectivas prontas'} para
+                análise da Lupa Lu
+              </span>
             </div>
           </div>
         ) : isDragOver ? (
-          /* Drag Over Active State */
-          <div className="flex flex-col items-center justify-center text-emerald-700 animate-pulse">
+          <div className="flex flex-col items-center justify-center text-emerald-700 animate-pulse py-10">
             <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mb-3">
               <UploadCloud className="w-9 h-9 text-emerald-600" />
             </div>
             <h4 className="text-base font-bold">Solte para enviar</h4>
             <p className="text-xs text-emerald-600 mt-1">
-              Processando arquivo de projeto do cliente...
+              Processando imagens do projeto do cliente...
             </p>
           </div>
         ) : (
-          /* Default Empty State */
           <div className="flex flex-col items-center justify-center text-slate-600 py-4">
             <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4 text-emerald-600 group-hover:scale-110 transition-transform">
               <UploadCloud className="w-8 h-8" />
             </div>
 
             <h4 className="text-sm sm:text-base font-semibold text-slate-900 mb-1">
-              Arraste a foto/projeto ou clique para fazer upload
+              Arraste as fotos/projeto ou clique para fazer upload
             </h4>
 
-            <p className="text-xs text-slate-500 mb-3 max-w-[260px]">
-              Envie a foto do ambiente, desenho à mão ou projeto executivo do cliente
+            <p className="text-xs text-slate-500 mb-3 max-w-[280px]">
+              Envie múltiplas perspectivas (frente, interno, detalhes) para a Lupa Lu identificar o
+              módulo automaticamente
             </p>
 
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[11px] font-medium mb-4">
               <Info className="w-3.5 h-3.5 text-slate-400" />
-              Formatos aceitos: PNG, JPG, PDF (máx. 25MB)
+              Formatos aceitos: PNG, JPG, WEBP, PDF (máx. 25MB cada)
             </div>
 
-            {/* Quick action button */}
             <Button
               type="button"
               variant="outline"
@@ -290,19 +430,18 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
               Procurar no Computador
             </Button>
 
-            {/* Quick Sample trigger */}
             <button
               type="button"
               onClick={handleLoadSample}
-              className="mt-3 text-[11px] text-slate-400 hover:text-emerald-600 underline font-medium transition-colors"
+              className="mt-3 text-[11px] text-slate-400 hover:text-emerald-600 underline font-medium transition-colors inline-flex items-center gap-1"
             >
-              Usar foto de exemplo para teste rápido
+              <Sparkles className="w-3 h-3" />
+              Usar 3 fotos de exemplo para teste rápido
             </button>
           </div>
         )}
       </div>
 
-      {/* Error Message */}
       {activeError && (
         <div className="mt-2.5 flex items-center gap-2 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium animate-fade-in">
           <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-600" />

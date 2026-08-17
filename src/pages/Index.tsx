@@ -49,8 +49,12 @@ export default function Index() {
   const [modulosDisponiveis, setModulosDisponiveis] = useState<TemplateEngenharia[]>([])
   const [loadingModulos, setLoadingModulos] = useState<boolean>(true)
 
-  // Upload state
-  const [uploadedFile, setUploadedFile] = useState<UploadedFileState | null>(null)
+  // Upload state — agora suporta MÚLTIPLAS imagens (array de perspectivas)
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFileState[]>([])
+
+  // Estado de análise automática da "Lupa Lu" (simulação da chamada OpenAI)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const analyzeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Validation errors
   const [errors, setErrors] = useState<{
@@ -160,12 +164,63 @@ export default function Index() {
     }
   }
 
-  const handleFileSelect = (file: UploadedFileState | null) => {
-    setUploadedFile(file)
+  const handleFilesSelect = (files: UploadedFileState[] | null) => {
+    setUploadedFiles(files ?? [])
+
     if (errors.uploadedFile) {
       setErrors((prev) => ({ ...prev, uploadedFile: undefined }))
     }
+
+    // Limpa qualquer análise anterior pendente
+    if (analyzeTimeoutRef.current) {
+      clearTimeout(analyzeTimeoutRef.current)
+      analyzeTimeoutRef.current = null
+    }
+
+    // Sem arquivos ⇒ reset do estado de análise
+    if (!files || files.length === 0) {
+      setIsAnalyzing(false)
+      return
+    }
+
+    // 🔄 FLUXO DE MATCH AUTOMÁTICO (simulação da IA "Lupa Lu"):
+    // Dispara análise imediatamente após o upload concluir.
+    setIsAnalyzing(true)
+
+    // Limpa qualquer seleção manual anterior para o match automático tomar a frente.
+    // (A seleção manual é o "Plano B" — Select rebaixado no cabeçalho.)
+    // Não limamos aqui para preservar ajuste manual; o match só sobrescreve se vazio.
+    if (!selectedModuleId) {
+      // mantém selecionado se o usuário já ajustou manualmente
+    }
+
+    analyzeTimeoutRef.current = setTimeout(() => {
+      // Pega o primeiro módulo disponível no estado vindo do Supabase.
+      setModulosDisponiveis((currentModulos) => {
+        if (currentModulos.length > 0) {
+          // Só sobrescreve se não houver seleção manual prévia.
+          setSelectedModuleId((prevSel) => prevSel || currentModulos[0].id)
+        }
+        return currentModulos
+      })
+
+      setIsAnalyzing(false)
+      analyzeTimeoutRef.current = null
+
+      toast({
+        title: '✓ Match Automático Concluído!',
+        description:
+          'A Lupa Lu identificou o gabarito do módulo na biblioteca. Ajuste manual disponível no cabeçalho caso necessário.',
+      })
+    }, 3000)
   }
+
+  // Limpa o timeout pendente ao desmontar
+  useEffect(() => {
+    return () => {
+      if (analyzeTimeoutRef.current) clearTimeout(analyzeTimeoutRef.current)
+    }
+  }, [])
 
   // Action: "⚙️ Gerar Orçamento do Módulo"
   const handleGenerateBudget = () => {
@@ -188,8 +243,8 @@ export default function Index() {
       newErrors.selectedModule = 'Selecione um módulo da biblioteca'
     }
 
-    if (!uploadedFile) {
-      newErrors.uploadedFile = 'Envie a foto ou projeto do cliente para comparação'
+    if (uploadedFiles.length === 0) {
+      newErrors.uploadedFile = 'Envie ao menos uma foto ou projeto do cliente para comparação'
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -271,12 +326,17 @@ export default function Index() {
   // Action: "+ Adicionar Outro Módulo"
   const handleAddAnotherModule = () => {
     setSelectedModuleId('')
-    setUploadedFile(null)
+    setUploadedFiles([])
+    setIsAnalyzing(false)
+    if (analyzeTimeoutRef.current) {
+      clearTimeout(analyzeTimeoutRef.current)
+      analyzeTimeoutRef.current = null
+    }
     setErrors({})
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     toast({
       title: 'Pronto para novo módulo',
-      description: 'Selecione o próximo módulo e faça o upload do croqui.',
+      description: 'Faça o upload das fotos e a Lupa Lu identificará o módulo automaticamente.',
     })
   }
 
@@ -418,7 +478,7 @@ export default function Index() {
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
               >
                 <Box className="w-3.5 h-3.5 text-emerald-600" />
-                Módulo da Biblioteca <span className="text-rose-500">*</span>
+                Módulo Identificado (Ajuste Manual) <span className="text-rose-500">*</span>
               </label>
               <Select value={selectedModuleId} onValueChange={handleModuleChange}>
                 <SelectTrigger
@@ -492,8 +552,8 @@ export default function Index() {
 
             <div className="flex-1 min-h-[300px]">
               <CustomerDropzone
-                uploadedFile={uploadedFile}
-                onFileSelect={handleFileSelect}
+                uploadedFiles={uploadedFiles}
+                onFilesSelect={handleFilesSelect}
                 error={errors.uploadedFile}
                 onClearError={() => setErrors((prev) => ({ ...prev, uploadedFile: undefined }))}
               />
@@ -511,6 +571,7 @@ export default function Index() {
           <div className="flex flex-col h-full">
             <LibraryMatchCard
               selectedModule={selectedModuleObj}
+              isAnalyzing={isAnalyzing}
               onOpenLibraryModal={() => navigate('/biblioteca')}
             />
           </div>
