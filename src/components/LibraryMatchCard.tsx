@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   CheckCircle,
   HelpCircle,
@@ -10,8 +10,17 @@ import {
   Loader2,
   Eye,
   Sparkles,
+  Repeat2,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { ModuleBlueprint } from './ModuleBlueprint'
 import { TemplateEngenharia, normalizeIconType } from '@/services/templates'
 import { cn } from '@/lib/utils'
@@ -22,14 +31,24 @@ interface LibraryMatchCardProps {
   /** Quando true, exibe o esqueleto de análise da Lupa Lu em vez do conteúdo. */
   isAnalyzing?: boolean
   onOpenLibraryModal?: () => void
+  /** Lista de módulos disponíveis para o fallback manual "Trocar Módulo". */
+  modulosDisponiveis?: TemplateEngenharia[]
+  /** Id do módulo atualmente selecionado (para o select de troca). */
+  selectedModuleId?: string
+  /** Callback disparado ao escolher manualmente outro módulo. */
+  onModuleChange?: (id: string) => void
 }
 
 export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
   selectedModule,
   isAnalyzing = false,
   onOpenLibraryModal,
+  modulosDisponiveis = [],
+  selectedModuleId = '',
+  onModuleChange,
 }) => {
   const isMatched = !!selectedModule
+  const [showSwap, setShowSwap] = useState(false)
 
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl border border-slate-200 p-6 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
@@ -47,31 +66,81 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
           </p>
         </div>
 
-        {/* Match Status Badge */}
-        {isAnalyzing ? (
-          <Badge
-            variant="outline"
-            className="bg-violet-50 text-violet-700 border-violet-300 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0 shadow-2xs animate-fade-in"
-          >
-            <Loader2 className="w-3.5 h-3.5 text-violet-600 animate-spin" />
-            Analisando...
-          </Badge>
-        ) : isMatched ? (
-          <Badge
-            variant="outline"
-            className="bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0 shadow-2xs animate-fade-in"
-          >
-            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />✓ Match Encontrado
-          </Badge>
-        ) : (
-          <Badge
-            variant="outline"
-            className="bg-slate-100 text-slate-500 border-slate-200 font-medium text-xs px-2.5 py-1 rounded-full shrink-0"
-          >
-            Aguardando seleção
-          </Badge>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Botão de fallback: Trocar Módulo (manual) */}
+          {onModuleChange && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSwap((v) => !v)}
+              className={cn(
+                'h-8 px-2.5 text-[11px] font-semibold rounded-full border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs',
+                showSwap && 'bg-emerald-50 border-emerald-300 text-emerald-700',
+              )}
+            >
+              <Repeat2 className="w-3.5 h-3.5 mr-1" />
+              Trocar Módulo
+            </Button>
+          )}
+
+          {/* Match Status Badge */}
+          {isAnalyzing ? (
+            <Badge
+              variant="outline"
+              className="bg-violet-50 text-violet-700 border-violet-300 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-fade-in"
+            >
+              <Loader2 className="w-3.5 h-3.5 text-violet-600 animate-spin" />
+              Analisando...
+            </Badge>
+          ) : isMatched ? (
+            <Badge
+              variant="outline"
+              className="bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-fade-in"
+            >
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />✓ Match Encontrado
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="bg-slate-100 text-slate-500 border-slate-200 font-medium text-xs px-2.5 py-1 rounded-full"
+            >
+              Aguardando seleção
+            </Badge>
+          )}
+        </div>
       </div>
+
+      {/* Select inline de "Trocar Módulo" — força a escolha manual de outro gabarito. */}
+      {showSwap && onModuleChange && (
+        <div className="flex items-center gap-2 px-3 py-2.5 mt-3 mb-1 bg-emerald-50/60 border border-emerald-200 rounded-xl animate-fade-in">
+          <Box className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="text-[11px] font-semibold text-emerald-800 shrink-0 hidden sm:inline">
+            Selecionar manualmente:
+          </span>
+          <Select
+            value={selectedModuleId}
+            onValueChange={(v) => {
+              onModuleChange(v)
+              setShowSwap(false)
+            }}
+          >
+            <SelectTrigger className="h-9 rounded-lg text-xs flex-1 min-w-0 bg-white border-emerald-200">
+              <SelectValue placeholder="Escolha outro gabarito..." />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl">
+              {modulosDisponiveis.length === 0 && (
+                <div className="px-3 py-2 text-xs text-slate-500">Nenhum módulo disponível.</div>
+              )}
+              {modulosDisponiveis.map((modulo) => (
+                <SelectItem key={modulo.id} value={modulo.id}>
+                  {modulo.nome_template}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* ESTADO DE ANÁLISE — esqueleto pulsante da Lupa Lu */}
       {isAnalyzing ? (

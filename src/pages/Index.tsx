@@ -14,9 +14,16 @@ import {
   FileCheck2,
   HelpCircle,
   FileSpreadsheet,
+  Ruler,
+  ArrowUpDown,
+  Star,
+  Layers3,
+  Package,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   Select,
   SelectContent,
@@ -35,6 +42,11 @@ import { cn } from '@/lib/utils'
 
 // Ambientes permitidos no Select (array estático conforme especificação).
 const AMBIENTES = ['Cozinha', 'Quarto', 'Sala', 'Banheiro']
+
+// Opções de cor/padrão de MDF (lista de referência — catálogo comercial).
+const MDF_EXTERNO_CORES = ['Branco TX', 'Louro Freijó', 'Grafito', 'Carvalho']
+const MDF_INTERNO_CORES = ['Branco TX', 'Gianduia']
+const MDF_FUNDO_OPCOES = ['MDF 6mm Branco TX', 'MDF 3mm Branco']
 
 export default function Index() {
   const [searchParams] = useSearchParams()
@@ -91,6 +103,25 @@ export default function Index() {
 
   // Modal confirmation state
   const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false)
+
+  // 📐 DIMENSÕES REAIS DO MÓDULO (inputs manuais — defaults paramétricos).
+  const [dimensoes, setDimensoes] = useState({
+    largura: 1800,
+    altura: 2200,
+    profundidade: 600,
+  })
+
+  // 🎨 ESPECIFICAÇÃO DE MATERIAIS (acabamento do módulo).
+  const [padraoProjeto, setPadraoProjeto] = useState<'comercial' | 'premium'>('comercial')
+  const [mdfExterno, setMdfExterno] = useState<{ cor: string; espessura: 15 | 18 }>({
+    cor: 'Branco TX',
+    espessura: 18,
+  })
+  const [mdfInterno, setMdfInterno] = useState<{ cor: string; espessura: 15 | 18 }>({
+    cor: 'Branco TX',
+    espessura: 15,
+  })
+  const [mdfFundo, setMdfFundo] = useState<string>('MDF 6mm Branco TX')
 
   // Section references for scrolling
   const topRef = useRef<HTMLDivElement>(null)
@@ -573,7 +604,363 @@ export default function Index() {
               selectedModule={selectedModuleObj}
               isAnalyzing={isAnalyzing}
               onOpenLibraryModal={() => navigate('/biblioteca')}
+              modulosDisponiveis={modulosDisponiveis}
+              selectedModuleId={selectedModuleId}
+              onModuleChange={(id) => {
+                // Troca manual de gabarito: atualiza o card e reseta o estado de análise.
+                handleModuleChange(id)
+                setIsAnalyzing(false)
+                if (analyzeTimeoutRef.current) {
+                  clearTimeout(analyzeTimeoutRef.current)
+                  analyzeTimeoutRef.current = null
+                }
+                toast({
+                  title: 'Módulo trocado manualmente',
+                  description: 'Gabarito atualizado para o módulo escolhido.',
+                })
+              }}
             />
+          </div>
+        </div>
+      </section>
+
+      {/* 3a. PAINEL DE DIMENSÕES REAIS DO MÓDULO */}
+      <section aria-labelledby="dimensoes-heading" className="space-y-3">
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <Ruler className="w-4 h-4" />
+              </div>
+              <h3 id="dimensoes-heading" className="text-sm sm:text-base font-bold text-slate-900">
+                Dimensões Reais do Módulo
+              </h3>
+            </div>
+            <span className="text-xs text-slate-500">
+              Ajuste fino das medidas para o plano de corte
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
+            {/* Largura */}
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="dim-largura"
+                className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
+              >
+                <ArrowRight className="w-3.5 h-3.5 text-emerald-600" />
+                Largura (L)
+              </Label>
+              <div className="relative">
+                <Input
+                  id="dim-largura"
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  value={dimensoes.largura}
+                  onChange={(e) =>
+                    setDimensoes((prev) => ({
+                      ...prev,
+                      largura: Number(e.target.value) || 0,
+                    }))
+                  }
+                  className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 pr-12"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                  mm
+                </span>
+              </div>
+            </div>
+
+            {/* Altura */}
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="dim-altura"
+                className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5 text-emerald-600" />
+                Altura (A)
+              </Label>
+              <div className="relative">
+                <Input
+                  id="dim-altura"
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  value={dimensoes.altura}
+                  onChange={(e) =>
+                    setDimensoes((prev) => ({
+                      ...prev,
+                      altura: Number(e.target.value) || 0,
+                    }))
+                  }
+                  className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 pr-12"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                  mm
+                </span>
+              </div>
+            </div>
+
+            {/* Profundidade */}
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="dim-profundidade"
+                className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
+              >
+                <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
+                Profundidade (P)
+              </Label>
+              <div className="relative">
+                <Input
+                  id="dim-profundidade"
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  value={dimensoes.profundidade}
+                  onChange={(e) =>
+                    setDimensoes((prev) => ({
+                      ...prev,
+                      profundidade: Number(e.target.value) || 0,
+                    }))
+                  }
+                  className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 pr-12"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                  mm
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 3b. CARD DE ESPECIFICAÇÃO DE MATERIAIS */}
+      <section aria-labelledby="materiais-heading" className="space-y-3">
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <Layers3 className="w-4 h-4" />
+              </div>
+              <h3 id="materiais-heading" className="text-sm sm:text-base font-bold text-slate-900">
+                Especificação de Materiais
+              </h3>
+            </div>
+            <span className="text-xs text-slate-500">Acabamento e espessuras do MDF</span>
+          </div>
+
+          <div className="space-y-5 pt-4">
+            {/* Padrão do Projeto — Radio Cards visuais */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                Padrão do Projeto
+              </Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPadraoProjeto('comercial')}
+                  className={cn(
+                    'flex items-start gap-3 p-3 rounded-xl border text-left transition-all',
+                    padraoProjeto === 'comercial'
+                      ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20'
+                      : 'border-slate-200 hover:border-slate-300 bg-white',
+                  )}
+                >
+                  <Star
+                    className={cn(
+                      'w-5 h-5 mt-0.5 shrink-0',
+                      padraoProjeto === 'comercial'
+                        ? 'text-emerald-600 fill-emerald-500'
+                        : 'text-slate-300',
+                    )}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-slate-900">Padrão (Comercial)</div>
+                    <div className="text-[11px] text-slate-500 leading-snug">
+                      Materiais e acabamentos de mercado, custo otimizado.
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPadraoProjeto('premium')}
+                  className={cn(
+                    'flex items-start gap-3 p-3 rounded-xl border text-left transition-all',
+                    padraoProjeto === 'premium'
+                      ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20'
+                      : 'border-slate-200 hover:border-slate-300 bg-white',
+                  )}
+                >
+                  <div className="flex mt-0.5 shrink-0">
+                    <Star
+                      className={cn(
+                        'w-5 h-5',
+                        padraoProjeto === 'premium'
+                          ? 'text-emerald-600 fill-emerald-500'
+                          : 'text-slate-300',
+                      )}
+                    />
+                    <Star
+                      className={cn(
+                        'w-5 h-5 -ml-1',
+                        padraoProjeto === 'premium'
+                          ? 'text-emerald-600 fill-emerald-500'
+                          : 'text-slate-300',
+                      )}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-slate-900">Premium (Alto Padrão)</div>
+                    <div className="text-[11px] text-slate-500 leading-snug">
+                      Acabamentos nobres, ferragens e detalhamento superior.
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* MDF Externo */}
+            <div className="space-y-2 p-3 rounded-xl bg-slate-50/60 border border-slate-100">
+              <div className="flex items-center gap-1.5">
+                <Box className="w-4 h-4 text-emerald-600" />
+                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                  MDF Externo
+                </Label>
+                <span className="text-[11px] text-slate-400 font-normal">
+                  Frentes / caixaria vista
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold text-slate-500">Cor / Padrão</span>
+                  <Select
+                    value={mdfExterno.cor}
+                    onValueChange={(v) => setMdfExterno((prev) => ({ ...prev, cor: v }))}
+                  >
+                    <SelectTrigger className="h-10 rounded-lg text-sm bg-white border-slate-300">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      {MDF_EXTERNO_CORES.map((cor) => (
+                        <SelectItem key={cor} value={cor}>
+                          {cor}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold text-slate-500">Espessura</span>
+                  <ToggleGroup
+                    type="single"
+                    value={String(mdfExterno.espessura)}
+                    onValueChange={(v) =>
+                      v && setMdfExterno((prev) => ({ ...prev, espessura: Number(v) as 15 | 18 }))
+                    }
+                    className="justify-start bg-white border border-slate-300 rounded-lg p-1 h-10 w-full"
+                  >
+                    <ToggleGroupItem
+                      value="15"
+                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-emerald-600 data-[state=on]:text-white rounded-md"
+                    >
+                      15 mm
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="18"
+                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-emerald-600 data-[state=on]:text-white rounded-md"
+                    >
+                      18 mm
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+              </div>
+            </div>
+
+            {/* MDF Interno */}
+            <div className="space-y-2 p-3 rounded-xl bg-slate-50/60 border border-slate-100">
+              <div className="flex items-center gap-1.5">
+                <Layers3 className="w-4 h-4 text-emerald-600" />
+                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                  MDF Interno
+                </Label>
+                <span className="text-[11px] text-slate-400 font-normal">
+                  Prateleiras / divisórias / gavetas
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold text-slate-500">Cor / Padrão</span>
+                  <Select
+                    value={mdfInterno.cor}
+                    onValueChange={(v) => setMdfInterno((prev) => ({ ...prev, cor: v }))}
+                  >
+                    <SelectTrigger className="h-10 rounded-lg text-sm bg-white border-slate-300">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      {MDF_INTERNO_CORES.map((cor) => (
+                        <SelectItem key={cor} value={cor}>
+                          {cor}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold text-slate-500">Espessura</span>
+                  <ToggleGroup
+                    type="single"
+                    value={String(mdfInterno.espessura)}
+                    onValueChange={(v) =>
+                      v && setMdfInterno((prev) => ({ ...prev, espessura: Number(v) as 15 | 18 }))
+                    }
+                    className="justify-start bg-white border border-slate-300 rounded-lg p-1 h-10 w-full"
+                  >
+                    <ToggleGroupItem
+                      value="15"
+                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-emerald-600 data-[state=on]:text-white rounded-md"
+                    >
+                      15 mm
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="18"
+                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-emerald-600 data-[state=on]:text-white rounded-md"
+                    >
+                      18 mm
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+              </div>
+            </div>
+
+            {/* MDF Fundo */}
+            <div className="space-y-2 p-3 rounded-xl bg-slate-50/60 border border-slate-100">
+              <div className="flex items-center gap-1.5">
+                <Package className="w-4 h-4 text-emerald-600" />
+                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                  MDF Fundo
+                </Label>
+                <span className="text-[11px] text-slate-400 font-normal">
+                  Espessura / cor do fundo
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-semibold text-slate-500">Opção</span>
+                <Select value={mdfFundo} onValueChange={setMdfFundo}>
+                  <SelectTrigger className="h-10 rounded-lg text-sm bg-white border-slate-300">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {MDF_FUNDO_OPCOES.map((op) => (
+                      <SelectItem key={op} value={op}>
+                        {op}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
         </div>
       </section>
