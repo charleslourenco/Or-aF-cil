@@ -42,6 +42,7 @@ export async function fetchTemplatesEngenharia(): Promise<{
       'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual',
     )
     .order('nome_template')
+    .limit(100)
 
   if (error) {
     console.error('Erro ao buscar módulos da biblioteca (TemplatesEngenharia):', error)
