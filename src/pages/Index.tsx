@@ -40,6 +40,7 @@ import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { calcularBOM, custoConsolidado, valorConsolidado, type PadraoProjeto } from '@/lib/pricing'
 import { fetchCatalogoMateriais, type CatalogoMaterial } from '@/services/catalogo'
+import { supabase } from '@/lib/supabase/client'
 
 // Ambientes permitidos no Select (array estático conforme especificação).
 const AMBIENTES = ['Cozinha', 'Quarto', 'Sala', 'Banheiro']
@@ -289,74 +290,31 @@ export default function Index() {
   }
 
   /**
-   * Executa o match real via OpenAI GPT-4o Vision. Retorna o id do módulo
-   * encontrado e a justificativa, ou null em caso de falha.
+   * Executa o match via Edge Function 'analisar-imagem' do Supabase.
+   * Retorna o id do módulo encontrado e a justificativa.
    */
   const runOpenAIVisionMatch = async (
     fileState: UploadedFileState,
     modulos: TemplateEngenharia[],
-    apiKey: string,
   ): Promise<{ idModulo: string | null; justificativa: string }> => {
     // Converte a primeira imagem para Base64.
-    const base64Image = await fileToBase64(fileState)
+    const imagemBase64 = await fileToBase64(fileState)
 
-    // Constrói a lista de módulos como string para o prompt.
-    const listaModulos = modulos
-      .map((m) => {
-        const tags = m.assinatura_visual?.join(', ') ?? ''
-        return `ID: ${m.id} | Nome: ${m.nome_template} | Tags: ${tags}`
-      })
-      .join('\n')
-
-    const systemContent = `Você é um especialista em móveis sob medida. Analise a imagem anexada enviada pelo usuário e encontre o 'match' exato na biblioteca de módulos do sistema. A lista de módulos disponíveis é:\n\n${listaModulos}\n\nRetorne EXATAMENTE um objeto JSON válido no formato:\n{ "id_modulo_encontrado": "ID_EXATO_DA_LISTA", "justificativa": "Breve explicação do porquê este módulo corresponde à imagem" }\n\nNão inclua markdown, crases ou texto fora do JSON.`
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: systemContent },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Analise esta imagem de um projeto de marcenaria e identifique qual módulo da biblioteca corresponde a ela.',
-              },
-              {
-                type: 'image_url',
-                image_url: { url: base64Image },
-              },
-            ],
-          },
-        ],
-        max_tokens: 300,
-        temperature: 0.1,
-      }),
+    const { data, error } = await supabase.functions.invoke('analisar-imagem', {
+      body: { imagemBase64, modulos },
     })
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '')
-      throw new Error(`OpenAI respondeu ${response.status}. ${errText}`.trim())
+    if (error) {
+      throw new Error(error.message || 'Erro ao chamar função de análise de imagem.')
     }
 
-    const data = await response.json()
-    const rawContent: string = data?.choices?.[0]?.message?.content ?? ''
-
-    // Extrai o JSON mesmo se vier envolto em crases markdown.
-    const jsonMatch = rawContent.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error('Resposta da IA não continha um JSON válido.')
+    if (data?.error) {
+      throw new Error(data.error)
     }
 
-    const parsed = JSON.parse(jsonMatch[0])
-    const idModulo: string | null = parsed?.id_modulo_encontrado ?? null
+    const idModulo: string | null = data?.id_modulo_encontrado ?? null
     const justificativa: string =
-      parsed?.justificativa ?? 'Match identificado pela análise visual da IA.'
+      data?.justificativa ?? 'Match identificado pela análise visual da IA.'
 
     return { idModulo, justificativa }
   }
@@ -410,24 +368,12 @@ export default function Index() {
     const modulosAtuais = modulosDisponiveis
 
     // 🔄 FLUXO DE MATCH AUTOMÁTICO (Lupa Lu):
-    // Se houver API key configurada, dispara a chamada real ao GPT-4o Vision.
-    // Caso contrário, mantém o fallback mock de 3 segundos.
-    const apiKey = localStorage.getItem('openai_api_key')
-
-    if (!apiKey) {
-      runMockMatch(
-        modulosAtuais,
-        '⚠️ Configure a chave OpenAI em Configurações para ativar o reconhecimento visual real.',
-      )
-      return
-    }
-
-    // Fluxo real com GPT-4o Vision
+    // Chama a Edge Function 'analisar-imagem' do Supabase
     setIsAnalyzing(true)
 
     const primeiraImagem = files[0]
 
-    runOpenAIVisionMatch(primeiraImagem, modulosAtuais, apiKey)
+    runOpenAIVisionMatch(primeiraImagem, modulosAtuais)
       .then(({ idModulo, justificativa }) => {
         // Tenta encontrar o módulo pelo ID retornado; se não achar, busca
         // pelo nome; se ainda assim não achar, mantém o primeiro módulo.
@@ -455,11 +401,11 @@ export default function Index() {
         })
       })
       .catch((err) => {
-        console.error('Falha na análise visual da IA (GPT-4o):', err)
+        console.error('Falha na análise visual da IA (Edge Function):', err)
         // Fallback para o mock em caso de erro na chamada da IA.
         runMockMatch(
           modulosAtuais,
-          '⚠️ A IA falhou, mas o match manual está disponível. Verifique sua chave OpenAI em Configurações.',
+          '⚠️ A IA falhou, mas o match manual está disponível.',
           'destructive',
         )
       })

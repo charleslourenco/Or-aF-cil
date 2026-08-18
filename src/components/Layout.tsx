@@ -15,7 +15,10 @@ import {
   Bell,
   BookOpen,
   Wallet,
+  Sun,
+  Moon,
 } from 'lucide-react'
+import { useTheme } from '@/components/ThemeProvider'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -125,7 +128,7 @@ export default function Layout() {
       }
     }
     return {
-      title: 'Marcenaria Pro',
+      title: 'OrçaFácil',
       breadcrumb: 'Sistema',
       showBack: true,
       backHref: '/',
@@ -133,9 +136,10 @@ export default function Layout() {
   }
 
   const pageMeta = getPageMeta()
+  const { theme, setTheme } = useTheme()
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-[#0f172a] flex flex-col font-sans antialiased selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased selection:bg-emerald-100 selection:text-emerald-900 dark:selection:bg-emerald-900 dark:selection:text-emerald-100 transition-colors duration-200">
       {/* Mobile Drawer Backdrop */}
       {mobileMenuOpen && (
         <div
@@ -150,26 +154,26 @@ export default function Layout() {
         {/* Sidebar Desktop & Mobile Drawer */}
         <aside
           className={cn(
-            'fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200/80 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto shadow-sm',
+            'fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto shadow-sm',
             mobileMenuOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
           {/* Sidebar Header / Logo */}
-          <div className="h-16 px-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="h-16 px-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <Link
               to="/"
               className="flex items-center gap-3 group"
               onClick={() => setMobileMenuOpen(false)}
             >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-800 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
                 <Hammer className="w-5 h-5" />
               </div>
               <div className="flex flex-col">
-                <span className="font-bold text-base tracking-tight text-slate-900 group-hover:text-emerald-700 transition-colors flex items-center gap-1.5">
-                  Marcenaria Pro
+                <span className="font-bold text-base tracking-tight text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
+                  OrçaFácil
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 </span>
-                <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Módulos Sob Medida
                 </span>
               </div>
@@ -179,7 +183,7 @@ export default function Layout() {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(false)}
-              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 lg:hidden"
+              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden"
               aria-label="Fechar menu"
             >
               <X className="w-5 h-5" />
@@ -216,15 +220,17 @@ export default function Layout() {
                   className={cn(
                     'flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group',
                     active
-                      ? 'bg-emerald-50/80 text-emerald-800 font-semibold shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70',
+                      ? 'bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-400 font-semibold shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/70 dark:hover:bg-slate-800/60',
                   )}
                 >
                   <div className="flex items-center gap-3">
                     <Icon
                       className={cn(
                         'w-4 h-4 transition-colors',
-                        active ? 'text-emerald-600' : 'text-slate-400 group-hover:text-slate-600',
+                        active
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300',
                       )}
                     />
                     <span>{item.name}</span>
@@ -233,14 +239,14 @@ export default function Layout() {
                   {item.badge && (
                     <Badge
                       variant="secondary"
-                      className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full font-semibold"
+                      className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs px-2 py-0.5 rounded-full font-semibold"
                     >
                       {item.badge}
                     </Badge>
                   )}
 
                   {active && !item.badge && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   )}
                 </Link>
               )
@@ -248,31 +254,39 @@ export default function Layout() {
           </nav>
 
           {/* User Footer inside Sidebar */}
-          <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-            <div className="flex items-center justify-between">
+          <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-3 min-w-0">
-                <Avatar className="w-9 h-9 border border-slate-200">
+                <Avatar className="w-9 h-9 border border-slate-200 dark:border-slate-700">
                   <AvatarImage
                     src="https://img.usecurling.com/ppl/medium?gender=male&seed=42"
-                    alt="Marceneiro Responsável"
+                    alt="Charles Lourenço da Luz"
                   />
                   <AvatarFallback className="bg-emerald-600 text-white font-bold text-xs">
-                    MP
+                    CL
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold text-slate-800 truncate">
-                    Marcenaria Silva & Cia
+                  <p
+                    className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate"
+                    title="Charles Lourenço da Luz"
+                  >
+                    Charles Lourenço da Luz
                   </p>
-                  <p className="text-[11px] text-slate-500 truncate">Projetista Master</p>
+                  <p
+                    className="text-[11px] text-slate-500 dark:text-slate-400 truncate"
+                    title="Bender Haussform"
+                  >
+                    Bender Haussform
+                  </p>
                 </div>
               </div>
 
               <button
                 type="button"
-                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-white transition-colors"
+                className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-colors shrink-0"
                 title="Sair do sistema"
-                onClick={() => alert('Sessão ativa como Projetista Master.')}
+                onClick={() => alert('Sessão ativa como Charles Lourenço da Luz.')}
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -283,13 +297,13 @@ export default function Layout() {
         {/* Content Column */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Topbar */}
-          <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+          <header className="sticky top-0 z-30 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               {/* Mobile hamburger */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden text-slate-600 hover:text-slate-900"
+                className="lg:hidden text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                 onClick={() => setMobileMenuOpen(true)}
                 aria-label="Abrir menu"
               >
@@ -297,10 +311,10 @@ export default function Layout() {
               </Button>
 
               <div>
-                <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-medium">
                   <span>{pageMeta.breadcrumb}</span>
                 </div>
-                <h1 className="text-lg font-bold text-slate-900 tracking-tight leading-none mt-0.5">
+                <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none mt-0.5">
                   {pageMeta.title}
                 </h1>
               </div>
@@ -308,6 +322,21 @@ export default function Layout() {
 
             {/* Right Topbar actions */}
             <div className="flex items-center gap-2 sm:gap-3">
+              {/* Theme Toggle Selector (Sol/Lua) */}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="w-9 h-9 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg shadow-xs"
+                title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
+                aria-label="Alternar tema"
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <Moon className="w-4 h-4 text-slate-600" />
+                )}
+              </Button>
               {/* Active Project Selector */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -380,15 +409,17 @@ export default function Layout() {
           </main>
 
           {/* Global Footer */}
-          <footer className="border-t border-slate-200 bg-white py-4 px-6 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2 max-w-7xl mx-auto w-full">
+          <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-4 px-6 text-center text-xs text-slate-500 dark:text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2 max-w-7xl mx-auto w-full">
             <span>
-              © {new Date().getFullYear()} Marcenaria Pro — Sistema Especialista em Mobiliário Sob
+              © {new Date().getFullYear()} OrçaFácil — Sistema Especialista em Mobiliário Sob
               Medida.
             </span>
-            <div className="flex items-center gap-4 text-[11px] text-slate-400">
-              <span>Versão 2.4.0</span>
+            <div className="flex items-center gap-4 text-[11px] text-slate-400 dark:text-slate-500">
+              <span>Versão 3.0.0</span>
               <span>•</span>
-              <span className="text-emerald-600 font-medium">Sistema 100% Operacional</span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                Sistema 100% Operacional
+              </span>
             </div>
           </footer>
         </div>

@@ -57,44 +57,45 @@
   }
 
   .dark {
-    /* Change the colors to match the design system consistent with the dark mode */
-    --background: 222.2 84% 4.9%;
+    /* Gestor Bender - Modo Escuro (Slate 950 Fundo, Slate 900 Cards, Verde Esmeralda) */
+    --background: 222.2 84% 2%; /* slate-950 */
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
+    --card: 222.2 47.4% 11.2%; /* slate-900 */
     --card-foreground: 210 40% 98%;
 
-    --popover: 222.2 84% 4.9%;
+    --popover: 222.2 47.4% 11.2%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 84% 4.9%;
+    --primary: 160 84% 39%; /* emerald-500 */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%; /* slate-800 */
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 222.2 84% 4.9%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 222.2 84% 4.9%;
+    --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 222.2 84% 4.9%;
-    --input: 222.2 84% 4.9%;
-    --ring: 214.3 31.8% 91.4%;
-    --sidebar-background: 222.2 84% 4.9%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 222.2 84% 4.9%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222.2 84% 4.9%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222.2 84% 4.9%;
-    --sidebar-ring: 222.2 84% 4.9%;
+    --border: 217.2 32.6% 17.5%; /* slate-800 sutil */
+    --input: 217.2 32.6% 17.5%;
+    --ring: 160 84% 39%;
 
-    --chart-1: 270 100% 44%;
+    --sidebar-background: 222.2 47.4% 11.2%; /* slate-900 */
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 160 84% 39%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217.2 32.6% 17.5%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217.2 32.6% 17.5%;
+    --sidebar-ring: 160 84% 39%;
+
+    --chart-1: 160 84% 39%;
     --chart-2: 164 100% 38%;
     --chart-3: 43 100% 32%;
     --chart-4: 340 100% 50%;
