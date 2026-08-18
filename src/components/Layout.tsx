@@ -62,6 +62,14 @@ export default function Layout() {
   const getPageMeta = () => {
     if (location.pathname === '/') {
       return {
+        title: 'Painel de Orçamentos',
+        breadcrumb: 'Visão Geral / Painel',
+        showBack: false,
+        backHref: '/',
+      }
+    }
+    if (location.pathname === '/novo-orcamento') {
+      return {
         title: 'Novo Orçamento',
         breadcrumb: 'Orçamentos / Novo Orçamento',
         showBack: true,
@@ -81,6 +89,38 @@ export default function Layout() {
         title: 'Biblioteca de Módulos',
         breadcrumb: 'Sistema / Biblioteca de Módulos',
         showBack: true,
+        backHref: '/',
+      }
+    }
+    if (location.pathname === '/catalogo') {
+      return {
+        title: 'Catálogo de Materiais',
+        breadcrumb: 'Sistema / Catálogo de Materiais',
+        showBack: false,
+        backHref: '/',
+      }
+    }
+    if (location.pathname === '/engenharia-financeira') {
+      return {
+        title: 'Engenharia Financeira',
+        breadcrumb: 'Sistema / Engenharia Financeira',
+        showBack: false,
+        backHref: '/',
+      }
+    }
+    if (location.pathname === '/configuracoes') {
+      return {
+        title: 'Configurações',
+        breadcrumb: 'Sistema / Configurações',
+        showBack: false,
+        backHref: '/',
+      }
+    }
+    if (location.pathname === '/usuarios') {
+      return {
+        title: 'Usuários',
+        breadcrumb: 'Sistema / Usuários',
+        showBack: false,
         backHref: '/',
       }
     }

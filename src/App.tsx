@@ -6,10 +6,14 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import Index from './pages/Index'
 import QuotesListPage from './pages/QuotesListPage'
 import LibraryPage from './pages/LibraryPage'
+import DashboardPage from './pages/DashboardPage'
+import CatalogPage from './pages/CatalogPage'
+import EngineeringPage from './pages/EngineeringPage'
+import SettingsPage from './pages/SettingsPage'
+import UsersPage from './pages/UsersPage'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 
-// ONLY IMPORT AND RENDER WORKING PAGES, NEVER ADD PLACEHOLDER COMPONENTS OR PAGES IN THIS FILE
 // AVOID REMOVING ANY CONTEXT PROVIDERS FROM THIS FILE (e.g. TooltipProvider, Toaster, Sonner)
 
 const App = () => (
@@ -19,9 +23,14 @@ const App = () => (
       <Sonner />
       <Routes>
         <Route element={<Layout />}>
-          <Route path="/" element={<Index />} />
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/novo-orcamento" element={<Index />} />
           <Route path="/orcamentos" element={<QuotesListPage />} />
           <Route path="/biblioteca" element={<LibraryPage />} />
+          <Route path="/catalogo" element={<CatalogPage />} />
+          <Route path="/engenharia-financeira" element={<EngineeringPage />} />
+          <Route path="/configuracoes" element={<SettingsPage />} />
+          <Route path="/usuarios" element={<UsersPage />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
