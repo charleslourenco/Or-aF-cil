@@ -1,4 +1,5 @@
 import { BudgetItem } from '@/data/mockData'
+import type { CatalogoMaterial } from '@/services/catalogo'
 
 /**
  * Tipos de entrada para o motor de cálculo geométrico da BOM (Bill of Materials).
@@ -36,6 +37,83 @@ export const MARKUP_PADRAO = 2.5
 const PERDA = 1.2
 
 const round2 = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Mapa de categorias do catálogo → chaves de BOM (CUSTOS_UNITARIOS).
+ * Usado para fazer o lookup dos preços vindo do banco.
+ */
+const CATEGORIA_POR_BOM_KEY: Record<string, string> = {
+  'MDF Externo 18': 'MDF 18mm',
+  'MDF Externo 15': 'MDF 15mm',
+  'MDF Interno 15': 'MDF 15mm',
+  'MDF Interno 18': 'MDF 18mm',
+  'MDF Fundo 6': 'MDF 6mm',
+  'Fita de Borda': 'Fita de Borda',
+  Ferragens: 'Ferragem',
+}
+
+/** Converte o padrão do projeto (comercial/premium) para o nível do catálogo. */
+function nivelCatalogoParaPadrao(padraoProjeto: PadraoProjeto): string {
+  return padraoProjeto === 'premium' ? 'premium' : 'padrao'
+}
+
+/**
+ * Faz lookup do preço de um material no catálogo.
+ * Prioriza o `nivel_padrao` que bate com o `padraoProjeto`;
+ * se não encontrar, usa o primeiro item da categoria.
+ * Retorna `undefined` se a categoria não existir no catálogo.
+ */
+function lookupPrecoCatalogo(
+  catalogo: CatalogoMaterial[],
+  bomKey: string,
+  padraoProjeto: PadraoProjeto,
+): number | undefined {
+  const categoria = CATEGORIA_POR_BOM_KEY[bomKey]
+  if (!categoria) return undefined
+
+  const daCategoria = catalogo.filter((m) => m.categoria === categoria)
+  if (daCategoria.length === 0) return undefined
+
+  const nivelDesejado = nivelCatalogoParaPadrao(padraoProjeto)
+  const matchNivel = daCategoria.find((m) => m.nivel_padrao === nivelDesejado)
+  const escolhido = matchNivel ?? daCategoria[0]
+  return Number(escolhido.preco_custo)
+}
+
+/**
+ * Resolve o custo unitário de um item da BOM: primeiro tenta o catálogo
+ * (passado dinamicamente); se não encontrar, cai no fallback `CUSTOS_UNITARIOS`.
+ */
+function resolverCustoUnitario(
+  bomKey: string,
+  catalogoPrecos: CatalogoMaterial[] | undefined,
+  padraoProjeto: PadraoProjeto,
+): number {
+  if (catalogoPrecos && catalogoPrecos.length > 0) {
+    const preco = lookupPrecoCatalogo(catalogoPrecos, bomKey, padraoProjeto)
+    if (typeof preco === 'number' && !Number.isNaN(preco)) return preco
+  }
+  return CUSTOS_UNITARIOS[bomKey] ?? 0
+}
+
+/**
+ * Constrói um mapa simples `Record<string, number>` (chave de BOM → preço)
+ * a partir do catálogo. Útil para cenários que preferem um lookup direto por
+ * chave em vez do array completo. Prioriza o nível `padrao`.
+ *
+ * Exportado para que a tela de orçamento possa gerar o mapa de preços e
+ * inspecioná-lo/depurá-lo se necessário.
+ */
+export function buildCatalogoPriceMap(catalogo: CatalogoMaterial[]): Record<string, number> {
+  const map: Record<string, number> = {}
+  for (const bomKey of Object.keys(CATEGORIA_POR_BOM_KEY)) {
+    const daCategoria = catalogo.filter((m) => m.categoria === CATEGORIA_POR_BOM_KEY[bomKey])
+    if (daCategoria.length === 0) continue
+    const escolhido = daCategoria.find((m) => m.nivel_padrao === 'padrao') ?? daCategoria[0]
+    map[bomKey] = Number(escolhido.preco_custo)
+  }
+  return map
+}
 
 /**
  * Cria uma peça (item) da BOM já precificada.
@@ -86,6 +164,7 @@ export function calcularBOM(
   mdfInterno: MdfSpec,
   mdfFundo: string,
   padraoProjeto: PadraoProjeto,
+  catalogoPrecos?: CatalogoMaterial[],
 ): BudgetItem[] {
   // Validação: dimensões e módulo obrigatórios.
   if (!modulo || !dimensoes.largura || !dimensoes.altura || !dimensoes.profundidade) {
@@ -97,8 +176,6 @@ export function calcularBOM(
   const P = dimensoes.profundidade
   const espExt = mdfExterno.espessura
   const espInt = mdfInterno.espessura
-  // Reserva uso de padraoProjeto para futura variação de markup (sem efeito agora).
-  void padraoProjeto
 
   const pecas: BudgetItem[] = []
 
@@ -112,7 +189,7 @@ export function calcularBOM(
       espExt,
       areaLateral * 2,
       'm²',
-      CUSTOS_UNITARIOS[`MDF Externo ${espExt}`],
+      resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
     ),
   )
 
@@ -127,7 +204,7 @@ export function calcularBOM(
       espExt,
       areaBaseTopo * 2,
       'm²',
-      CUSTOS_UNITARIOS[`MDF Externo ${espExt}`],
+      resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
     ),
   )
 
@@ -142,7 +219,7 @@ export function calcularBOM(
       espInt,
       areaPrateleira * 2,
       'm²',
-      CUSTOS_UNITARIOS[`MDF Interno ${espInt}`],
+      resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
     ),
   )
 
@@ -156,7 +233,7 @@ export function calcularBOM(
       6,
       areaFundo,
       'm²',
-      CUSTOS_UNITARIOS['MDF Fundo 6'],
+      resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto),
     ),
   )
 
@@ -174,7 +251,7 @@ export function calcularBOM(
       0,
       perimetroFitaM,
       'm',
-      CUSTOS_UNITARIOS['Fita de Borda'],
+      resolverCustoUnitario('Fita de Borda', catalogoPrecos, padraoProjeto),
     ),
   )
 
@@ -187,7 +264,7 @@ export function calcularBOM(
       0,
       1,
       'jogo',
-      CUSTOS_UNITARIOS['Ferragens'],
+      resolverCustoUnitario('Ferragens', catalogoPrecos, padraoProjeto),
     ),
   )
 

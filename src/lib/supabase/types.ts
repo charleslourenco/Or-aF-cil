@@ -45,6 +45,42 @@ export type Database = {
         }
         Relationships: []
       }
+      CatalogoMateriais: {
+        Row: {
+          id: string
+          nome_material: string
+          categoria: string
+          unidade: string
+          preco_custo: number
+          nivel_padrao: string
+          ativo: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          nome_material: string
+          categoria: string
+          unidade: string
+          preco_custo: number
+          nivel_padrao?: string
+          ativo?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          nome_material?: string
+          categoria?: string
+          unidade?: string
+          preco_custo?: number
+          nivel_padrao?: string
+          ativo?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

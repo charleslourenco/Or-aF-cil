@@ -39,6 +39,7 @@ import { fetchTemplatesEngenharia, TemplateEngenharia } from '@/services/templat
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { calcularBOM, custoConsolidado, valorConsolidado, type PadraoProjeto } from '@/lib/pricing'
+import { fetchCatalogoMateriais, type CatalogoMaterial } from '@/services/catalogo'
 
 // Ambientes permitidos no Select (array estático conforme especificação).
 const AMBIENTES = ['Cozinha', 'Quarto', 'Sala', 'Banheiro']
@@ -60,6 +61,9 @@ export default function Index() {
   // Módulos disponíveis — fetch 100% dinâmico do Supabase (tabela TemplatesEngenharia)
   const [modulosDisponiveis, setModulosDisponiveis] = useState<TemplateEngenharia[]>([])
   const [loadingModulos, setLoadingModulos] = useState<boolean>(true)
+
+  // Catálogo de materiais (preços) — carregado do Supabase; fallback para CUSTOS_UNITARIOS.
+  const [catalogoMateriais, setCatalogoMateriais] = useState<CatalogoMaterial[]>([])
 
   // Upload state — agora suporta MÚLTIPLAS imagens (array de perspectivas)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileState[]>([])
@@ -141,6 +145,25 @@ export default function Index() {
     }
   }, [searchParams])
 
+  // FETCH DO CATÁLOGO DE MATERIAIS — preços reais vindos do Supabase.
+  // Em caso de erro ou catálogo vazio, o motor de cálculo usa CUSTOS_UNITARIOS (fallback).
+  useEffect(() => {
+    let active = true
+    fetchCatalogoMateriais()
+      .then((materiais) => {
+        if (!active) return
+        if (materiais && materiais.length > 0) {
+          setCatalogoMateriais(materiais)
+        }
+      })
+      .catch((err) => {
+        console.error('Falha ao carregar catálogo de materiais:', err)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
   // Objeto do módulo selecionado (id + nome_template) derivado do estado dinâmico.
   const selectedModuleObj: TemplateEngenharia | null =
     modulosDisponiveis.find((m) => m.id === selectedModuleId) ?? null
@@ -150,6 +173,10 @@ export default function Index() {
   // A BOM é recalculada em tempo real via useMemo sempre que qualquer um dos
   // parâmetros relevantes (dimensões, materiais, padrão, módulo) muda.
   // ============================================================================
+  // Catálogo efetivo para precificação: se vazio, usa undefined para que o
+  // motor caia no fallback CUSTOS_UNITARIOS (tratado dentro de calcularBOM).
+  const catalogoParaPricing = catalogoMateriais.length > 0 ? catalogoMateriais : undefined
+
   const bomItems = useMemo(
     () =>
       calcularBOM(
@@ -161,8 +188,17 @@ export default function Index() {
         mdfInterno,
         mdfFundo,
         padraoProjeto,
+        catalogoParaPricing,
       ),
-    [selectedModuleObj, dimensoes, mdfExterno, mdfInterno, mdfFundo, padraoProjeto],
+    [
+      selectedModuleObj,
+      dimensoes,
+      mdfExterno,
+      mdfInterno,
+      mdfFundo,
+      padraoProjeto,
+      catalogoParaPricing,
+    ],
   )
 
   // Lista final de itens exibida: BOM dinâmica + itens manuais do usuário.
