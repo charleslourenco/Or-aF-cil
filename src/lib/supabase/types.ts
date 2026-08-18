@@ -9,8 +9,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      CatalogoMateriais: {
+        Row: {
+          ativo: boolean
+          categoria: string
+          created_at: string
+          id: string
+          nivel_padrao: string
+          nome_material: string
+          preco_custo: number
+          unidade: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          categoria: string
+          created_at?: string
+          id?: string
+          nivel_padrao?: string
+          nome_material: string
+          preco_custo: number
+          unidade: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          categoria?: string
+          created_at?: string
+          id?: string
+          nivel_padrao?: string
+          nome_material?: string
+          preco_custo?: number
+          unidade?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      templatesengenharia: {
+        Row: {
+          assinatura_visual: Json | null
+          ativo: boolean | null
+          id: string
+          nome_template: string
+          regras_json: Json | null
+        }
+        Insert: {
+          assinatura_visual?: Json | null
+          ativo?: boolean | null
+          id?: string
+          nome_template: string
+          regras_json?: Json | null
+        }
+        Update: {
+          assinatura_visual?: Json | null
+          ativo?: boolean | null
+          id?: string
+          nome_template?: string
+          regras_json?: Json | null
+        }
+        Relationships: []
+      }
       TemplatesEngenharia: {
         Row: {
+          assinatura_visual: string[] | null
           categoria: string | null
           created_at: string
           descricao: string | null
@@ -22,6 +83,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assinatura_visual?: string[] | null
           categoria?: string | null
           created_at?: string
           descricao?: string | null
@@ -33,6 +95,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assinatura_visual?: string[] | null
           categoria?: string | null
           created_at?: string
           descricao?: string | null
@@ -41,42 +104,6 @@ export type Database = {
           id?: string
           material?: string | null
           nome_template?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      CatalogoMateriais: {
-        Row: {
-          id: string
-          nome_material: string
-          categoria: string
-          unidade: string
-          preco_custo: number
-          nivel_padrao: string
-          ativo: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          nome_material: string
-          categoria: string
-          unidade: string
-          preco_custo: number
-          nivel_padrao?: string
-          ativo?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          nome_material?: string
-          categoria?: string
-          unidade?: string
-          preco_custo?: number
-          nivel_padrao?: string
-          ativo?: boolean
-          created_at?: string
           updated_at?: string
         }
         Relationships: []

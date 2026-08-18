@@ -119,8 +119,12 @@ export default function Index() {
     setLoadingModulos(true)
 
     fetchTemplatesEngenharia()
-      .then((modulos) => {
+      .then(({ data: modulos, error }) => {
         if (!active) return
+        if (error) {
+          console.error('Falha ao carregar módulos disponíveis:', error)
+          return
+        }
         setModulosDisponiveis(modulos)
 
         // Suporte a pré-preenchimento via query param ?modulo=<id>
@@ -131,10 +135,6 @@ export default function Index() {
             setSelectedModuleId(encontrado.id)
           }
         }
-      })
-      .catch((err) => {
-        // Erro de fetch já é logado via console.error no serviço.
-        console.error('Falha ao carregar módulos disponíveis:', err)
       })
       .finally(() => {
         if (active) setLoadingModulos(false)
