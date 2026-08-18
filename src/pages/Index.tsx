@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import {
   User,
@@ -11,7 +11,6 @@ import {
   AlertCircle,
   Plus,
   RefreshCw,
-  FileCheck2,
   HelpCircle,
   FileSpreadsheet,
   Ruler,
@@ -39,6 +38,7 @@ import { BudgetItem } from '@/data/mockData'
 import { fetchTemplatesEngenharia, TemplateEngenharia } from '@/services/templates'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import { calcularBOM, custoConsolidado, valorConsolidado, type PadraoProjeto } from '@/lib/pricing'
 
 // Ambientes permitidos no Select (array estático conforme especificação).
 const AMBIENTES = ['Cozinha', 'Quarto', 'Sala', 'Banheiro']
@@ -80,26 +80,8 @@ export default function Index() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [showResults, setShowResults] = useState(false)
 
-  // Pricing Table Items state
-  // Pre-load default 2 mock rows as requested by user specification (mantida estática).
-  const [pricingItems, setPricingItems] = useState<BudgetItem[]>([
-    {
-      id: 'item-1',
-      description: 'Lateral MDP 18mm 2750x600mm',
-      unitCost: 120.0,
-      totalCost: 240.0,
-      markup: 150,
-      salePrice: 600.0,
-    },
-    {
-      id: 'item-2',
-      description: 'Porta MDF 18mm 2000x500mm (2 un.)',
-      unitCost: 95.0,
-      totalCost: 190.0,
-      markup: 150,
-      salePrice: 475.0,
-    },
-  ])
+  // Itens manuais adicionados pelo usuário (somam-se à BOM dinâmica).
+  const [manualItems, setManualItems] = useState<BudgetItem[]>([])
 
   // Modal confirmation state
   const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false)
@@ -112,7 +94,7 @@ export default function Index() {
   })
 
   // 🎨 ESPECIFICAÇÃO DE MATERIAIS (acabamento do módulo).
-  const [padraoProjeto, setPadraoProjeto] = useState<'comercial' | 'premium'>('comercial')
+  const [padraoProjeto, setPadraoProjeto] = useState<PadraoProjeto>('comercial')
   const [mdfExterno, setMdfExterno] = useState<{ cor: string; espessura: 15 | 18 }>({
     cor: 'Branco TX',
     espessura: 18,
@@ -162,6 +144,42 @@ export default function Index() {
   // Objeto do módulo selecionado (id + nome_template) derivado do estado dinâmico.
   const selectedModuleObj: TemplateEngenharia | null =
     modulosDisponiveis.find((m) => m.id === selectedModuleId) ?? null
+
+  // ============================================================================
+  // 🧮 MOTOR DE CÁLCULO GEOMÉTRICO E PRECIFICAÇÃO DINÂMICA
+  // A BOM é recalculada em tempo real via useMemo sempre que qualquer um dos
+  // parâmetros relevantes (dimensões, materiais, padrão, módulo) muda.
+  // ============================================================================
+  const bomItems = useMemo(
+    () =>
+      calcularBOM(
+        selectedModuleObj
+          ? { id: selectedModuleObj.id, nome_template: selectedModuleObj.nome_template }
+          : null,
+        dimensoes,
+        mdfExterno,
+        mdfInterno,
+        mdfFundo,
+        padraoProjeto,
+      ),
+    [selectedModuleObj, dimensoes, mdfExterno, mdfInterno, mdfFundo, padraoProjeto],
+  )
+
+  // Lista final de itens exibida: BOM dinâmica + itens manuais do usuário.
+  const pricingItems = useMemo<BudgetItem[]>(() => {
+    return [...bomItems, ...manualItems]
+  }, [bomItems, manualItems])
+
+  // Totais consolidados (custo e valor de venda).
+  const totalCusto = useMemo(() => custoConsolidado(pricingItems), [pricingItems])
+  const totalVenda = useMemo(() => valorConsolidado(pricingItems), [pricingItems])
+
+  // Flag de validação: módulo selecionado e dimensões preenchidas.
+  const dimensoesValidas =
+    !!selectedModuleObj &&
+    dimensoes.largura > 0 &&
+    dimensoes.altura > 0 &&
+    dimensoes.profundidade > 0
 
   // Clear errors when fields update
   const handleClientNameChange = (val: string) => {
@@ -217,13 +235,6 @@ export default function Index() {
     // 🔄 FLUXO DE MATCH AUTOMÁTICO (simulação da IA "Lupa Lu"):
     // Dispara análise imediatamente após o upload concluir.
     setIsAnalyzing(true)
-
-    // Limpa qualquer seleção manual anterior para o match automático tomar a frente.
-    // (A seleção manual é o "Plano B" — Select rebaixado no cabeçalho.)
-    // Não limamos aqui para preservar ajuste manual; o match só sobrescreve se vazio.
-    if (!selectedModuleId) {
-      // mantém selecionado se o usuário já ajustou manualmente
-    }
 
     analyzeTimeoutRef.current = setTimeout(() => {
       // Pega o primeiro módulo disponível no estado vindo do Supabase.
@@ -308,28 +319,6 @@ export default function Index() {
     }, 600)
   }
 
-  // Update a single item in pricing table
-  const handleUpdateItem = (index: number, updated: BudgetItem) => {
-    setPricingItems((prev) => {
-      const clone = [...prev]
-      clone[index] = updated
-      return clone
-    })
-    toast({
-      title: 'Item Atualizado',
-      description: 'Cálculos de markup e preço de venda recalculados.',
-    })
-  }
-
-  // Delete item from pricing table
-  const handleDeleteItem = (index: number) => {
-    setPricingItems((prev) => prev.filter((_, idx) => idx !== index))
-    toast({
-      title: 'Item Removido',
-      description: 'A peça foi retirada do orçamento.',
-    })
-  }
-
   // Action: "+ Adicionar Item Manualmente"
   const handleAddNewManualItem = () => {
     if (!showResults) {
@@ -341,12 +330,12 @@ export default function Index() {
       description: 'Nova Peça em MDF 18mm',
       unitCost: 80.0,
       totalCost: 160.0,
-      markup: 150,
+      markup: 2.5,
       salePrice: 400.0,
       isEditing: true,
     }
 
-    setPricingItems((prev) => [...prev, newItem])
+    setManualItems((prev) => [...prev, newItem])
 
     // Scroll to results if needed
     setTimeout(() => {
@@ -359,6 +348,7 @@ export default function Index() {
     setSelectedModuleId('')
     setUploadedFiles([])
     setIsAnalyzing(false)
+    setManualItems([])
     if (analyzeTimeoutRef.current) {
       clearTimeout(analyzeTimeoutRef.current)
       analyzeTimeoutRef.current = null
@@ -397,6 +387,13 @@ export default function Index() {
   }
 
   const currentModuleName = selectedModuleObj?.nome_template || 'Módulo Padrão'
+
+  // Formatador monetário pt-BR com 2 casas decimais.
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(val)
 
   return (
     <div ref={topRef} className="space-y-8 pb-20">
@@ -993,7 +990,7 @@ export default function Index() {
         </p>
       </div>
 
-      {/* 5. RESULTADOS: TABELA DE PRECIFICAÇÃO */}
+      {/* 5. RESULTADOS: TABELA DE PRECIFICAÇÃO DINÂMICA */}
       {showResults && (
         <section
           ref={resultsRef}
@@ -1014,13 +1011,63 @@ export default function Index() {
             </span>
           </div>
 
-          {/* Pricing Table Component */}
-          <PricingTable
-            items={pricingItems}
-            onUpdateItem={handleUpdateItem}
-            onDeleteItem={handleDeleteItem}
-            onAddNewManualItem={handleAddNewManualItem}
-          />
+          {dimensoesValidas ? (
+            <PricingTable items={pricingItems} />
+          ) : (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center">
+              <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                <HelpCircle className="w-6 h-6" />
+              </div>
+              <p className="text-sm font-semibold text-slate-700">
+                Selecione um módulo e preencha as dimensões para gerar a precificação.
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                A tabela de peças é calculada em tempo real a partir das medidas e materiais
+                informados acima.
+              </p>
+            </div>
+          )}
+
+          {/* Rodapé de Totais Consolidados — exibido quando há BOM válida */}
+          {dimensoesValidas && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">
+                      Custo Consolidado
+                    </p>
+                    <p className="text-[11px] text-amber-700/70">Soma de todos os custos totais</p>
+                  </div>
+                </div>
+                <p className="text-xl font-extrabold text-amber-800 font-mono">
+                  {formatCurrency(totalCusto)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider">
+                      Valor Consolidado
+                    </p>
+                    <p className="text-[11px] text-emerald-700/70">
+                      Soma de todos os valores de venda
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xl font-extrabold text-emerald-700 font-mono">
+                  {formatCurrency(totalVenda)}
+                </p>
+              </div>
+            </div>
+          )}
         </section>
       )}
 

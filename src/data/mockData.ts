@@ -5,6 +5,11 @@ export interface BudgetItem {
   totalCost: number
   markup: number
   salePrice: number
+  /** Campos do motor de cálculo geométrico (BOM dinâmica). */
+  material?: string
+  espessura?: number
+  metragem?: number
+  unidade?: 'm²' | 'm' | 'jogo'
   isEditing?: boolean
 }
 
