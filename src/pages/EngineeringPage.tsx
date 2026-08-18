@@ -11,6 +11,7 @@ import {
   saveConfigEngenharia,
   type ConfigEngenharia,
   type CustoFixo,
+  type ComissaoPersonalizada,
 } from '@/services/engenharia'
 
 // ----- Defaults -----
@@ -30,6 +31,8 @@ const DEFAULT_CUSTOS: CustoFixo[] = [
   { id: crypto.randomUUID(), config_id: '', descricao: 'Contador', valor: 500 },
 ]
 
+const DEFAULT_COMISSOES: ComissaoPersonalizada[] = []
+
 // ----- Formatação -----
 const round2 = (n: number) => Math.round(n * 100) / 100
 
@@ -47,6 +50,8 @@ const parseNum = (v: string): number => {
 export default function EngineeringPage() {
   const [config, setConfig] = useState<ConfigEngenharia>(DEFAULT_CONFIG)
   const [custosFixos, setCustosFixos] = useState<CustoFixo[]>(DEFAULT_CUSTOS)
+  const [comissoesPersonalizadas, setComissoesPersonalizadas] =
+    useState<ComissaoPersonalizada[]>(DEFAULT_COMISSOES)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -60,7 +65,12 @@ export default function EngineeringPage() {
     async function load() {
       setLoading(true)
       setError(null)
-      const { config: cfg, custosFixos: cf, error: err } = await fetchConfigEngenharia()
+      const {
+        config: cfg,
+        custosFixos: cf,
+        comissoesPersonalizadas: cps,
+        error: err,
+      } = await fetchConfigEngenharia()
       if (!active) return
       if (err) {
         setError(err)
@@ -68,6 +78,9 @@ export default function EngineeringPage() {
         setConfig(cfg)
         setCustosFixos(
           cf.length > 0 ? cf : DEFAULT_CUSTOS.map((c) => ({ ...c, config_id: cfg.id })),
+        )
+        setComissoesPersonalizadas(
+          cps.length > 0 ? cps : DEFAULT_COMISSOES.map((c) => ({ ...c, config_id: cfg.id })),
         )
         setMarkupSimulador(cfg.markup_padrao)
       }
@@ -78,7 +91,6 @@ export default function EngineeringPage() {
       active = false
     }
   }, [])
-
   // ----- Cálculos derivados (DRE) -----
   const dre = useMemo(() => {
     const totalCustosFixos = round2(custosFixos.reduce((s, c) => s + (Number(c.valor) || 0), 0))
@@ -93,10 +105,26 @@ export default function EngineeringPage() {
     const rateio = round2((precoVenda * (indiceRateioNum ?? 0)) / 100)
     const impostos = round2(precoVenda * (config.impostos_percent / 100))
     const comissoes = round2(precoVenda * (config.comissoes_percent / 100))
+
+    // Comissões/variáveis personalizadas — deduzidas em cascata
+    const comissoesCustom = comissoesPersonalizadas.map((c) => ({
+      id: c.id,
+      nome: c.nome,
+      percentual: Number(c.percentual) || 0,
+      valor: round2(precoVenda * ((Number(c.percentual) || 0) / 100)),
+    }))
+    const totalComissoesCustom = round2(comissoesCustom.reduce((s, c) => s + c.valor, 0))
+
     const custoFinanceiro = round2(precoVenda * (config.custo_financeiro_percent / 100))
 
     const lucroLiquido = round2(
-      precoVenda - custoMaterial - rateio - impostos - comissoes - custoFinanceiro,
+      precoVenda -
+        custoMaterial -
+        rateio -
+        impostos -
+        comissoes -
+        totalComissoesCustom -
+        custoFinanceiro,
     )
     const margemLiquida = precoVenda > 0 ? round2((lucroLiquido / precoVenda) * 100) : 0
 
@@ -110,11 +138,13 @@ export default function EngineeringPage() {
       rateio,
       impostos,
       comissoes,
+      comissoesCustom,
+      totalComissoesCustom,
       custoFinanceiro,
       lucroLiquido,
       margemLiquida,
     }
-  }, [config, custosFixos, custoMaterialSimulador, markupSimulador])
+  }, [config, custosFixos, comissoesPersonalizadas, custoMaterialSimulador, markupSimulador])
 
   // ----- Handlers de custos fixos -----
   const addCustoFixo = () => {
@@ -140,10 +170,34 @@ export default function EngineeringPage() {
     setConfig((prev) => ({ ...prev, [key]: value }))
   }
 
+  // ----- Handlers de comissões personalizadas -----
+  const addComissaoPersonalizada = () => {
+    setComissoesPersonalizadas((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), config_id: config.id, nome: '', percentual: 0 },
+    ])
+  }
+
+  const removeComissaoPersonalizada = (id: string) => {
+    setComissoesPersonalizadas((prev) => prev.filter((c) => c.id !== id))
+  }
+
+  const updateComissaoPersonalizada = (id: string, field: 'nome' | 'percentual', value: string) => {
+    setComissoesPersonalizadas((prev) =>
+      prev.map((c) =>
+        c.id === id ? { ...c, [field]: field === 'percentual' ? parseNum(value) : value } : c,
+      ),
+    )
+  }
+
   // ----- Salvar -----
   const handleSave = async () => {
     setSaving(true)
-    const { success, error: err } = await saveConfigEngenharia(config, custosFixos)
+    const { success, error: err } = await saveConfigEngenharia(
+      config,
+      custosFixos,
+      comissoesPersonalizadas,
+    )
     setSaving(false)
     if (success) {
       toast({ title: 'Configurações salvas com sucesso!' })
@@ -159,17 +213,22 @@ export default function EngineeringPage() {
   const retry = () => {
     setLoading(true)
     setError(null)
-    fetchConfigEngenharia().then(({ config: cfg, custosFixos: cf, error: err }) => {
-      if (err) setError(err)
-      else if (cfg) {
-        setConfig(cfg)
-        setCustosFixos(
-          cf.length > 0 ? cf : DEFAULT_CUSTOS.map((c) => ({ ...c, config_id: cfg.id })),
-        )
-        setMarkupSimulador(cfg.markup_padrao)
-      }
-      setLoading(false)
-    })
+    fetchConfigEngenharia().then(
+      ({ config: cfg, custosFixos: cf, comissoesPersonalizadas: cps, error: err }) => {
+        if (err) setError(err)
+        else if (cfg) {
+          setConfig(cfg)
+          setCustosFixos(
+            cf.length > 0 ? cf : DEFAULT_CUSTOS.map((c) => ({ ...c, config_id: cfg.id })),
+          )
+          setComissoesPersonalizadas(
+            cps.length > 0 ? cps : DEFAULT_COMISSOES.map((c) => ({ ...c, config_id: cfg.id })),
+          )
+          setMarkupSimulador(cfg.markup_padrao)
+        }
+        setLoading(false)
+      },
+    )
   }
 
   // ----- Cor do lucro -----
@@ -410,6 +469,68 @@ export default function EngineeringPage() {
                   <p className="text-xs text-slate-400">Informativo — não afeta o DRE.</p>
                 </div>
               </div>
+
+              {/* Subseção: Comissões e Variáveis Personalizadas */}
+              <div className="mt-6 pt-5 border-t border-slate-200 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-semibold text-slate-800">
+                    🏷️ Comissões e Variáveis Personalizadas
+                  </h4>
+                  <span className="text-xs text-slate-400 hidden sm:inline">
+                    Deduzidas em cascata do Preço de Venda
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {comissoesPersonalizadas.map((c) => (
+                    <div key={c.id} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <Input
+                        type="text"
+                        placeholder="Ex: Comissão Vendedor"
+                        value={c.nome}
+                        onChange={(e) => updateComissaoPersonalizada(c.id, 'nome', e.target.value)}
+                        className="flex-1"
+                      />
+                      <div className="relative sm:w-32">
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          placeholder="0,0"
+                          value={c.percentual}
+                          onChange={(e) =>
+                            updateComissaoPersonalizada(c.id, 'percentual', e.target.value)
+                          }
+                          className="pr-7"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">
+                          %
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeComissaoPersonalizada(c.id)}
+                        className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 shrink-0 self-end sm:self-auto"
+                        aria-label="Remover campo personalizado"
+                      >
+                        <span className="text-lg leading-none" aria-hidden="true">
+                          ✕
+                        </span>
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                <Button
+                  variant="outline"
+                  onClick={addComissaoPersonalizada}
+                  className="gap-2 w-full sm:w-auto"
+                >
+                  <Plus className="w-4 h-4" />
+                  Adicionar Campo Personalizado
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -497,6 +618,15 @@ export default function EngineeringPage() {
                       formula="Preço de Venda × Comissões%"
                       value={-dre.comissoes}
                     />
+                    {dre.comissoesCustom.map((c) => (
+                      <DRELine
+                        key={c.id}
+                        icon="➖"
+                        label={c.nome || 'Comissão Personalizada'}
+                        formula={`Preço de Venda × ${fmtPct(c.percentual)}`}
+                        value={-c.valor}
+                      />
+                    ))}
                     <DRELine
                       icon="➖"
                       label="Custo Financeiro"

@@ -27,9 +27,18 @@ export interface CustoFixo {
   created_at?: string
 }
 
+export interface ComissaoPersonalizada {
+  id: string
+  config_id: string
+  nome: string
+  percentual: number
+  created_at?: string
+}
+
 export interface ConfigEngenhariaResult {
   config: ConfigEngenharia | null
   custosFixos: CustoFixo[]
+  comissoesPersonalizadas: ComissaoPersonalizada[]
   error: string | null
 }
 
@@ -53,11 +62,16 @@ export async function fetchConfigEngenharia(): Promise<ConfigEngenhariaResult> {
 
   if (configError) {
     console.error('Erro ao buscar configurações de engenharia:', configError)
-    return { config: null, custosFixos: [], error: configError.message }
+    return {
+      config: null,
+      custosFixos: [],
+      comissoesPersonalizadas: [],
+      error: configError.message,
+    }
   }
 
   if (!configData) {
-    return { config: null, custosFixos: [], error: null }
+    return { config: null, custosFixos: [], comissoesPersonalizadas: [], error: null }
   }
 
   const config = configData as unknown as ConfigEngenharia
@@ -70,12 +84,29 @@ export async function fetchConfigEngenharia(): Promise<ConfigEngenhariaResult> {
 
   if (custosError) {
     console.error('Erro ao buscar custos fixos:', custosError)
-    return { config, custosFixos: [], error: custosError.message }
+    return { config, custosFixos: [], comissoesPersonalizadas: [], error: custosError.message }
+  }
+
+  const { data: comissoesData, error: comissoesError } = await db
+    .from('comissoes_personalizadas')
+    .select('id, config_id, nome, percentual, created_at')
+    .eq('config_id', config.id)
+    .order('created_at', { ascending: true })
+
+  if (comissoesError) {
+    console.error('Erro ao buscar comissões personalizadas:', comissoesError)
+    return {
+      config,
+      custosFixos: (custosData ?? []) as unknown as CustoFixo[],
+      comissoesPersonalizadas: [],
+      error: comissoesError.message,
+    }
   }
 
   return {
     config,
     custosFixos: (custosData ?? []) as unknown as CustoFixo[],
+    comissoesPersonalizadas: (comissoesData ?? []) as unknown as ComissaoPersonalizada[],
     error: null,
   }
 }
@@ -87,6 +118,7 @@ export async function fetchConfigEngenharia(): Promise<ConfigEngenhariaResult> {
 export async function saveConfigEngenharia(
   config: ConfigEngenharia,
   custosFixos: CustoFixo[],
+  comissoesPersonalizadas: ComissaoPersonalizada[] = [],
 ): Promise<SaveConfigEngenhariaResult> {
   const payload = {
     meta_faturamento: config.meta_faturamento,
@@ -149,6 +181,34 @@ export async function saveConfigEngenharia(
     if (insertCustosError) {
       console.error('Erro ao inserir custos fixos:', insertCustosError)
       return { success: false, error: insertCustosError.message }
+    }
+  }
+
+  // Sincroniza comissões personalizadas: deleta todas e reinsere
+  const { error: deleteComissoesError } = await db
+    .from('comissoes_personalizadas')
+    .delete()
+    .eq('config_id', configId)
+  if (deleteComissoesError) {
+    console.error('Erro ao remover comissões personalizadas antigas:', deleteComissoesError)
+    return { success: false, error: deleteComissoesError.message }
+  }
+
+  const toInsertComissoes = comissoesPersonalizadas
+    .filter((c) => c.nome.trim() !== '')
+    .map((c) => ({
+      config_id: configId,
+      nome: c.nome.trim(),
+      percentual: c.percentual,
+    }))
+
+  if (toInsertComissoes.length > 0) {
+    const { error: insertComissoesError } = await db
+      .from('comissoes_personalizadas')
+      .insert(toInsertComissoes)
+    if (insertComissoesError) {
+      console.error('Erro ao inserir comissões personalizadas:', insertComissoesError)
+      return { success: false, error: insertComissoesError.message }
     }
   }
 

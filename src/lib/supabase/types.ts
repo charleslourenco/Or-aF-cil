@@ -45,6 +45,74 @@ export type Database = {
         }
         Relationships: []
       }
+      configuracoes_engenharia: {
+        Row: {
+          comissoes_percent: number
+          created_at: string
+          custo_financeiro_percent: number
+          id: string
+          impostos_percent: number
+          markup_padrao: number
+          meta_faturamento: number
+          perda_material_percent: number
+          updated_at: string
+        }
+        Insert: {
+          comissoes_percent?: number
+          created_at?: string
+          custo_financeiro_percent?: number
+          id?: string
+          impostos_percent?: number
+          markup_padrao?: number
+          meta_faturamento?: number
+          perda_material_percent?: number
+          updated_at?: string
+        }
+        Update: {
+          comissoes_percent?: number
+          created_at?: string
+          custo_financeiro_percent?: number
+          id?: string
+          impostos_percent?: number
+          markup_padrao?: number
+          meta_faturamento?: number
+          perda_material_percent?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      custos_fixos: {
+        Row: {
+          config_id: string
+          created_at: string
+          descricao: string
+          id: string
+          valor: number
+        }
+        Insert: {
+          config_id: string
+          created_at?: string
+          descricao: string
+          id?: string
+          valor?: number
+        }
+        Update: {
+          config_id?: string
+          created_at?: string
+          descricao?: string
+          id?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'custos_fixos_config_id_fkey'
+            columns: ['config_id']
+            isOneToOne: false
+            referencedRelation: 'configuracoes_engenharia'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       templatesengenharia: {
         Row: {
           assinatura_visual: Json | null
