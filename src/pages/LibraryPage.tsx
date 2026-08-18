@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ModuleBlueprint } from '@/components/ModuleBlueprint'
+import { ModuloBlueprint2D, type ModuloDimensoes } from '@/components/ModuloBlueprint2D'
 import { useToast } from '@/hooks/use-toast'
 import {
   fetchTemplatesEngenharia,
@@ -33,6 +33,28 @@ import {
   type TemplateEngenhariaInput,
   type ModuleIconType,
 } from '@/services/templates'
+
+/**
+ * Converte a string de dimensões do catálogo (ex.: "2000x1200x600 mm",
+ * "2000 x 1200 x 600", "1800X2200X600") em `{ largura, altura, profundidade }`.
+ * Ordem interpretada: L x A x P. Cai num fallback padrão se não houver 3 números.
+ */
+function parseDimensoes(raw?: string | null): ModuloDimensoes {
+  const fallback: ModuloDimensoes = {
+    largura: 1200,
+    altura: 2000,
+    profundidade: 600,
+  }
+  if (!raw) return fallback
+  const nums = raw.match(/\d+(?:[.,]\d+)?/g)
+  if (!nums || nums.length < 3) return fallback
+  const toNum = (s: string) => Number(s.replace(',', '.'))
+  return {
+    largura: toNum(nums[0]),
+    altura: toNum(nums[1]),
+    profundidade: toNum(nums[2]),
+  }
+}
 
 /** Paleta de cores variadas para os badges de tags. */
 const TAG_COLORS: Record<string, string> = {
@@ -323,7 +345,12 @@ export default function LibraryPage() {
             >
               {/* Blueprint preview */}
               <div className="p-4 bg-slate-50/50 border-b border-slate-100">
-                <ModuleBlueprint type={normalizeIconType(mod.icon_type)} className="h-44" />
+                <ModuloBlueprint2D
+                  type={normalizeIconType(mod.icon_type)}
+                  dimensoes={parseDimensoes(mod.dimensoes)}
+                  corMdf={mod.material ?? undefined}
+                  className="h-44"
+                />
               </div>
 
               {/* Content */}

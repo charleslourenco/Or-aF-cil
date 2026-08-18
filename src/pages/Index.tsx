@@ -636,6 +636,7 @@ export default function Index() {
             <LibraryMatchCard
               selectedModule={selectedModuleObj}
               isAnalyzing={isAnalyzing}
+              dimensoes={dimensoes}
               onOpenLibraryModal={() => navigate('/biblioteca')}
               modulosDisponiveis={modulosDisponiveis}
               selectedModuleId={selectedModuleId}

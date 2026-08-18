@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ModuleBlueprint } from './ModuleBlueprint'
+import { ModuloBlueprint2D, type ModuloDimensoes } from './ModuloBlueprint2D'
 import { TemplateEngenharia, normalizeIconType } from '@/services/templates'
 import { cn } from '@/lib/utils'
 
@@ -37,6 +37,8 @@ interface LibraryMatchCardProps {
   selectedModuleId?: string
   /** Callback disparado ao escolher manualmente outro módulo. */
   onModuleChange?: (id: string) => void
+  /** Dimensões reais (mm) usadas para desenhar o blueprint proporcional. */
+  dimensoes?: ModuloDimensoes
 }
 
 export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
@@ -46,6 +48,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
   modulosDisponiveis = [],
   selectedModuleId = '',
   onModuleChange,
+  dimensoes = { largura: 1800, altura: 2200, profundidade: 600 },
 }) => {
   const isMatched = !!selectedModule
   const [showSwap, setShowSwap] = useState(false)
@@ -181,8 +184,10 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
         <div className="flex-1 flex flex-col justify-between space-y-4 pt-4 animate-fade-in">
           {/* Visual Blueprint Representation — placeholder visual do módulo base */}
           <div className="w-full">
-            <ModuleBlueprint
+            <ModuloBlueprint2D
               type={normalizeIconType(selectedModule?.icon_type)}
+              dimensoes={dimensoes}
+              corMdf={selectedModule?.material ?? undefined}
               className="shadow-inner"
             />
           </div>
