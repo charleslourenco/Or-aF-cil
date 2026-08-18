@@ -39,6 +39,8 @@ interface LibraryMatchCardProps {
   onModuleChange?: (id: string) => void
   /** Dimensões reais (mm) usadas para desenhar o blueprint proporcional. */
   dimensoes?: ModuloDimensoes
+  /** Justificativa retornada pela IA (GPT-4o Vision) sobre o match do módulo. */
+  justificativa?: string | null
 }
 
 export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
@@ -49,6 +51,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
   selectedModuleId = '',
   onModuleChange,
   dimensoes = { largura: 1800, altura: 2200, profundidade: 600 },
+  justificativa = null,
 }) => {
   const isMatched = !!selectedModule
   const [showSwap, setShowSwap] = useState(false)
@@ -209,6 +212,17 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
               <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
                 {selectedModule.descricao}
               </p>
+            )}
+
+            {/* Balão de justificativa retornada pela IA (GPT-4o Vision) */}
+            {justificativa && (
+              <div className="mt-2.5 flex items-start gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs leading-relaxed animate-fade-in">
+                <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span>
+                  <span className="font-bold">Justificativa da IA: </span>
+                  {justificativa}
+                </span>
+              </div>
             )}
           </div>
 

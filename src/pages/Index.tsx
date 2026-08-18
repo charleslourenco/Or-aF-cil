@@ -72,6 +72,9 @@ export default function Index() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const analyzeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Justificativa retornada pela IA (GPT-4o Vision) sobre o match do módulo.
+  const [matchJustificativa, setMatchJustificativa] = useState<string | null>(null)
+
   // Validation errors
   const [errors, setErrors] = useState<{
     clientName?: string
@@ -234,6 +237,8 @@ export default function Index() {
 
   const handleModuleChange = (val: string) => {
     setSelectedModuleId(val)
+    // Troca manual de módulo ⇒ limpa a justificativa da IA.
+    setMatchJustificativa(null)
     if (errors.selectedModule) {
       setErrors((prev) => ({ ...prev, selectedModule: undefined }))
     }
@@ -249,8 +254,141 @@ export default function Index() {
     }
   }
 
+  /**
+   * Converte um UploadedFileState para Base64 (data URL) compatível com a API
+   * Vision da OpenAI. Suporta tanto uploads reais (File) quanto imagens de
+   * exemplo (URL pública via fetch → blob → Base64).
+   */
+  const fileToBase64 = (fileState: UploadedFileState): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error('Falha ao converter imagem para Base64.'))
+
+      // Upload real: usa o File diretamente.
+      if (fileState.file) {
+        reader.readAsDataURL(fileState.file)
+        return
+      }
+
+      // Imagem de exemplo (URL): baixa via fetch e converte para Base64.
+      if (fileState.previewUrl) {
+        fetch(fileState.previewUrl)
+          .then((res) => {
+            if (!res.ok) throw new Error('Falha ao baixar imagem de exemplo.')
+            return res.blob()
+          })
+          .then((blob) => reader.readAsDataURL(blob))
+          .catch((err) => reject(err))
+        return
+      }
+
+      reject(new Error('Arquivo inválido para análise visual.'))
+    })
+  }
+
+  /**
+   * Executa o match real via OpenAI GPT-4o Vision. Retorna o id do módulo
+   * encontrado e a justificativa, ou null em caso de falha.
+   */
+  const runOpenAIVisionMatch = async (
+    fileState: UploadedFileState,
+    modulos: TemplateEngenharia[],
+    apiKey: string,
+  ): Promise<{ idModulo: string | null; justificativa: string }> => {
+    // Converte a primeira imagem para Base64.
+    const base64Image = await fileToBase64(fileState)
+
+    // Constrói a lista de módulos como string para o prompt.
+    const listaModulos = modulos
+      .map((m) => {
+        const tags = m.assinatura_visual?.join(', ') ?? ''
+        return `ID: ${m.id} | Nome: ${m.nome_template} | Tags: ${tags}`
+      })
+      .join('\n')
+
+    const systemContent = `Você é um especialista em móveis sob medida. Analise a imagem anexada enviada pelo usuário e encontre o 'match' exato na biblioteca de módulos do sistema. A lista de módulos disponíveis é:\n\n${listaModulos}\n\nRetorne EXATAMENTE um objeto JSON válido no formato:\n{ "id_modulo_encontrado": "ID_EXATO_DA_LISTA", "justificativa": "Breve explicação do porquê este módulo corresponde à imagem" }\n\nNão inclua markdown, crases ou texto fora do JSON.`
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: systemContent },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Analise esta imagem de um projeto de marcenaria e identifique qual módulo da biblioteca corresponde a ela.',
+              },
+              {
+                type: 'image_url',
+                image_url: { url: base64Image },
+              },
+            ],
+          },
+        ],
+        max_tokens: 300,
+        temperature: 0.1,
+      }),
+    })
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '')
+      throw new Error(`OpenAI respondeu ${response.status}. ${errText}`.trim())
+    }
+
+    const data = await response.json()
+    const rawContent: string = data?.choices?.[0]?.message?.content ?? ''
+
+    // Extrai o JSON mesmo se vier envolto em crases markdown.
+    const jsonMatch = rawContent.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      throw new Error('Resposta da IA não continha um JSON válido.')
+    }
+
+    const parsed = JSON.parse(jsonMatch[0])
+    const idModulo: string | null = parsed?.id_modulo_encontrado ?? null
+    const justificativa: string =
+      parsed?.justificativa ?? 'Match identificado pela análise visual da IA.'
+
+    return { idModulo, justificativa }
+  }
+
+  /**
+   * Fallback mock (sem API key ou em caso de erro da IA): simula a análise da
+   * "Lupa Lu" em 3 segundos e seleciona o primeiro módulo disponível.
+   */
+  const runMockMatch = (
+    modulos: TemplateEngenharia[],
+    description: string,
+    variant?: 'default' | 'destructive',
+  ) => {
+    setIsAnalyzing(true)
+    analyzeTimeoutRef.current = setTimeout(() => {
+      if (modulos.length > 0) {
+        setSelectedModuleId((prevSel) => prevSel || modulos[0].id)
+      }
+      setIsAnalyzing(false)
+      analyzeTimeoutRef.current = null
+      toast({
+        title: '✓ Match Automático Concluído!',
+        description,
+        variant,
+      })
+    }, 3000)
+  }
+
   const handleFilesSelect = (files: UploadedFileState[] | null) => {
     setUploadedFiles(files ?? [])
+    // Limpa a justificativa anterior sempre que novos arquivos chegam.
+    setMatchJustificativa(null)
 
     if (errors.uploadedFile) {
       setErrors((prev) => ({ ...prev, uploadedFile: undefined }))
@@ -268,29 +406,63 @@ export default function Index() {
       return
     }
 
-    // 🔄 FLUXO DE MATCH AUTOMÁTICO (simulação da IA "Lupa Lu"):
-    // Dispara análise imediatamente após o upload concluir.
+    // Captura o estado atual dos módulos para usar de forma síncrona na IA.
+    const modulosAtuais = modulosDisponiveis
+
+    // 🔄 FLUXO DE MATCH AUTOMÁTICO (Lupa Lu):
+    // Se houver API key configurada, dispara a chamada real ao GPT-4o Vision.
+    // Caso contrário, mantém o fallback mock de 3 segundos.
+    const apiKey = localStorage.getItem('openai_api_key')
+
+    if (!apiKey) {
+      runMockMatch(
+        modulosAtuais,
+        '⚠️ Configure a chave OpenAI em Configurações para ativar o reconhecimento visual real.',
+      )
+      return
+    }
+
+    // Fluxo real com GPT-4o Vision
     setIsAnalyzing(true)
 
-    analyzeTimeoutRef.current = setTimeout(() => {
-      // Pega o primeiro módulo disponível no estado vindo do Supabase.
-      setModulosDisponiveis((currentModulos) => {
-        if (currentModulos.length > 0) {
-          // Só sobrescreve se não houver seleção manual prévia.
-          setSelectedModuleId((prevSel) => prevSel || currentModulos[0].id)
+    const primeiraImagem = files[0]
+
+    runOpenAIVisionMatch(primeiraImagem, modulosAtuais, apiKey)
+      .then(({ idModulo, justificativa }) => {
+        // Tenta encontrar o módulo pelo ID retornado; se não achar, busca
+        // pelo nome; se ainda assim não achar, mantém o primeiro módulo.
+        let moduloEncontrado: TemplateEngenharia | undefined
+
+        if (idModulo) {
+          moduloEncontrado = modulosAtuais.find((m) => m.id === idModulo)
         }
-        return currentModulos
-      })
 
-      setIsAnalyzing(false)
-      analyzeTimeoutRef.current = null
+        if (!moduloEncontrado && idModulo) {
+          moduloEncontrado = modulosAtuais.find(
+            (m) => m.nome_template.toLowerCase() === idModulo.toLowerCase(),
+          )
+        }
 
-      toast({
-        title: '✓ Match Automático Concluído!',
-        description:
-          'A Lupa Lu identificou o gabarito do módulo na biblioteca. Ajuste manual disponível no cabeçalho caso necessário.',
+        const idFinal = moduloEncontrado?.id ?? modulosAtuais[0]?.id ?? ''
+
+        setSelectedModuleId(idFinal)
+        setMatchJustificativa(justificativa)
+        setIsAnalyzing(false)
+
+        toast({
+          title: '✓ Match IA Concluído!',
+          description: justificativa,
+        })
       })
-    }, 3000)
+      .catch((err) => {
+        console.error('Falha na análise visual da IA (GPT-4o):', err)
+        // Fallback para o mock em caso de erro na chamada da IA.
+        runMockMatch(
+          modulosAtuais,
+          '⚠️ A IA falhou, mas o match manual está disponível. Verifique sua chave OpenAI em Configurações.',
+          'destructive',
+        )
+      })
   }
 
   // Limpa o timeout pendente ao desmontar
@@ -385,6 +557,7 @@ export default function Index() {
     setUploadedFiles([])
     setIsAnalyzing(false)
     setManualItems([])
+    setMatchJustificativa(null)
     if (analyzeTimeoutRef.current) {
       clearTimeout(analyzeTimeoutRef.current)
       analyzeTimeoutRef.current = null
@@ -640,6 +813,7 @@ export default function Index() {
               onOpenLibraryModal={() => navigate('/biblioteca')}
               modulosDisponiveis={modulosDisponiveis}
               selectedModuleId={selectedModuleId}
+              justificativa={matchJustificativa}
               onModuleChange={(id) => {
                 // Troca manual de gabarito: atualiza o card e reseta o estado de análise.
                 handleModuleChange(id)

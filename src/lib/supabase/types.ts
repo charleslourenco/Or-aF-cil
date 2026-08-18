@@ -45,6 +45,38 @@ export type Database = {
         }
         Relationships: []
       }
+      comissoes_personalizadas: {
+        Row: {
+          config_id: string
+          created_at: string
+          id: string
+          nome: string
+          percentual: number
+        }
+        Insert: {
+          config_id: string
+          created_at?: string
+          id?: string
+          nome?: string
+          percentual?: number
+        }
+        Update: {
+          config_id?: string
+          created_at?: string
+          id?: string
+          nome?: string
+          percentual?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'comissoes_personalizadas_config_id_fkey'
+            columns: ['config_id']
+            isOneToOne: false
+            referencedRelation: 'configuracoes_engenharia'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       configuracoes_engenharia: {
         Row: {
           comissoes_percent: number
