@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import {
   PlusCircle,
   Search,
@@ -11,6 +13,7 @@ import {
   FileUp,
   Loader2,
   FileText,
+  ImageIcon,
   X,
   CheckCircle2,
   Package,
@@ -309,6 +312,73 @@ export default function LibraryPage() {
     setModalOpen(false)
   }
 
+  // Configuração do Worker do PDF.js
+  useEffect(() => {
+    try {
+      if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
+      }
+    } catch (e) {
+      console.error('Falha ao configurar worker pdfjs:', e)
+    }
+  }, [])
+
+  // Converte a primeira página de um PDF em string Base64 PNG (data URL)
+  const renderPdfFirstPageToBase64 = async (file: File): Promise<string> => {
+    try {
+      if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
+      }
+
+      const arrayBuffer = await file.arrayBuffer()
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
+      const pdfDoc = await loadingTask.promise
+
+      if (pdfDoc.numPages < 1) {
+        throw new Error('O arquivo PDF não contém páginas legíveis.')
+      }
+
+      const page = await pdfDoc.getPage(1)
+      const viewport = page.getViewport({ scale: 2.0 }) // 2.0 scale para nitidez no OCR da IA
+
+      const canvas = document.createElement('canvas')
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      const context = canvas.getContext('2d')
+
+      if (!context) {
+        throw new Error('Não foi possível inicializar o canvas de renderização.')
+      }
+
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport,
+      }
+
+      await page.render(renderContext).promise
+      const dataUrl = canvas.toDataURL('image/png')
+      return dataUrl
+    } catch (err) {
+      console.error('Erro na conversão do PDF para imagem:', err)
+      throw new Error(
+        'Falha ao carregar e renderizar o PDF. Verifique se o arquivo não está corrompido ou protegido por senha.',
+      )
+    }
+  }
+
+  // Converte imagem (PNG, JPG, JPEG) em string Base64 (data URL)
+  const renderImageFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const resultStr = reader.result as string
+        resolve(resultStr)
+      }
+      reader.onerror = () => reject(new Error('Falha ao ler o arquivo de imagem selecionado.'))
+      reader.readAsDataURL(file)
+    })
+  }
+
   // --- Handlers do Modal de Importação de PDF Promob ---
   const openImportModal = () => {
     setImportFile(null)
@@ -325,11 +395,20 @@ export default function LibraryPage() {
   }
 
   const handleFileProcess = async (file: File) => {
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      setImportError('Formato inválido. Por favor, envie um arquivo .PDF.')
+    const fileName = file.name.toLowerCase()
+    const isPdf = file.type === 'application/pdf' || fileName.endsWith('.pdf')
+    const isImage =
+      file.type.startsWith('image/') ||
+      fileName.endsWith('.png') ||
+      fileName.endsWith('.jpg') ||
+      fileName.endsWith('.jpeg')
+
+    if (!isPdf && !isImage) {
+      const msg = 'Formato inválido. Por favor, envie um arquivo PDF, PNG ou JPG.'
+      setImportError(msg)
       toast({
-        title: 'Arquivo inválido',
-        description: 'Apenas arquivos PDF são aceitos para importação.',
+        title: 'Arquivo não suportado',
+        description: msg,
         variant: 'destructive',
       })
       return
@@ -341,22 +420,25 @@ export default function LibraryPage() {
     setImportResult(null)
 
     try {
-      // Converte para Base64 puro
-      const pdfBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => {
-          const resultStr = reader.result as string
-          // Remove prefixo data:*/*;base64, se houver
-          const base64Clean = resultStr.includes(',') ? resultStr.split(',')[1] : resultStr
-          resolve(base64Clean)
-        }
-        reader.onerror = () => reject(new Error('Falha ao ler arquivo PDF.'))
-        reader.readAsDataURL(file)
-      })
+      // 1. Obtenção da imagem em Base64 (converte PDF para imagem via canvas ou lê imagem diretamente)
+      let imagemDataUrl = ''
+      if (isPdf) {
+        imagemDataUrl = await renderPdfFirstPageToBase64(file)
+      } else {
+        imagemDataUrl = await renderImageFileToBase64(file)
+      }
 
-      // Invocação da Edge Function do Supabase
+      // 2. Extrai base64 limpo (sem cabeçalho) para compatibilidade com o backend
+      const imagemBase64Clean = imagemDataUrl.includes(',')
+        ? imagemDataUrl.split(',')[1]
+        : imagemDataUrl
+
+      // 3. Invocação da Edge Function do Supabase (passa imagemBase64 e pdfBase64 como alias)
       const { data, error } = await supabase.functions.invoke('importar-pdf-modulo', {
-        body: { pdfBase64 },
+        body: {
+          imagemBase64: imagemBase64Clean,
+          pdfBase64: imagemBase64Clean,
+        },
       })
 
       if (error) {
@@ -911,7 +993,7 @@ export default function LibraryPage() {
                 <input
                   id="pdf-file-input"
                   type="file"
-                  accept="application/pdf,.pdf"
+                  accept=".pdf, .png, .jpg, .jpeg"
                   className="hidden"
                   onChange={handleFileInputChange}
                 />
@@ -931,11 +1013,11 @@ export default function LibraryPage() {
                     <p className="text-sm font-bold text-slate-800">
                       {importDragOver
                         ? 'Solte para importar'
-                        : 'Arraste o PDF da ficha técnica ou clique para selecionar'}
+                        : 'Arraste o PDF ou a Imagem da Ficha Técnica (PDF, PNG ou JPG)'}
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
                       Compatível com relatórios de engenharia Promob, CorteCloud e fichas técnicas
-                      (PDF).
+                      (PDF, PNG, JPG).
                     </p>
                   </div>
 
@@ -944,7 +1026,11 @@ export default function LibraryPage() {
                       className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-semibold mt-2 border border-emerald-300"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <FileText className="w-4 h-4 text-emerald-700" />
+                      {importFile.name.toLowerCase().endsWith('.pdf') ? (
+                        <FileText className="w-4 h-4 text-emerald-700" />
+                      ) : (
+                        <ImageIcon className="w-4 h-4 text-emerald-700" />
+                      )}
                       <span>{importFile.name}</span>
                       <span className="text-[11px] text-emerald-600 font-mono">
                         ({formatFileSize(importFile.size)})
@@ -980,7 +1066,11 @@ export default function LibraryPage() {
                 </div>
                 {importFile && (
                   <Badge variant="outline" className="text-xs text-slate-600 bg-white">
-                    <FileText className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                    {importFile.name.toLowerCase().endsWith('.pdf') ? (
+                      <FileText className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                    ) : (
+                      <ImageIcon className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                    )}
                     {importFile.name}
                   </Badge>
                 )}

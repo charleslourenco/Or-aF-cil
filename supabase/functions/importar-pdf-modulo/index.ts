@@ -11,7 +11,15 @@ serve(async (req) => {
   }
 
   try {
-    const { pdfBase64 } = await req.json()
+    const body = await req.json()
+    let imagemBase64 = body.imagemBase64 || body.pdfBase64 || body.image || body.base64
+    if (!imagemBase64) {
+      throw new Error('Nenhuma imagem ou PDF enviado no corpo da requisição.')
+    }
+    // Remove prefixo data URL se houver (ex: data:image/png;base64,...)
+    if (imagemBase64.includes(',')) {
+      imagemBase64 = imagemBase64.split(',')[1]
+    }
     const apiKey = Deno.env.get('OPENAI_API_KEY')
 
     const promptSistema = `Você é um engenheiro especialista em marcenaria industrial. Analise a ficha técnica/PDF do módulo e extraia todas as informações no formato JSON estrito.
@@ -53,7 +61,7 @@ serve(async (req) => {
             role: 'user',
             content: [
               { type: 'text', text: promptSistema },
-              { type: 'image_url', image_url: { url: `data:image/png;base64,${pdfBase64}` } },
+              { type: 'image_url', image_url: { url: `data:image/png;base64,${imagemBase64}` } },
             ],
           },
         ],
