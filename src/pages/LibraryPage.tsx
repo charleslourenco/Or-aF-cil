@@ -19,6 +19,7 @@ import {
   Package,
   Wrench,
   Layers,
+  Compass,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -76,6 +77,7 @@ interface ModuleFormState {
   descricao: string
   assinatura_visual: string
   icon_type: ModuleIconType
+  imagem_url: string
 }
 
 const EMPTY_FORM: ModuleFormState = {
@@ -87,6 +89,7 @@ const EMPTY_FORM: ModuleFormState = {
   descricao: '',
   assinatura_visual: '',
   icon_type: 'wardrobe',
+  imagem_url: '',
 }
 
 export interface ExtractedPecaMdf {
@@ -175,6 +178,7 @@ export default function LibraryPage() {
   const [importResult, setImportResult] = useState<ImportPdfResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [importSaving, setImportSaving] = useState(false)
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
 
   // Campos editáveis no preview de importação
   const [previewCodigo, setPreviewCodigo] = useState('')
@@ -238,6 +242,7 @@ export default function LibraryPage() {
       descricao: mod.descricao ?? '',
       assinatura_visual: (mod.assinatura_visual ?? []).join(', '),
       icon_type: normalizeIconType(mod.icon_type),
+      imagem_url: mod.imagem_url ?? '',
     })
     setFormPecasMdf(mod.pecas_mdf ?? null)
     setFormFerragens(mod.ferragens ?? null)
@@ -293,6 +298,7 @@ export default function LibraryPage() {
       assinatura_visual: tags.length > 0 ? tags : null,
       pecas_mdf: formPecasMdf,
       ferragens: formFerragens,
+      imagem_url: form.imagem_url.trim() || null,
     }
 
     setSaving(true)
@@ -389,6 +395,61 @@ export default function LibraryPage() {
     })
   }
 
+  // Converte Data URL Base64 para Blob binário
+  const dataURLtoBlob = (dataUrl: string): Blob => {
+    const arr = dataUrl.split(',')
+    const mimeMatch = arr[0].match(/:(.*?);/)
+    const mime = mimeMatch ? mimeMatch[1] : 'image/png'
+    const bstr = atob(arr[1])
+    let n = bstr.length
+    const u8arr = new Uint8Array(n)
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n)
+    }
+    return new Blob([u8arr], { type: mime })
+  }
+
+  // Realiza upload da imagem ou arquivo original para o bucket 'modulos-imagens' no Supabase Storage
+  const uploadToStorage = async (file: File, renderedDataUrl?: string): Promise<string | null> => {
+    try {
+      const bucketName = 'modulos-imagens'
+      const timestamp = Date.now()
+      const randomStr = Math.random().toString(36).substring(2, 8)
+
+      let uploadBody: Blob | File = file
+      let filePath = ''
+
+      if (renderedDataUrl) {
+        // Se temos a imagem renderizada (especialmente para PDF ou para garantir formato PNG/JPG para exibição de capa)
+        uploadBody = dataURLtoBlob(renderedDataUrl)
+        filePath = `modulo-${timestamp}-${randomStr}.png`
+      } else {
+        const cleanExt = file.name.split('.').pop()?.toLowerCase() || 'png'
+        filePath = `modulo-${timestamp}-${randomStr}.${cleanExt}`
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(filePath, uploadBody, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: uploadBody.type || 'image/png',
+        })
+
+      if (uploadError) {
+        console.warn('Erro ao fazer upload no storage modulos-imagens:', uploadError)
+        return null
+      }
+
+      const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(filePath)
+
+      return publicUrlData?.publicUrl || null
+    } catch (err) {
+      console.warn('Exceção ao enviar imagem para o Supabase Storage:', err)
+      return null
+    }
+  }
+
   // --- Handlers do Modal de Importação de PDF Promob ---
   const openImportModal = () => {
     setImportFile(null)
@@ -397,6 +458,7 @@ export default function LibraryPage() {
     setImportResult(null)
     setImportError(null)
     setImportSaving(false)
+    setUploadedImageUrl(null)
     setPreviewCodigo('')
     setPreviewNome('')
     setPreviewDimensoes('')
@@ -428,6 +490,7 @@ export default function LibraryPage() {
     setImportError(null)
     setImportLoading(true)
     setImportResult(null)
+    setUploadedImageUrl(null)
 
     try {
       // 1. Obtenção da imagem em Base64 (converte PDF para imagem via canvas ou lê imagem diretamente)
@@ -443,13 +506,23 @@ export default function LibraryPage() {
         ? imagemDataUrl.split(',')[1]
         : imagemDataUrl
 
-      // 3. Invocação da Edge Function do Supabase (passa imagemBase64 e pdfBase64 como alias)
-      const { data, error } = await supabase.functions.invoke('importar-pdf-modulo', {
+      // 3. Upload da imagem renderizada para o Supabase Storage no bucket 'modulos-imagens'
+      // Executa em paralelo ou prévio à chamada da Edge Function
+      const publicUrlPromise = uploadToStorage(file, imagemDataUrl)
+
+      // 4. Invocação da Edge Function do Supabase (passa imagemBase64 e pdfBase64 como alias)
+      const functionPromise = supabase.functions.invoke('importar-pdf-modulo', {
         body: {
           imagemBase64: imagemBase64Clean,
           pdfBase64: imagemBase64Clean,
         },
       })
+
+      const [publicUrl, { data, error }] = await Promise.all([publicUrlPromise, functionPromise])
+
+      if (publicUrl) {
+        setUploadedImageUrl(publicUrl)
+      }
 
       if (error) {
         throw new Error(error.message || 'Erro ao conectar à função de importação.')
@@ -549,6 +622,7 @@ export default function LibraryPage() {
     setImportFile(null)
     setImportResult(null)
     setImportError(null)
+    setUploadedImageUrl(null)
     setPreviewCodigo('')
     setPreviewNome('')
     setPreviewDimensoes('')
@@ -601,6 +675,7 @@ export default function LibraryPage() {
       assinatura_visual: [catLimpa],
       pecas_mdf: normalizedPecasMdf.length > 0 ? normalizedPecasMdf : null,
       ferragens: normalizedFerragens.length > 0 ? normalizedFerragens : null,
+      imagem_url: uploadedImageUrl || null,
     }
 
     setImportSaving(true)
@@ -747,8 +822,23 @@ export default function LibraryPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredModules.map((mod) => {
-            const pecasCount = Array.isArray(mod.pecas_mdf) ? mod.pecas_mdf.length : null
-            const ferragensCount = Array.isArray(mod.ferragens) ? mod.ferragens.length : null
+            // Contagem segura de peças de MDF com suporte a pecas_mdf e composicao_mdf
+            const pecasArr =
+              (Array.isArray(mod.pecas_mdf) && mod.pecas_mdf.length > 0
+                ? mod.pecas_mdf
+                : Array.isArray((mod as any).composicao_mdf)
+                  ? (mod as any).composicao_mdf
+                  : null) ?? (Array.isArray(mod.pecas_mdf) ? mod.pecas_mdf : null)
+            const pecasCount = pecasArr ? pecasArr.length : 0
+
+            // Contagem segura de ferragens
+            const ferragensArr =
+              (Array.isArray(mod.ferragens) && mod.ferragens.length > 0
+                ? mod.ferragens
+                : Array.isArray((mod as any).ferragens_itens)
+                  ? (mod as any).ferragens_itens
+                  : null) ?? (Array.isArray(mod.ferragens) ? mod.ferragens : null)
+            const ferragensCount = ferragensArr ? ferragensArr.length : 0
 
             // Extrai iniciais do nome se não houver código
             const codigoDisplay =
@@ -767,29 +857,66 @@ export default function LibraryPage() {
                 onClick={() => setDetailModalId(mod.id)}
                 className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-emerald-300 transition-all overflow-hidden flex flex-col group cursor-pointer"
               >
-                {/* Cabeçalho técnico do card (bg-slate-800) */}
-                <div className="p-5 bg-slate-800 text-white flex flex-col justify-between min-h-[110px] relative">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-lg text-emerald-400 font-mono font-bold tracking-wider">
+                {/* Cabeçalho do card: Imagem real do módulo com fallback técnico */}
+                <div className="relative w-full h-48 bg-slate-100 flex items-center justify-center overflow-hidden border-b border-slate-100 rounded-t-2xl">
+                  {mod.imagem_url ? (
+                    <img
+                      src={mod.imagem_url}
+                      alt={mod.nome_template}
+                      className="w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+                      onError={(e) => {
+                        // Fallback se a imagem falhar ao carregar
+                        ;(e.target as HTMLImageElement).style.display = 'none'
+                        const parent = (e.target as HTMLElement).parentElement
+                        const fallback = parent?.querySelector('.image-fallback-container')
+                        if (fallback) {
+                          ;(fallback as HTMLElement).style.display = 'flex'
+                        }
+                      }}
+                    />
+                  ) : null}
+
+                  {/* Fallback técnico blueprint quando não há imagem ou em caso de erro */}
+                  <div
+                    className={`image-fallback-container w-full h-full flex flex-col items-center justify-center p-4 bg-slate-100 text-slate-400 ${
+                      mod.imagem_url ? 'hidden' : 'flex'
+                    }`}
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center text-slate-500 mb-2 group-hover:border-emerald-300 group-hover:text-emerald-600 transition-colors">
+                      <Compass className="w-7 h-7" />
+                    </div>
+                    <span className="text-[11px] font-mono font-bold text-slate-600 tracking-wider">
+                      {codigoDisplay}
+                    </span>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5 font-medium">
+                      Planta Técnica
+                    </span>
+                  </div>
+
+                  {/* Badges flutuantes no topo da imagem */}
+                  <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
+                    <span className="px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-xs text-emerald-400 font-mono text-xs font-bold border border-slate-700/60 shadow-xs">
                       {codigoDisplay}
                     </span>
                     {mod.categoria && (
                       <Badge
                         variant="secondary"
-                        className="bg-slate-700/80 text-emerald-300 border-slate-600 text-[10px] font-semibold uppercase tracking-wider"
+                        className="bg-white/90 backdrop-blur-xs text-slate-800 border-slate-200/80 text-[10px] font-semibold uppercase tracking-wider shadow-xs"
                       >
                         {mod.categoria}
                       </Badge>
                     )}
                   </div>
-                  <h3 className="font-semibold text-white text-sm mt-2 line-clamp-2 leading-snug">
-                    {mod.nome_template}
-                  </h3>
                 </div>
 
                 {/* Corpo do card */}
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                   <div className="space-y-3">
+                    {/* Título do módulo */}
+                    <h3 className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug group-hover:text-emerald-700 transition-colors">
+                      {mod.nome_template}
+                    </h3>
+
                     {/* Tags em linha */}
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
                       {mod.categoria && (
@@ -821,22 +948,18 @@ export default function LibraryPage() {
                       )}
                     </div>
 
-                    {/* Resumo técnico com ícones */}
+                    {/* Resumo técnico com contadores reais de MDF e Ferragens */}
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
                       <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
                         <span className="text-sm">🧱</span>
                         <span className="font-medium text-[11px] text-slate-800">
-                          {pecasCount !== null && pecasCount !== undefined
-                            ? `${pecasCount} peças de MDF`
-                            : '— peças de MDF'}
+                          {pecasCount} peças de MDF
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
                         <span className="text-sm">🔩</span>
                         <span className="font-medium text-[11px] text-slate-800">
-                          {ferragensCount !== null && ferragensCount !== undefined
-                            ? `${ferragensCount} ferragens`
-                            : '— ferragens'}
+                          {ferragensCount} ferragens/acessórios
                         </span>
                       </div>
                     </div>
@@ -878,8 +1001,17 @@ export default function LibraryPage() {
             <>
               {/* Cabeçalho */}
               <DialogHeader className="border-b border-slate-100 pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
+                <div className="flex flex-col sm:flex-row gap-4 items-start">
+                  {selectedDetailModule.imagem_url && (
+                    <div className="w-full sm:w-32 h-24 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shrink-0 flex items-center justify-center">
+                      <img
+                        src={selectedDetailModule.imagem_url}
+                        alt={selectedDetailModule.nome_template}
+                        className="w-full h-full object-contain p-1"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-1 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-base font-mono font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                         {selectedDetailModule.codigo || 'S/ CÓDIGO'}
@@ -901,22 +1033,21 @@ export default function LibraryPage() {
                         {selectedDetailModule.descricao}
                       </DialogDescription>
                     )}
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 pt-1">
+                      {selectedDetailModule.dimensoes && (
+                        <span className="flex items-center gap-1 font-mono">
+                          <Ruler className="w-3.5 h-3.5 text-emerald-600" />
+                          <strong>Dimensões:</strong> {selectedDetailModule.dimensoes}
+                        </span>
+                      )}
+                      {selectedDetailModule.material && (
+                        <span className="flex items-center gap-1">
+                          <Boxes className="w-3.5 h-3.5 text-emerald-600" />
+                          <strong>Material:</strong> {selectedDetailModule.material}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 pt-2">
-                  {selectedDetailModule.dimensoes && (
-                    <span className="flex items-center gap-1 font-mono">
-                      <Ruler className="w-3.5 h-3.5 text-emerald-600" />
-                      <strong>Dimensões:</strong> {selectedDetailModule.dimensoes}
-                    </span>
-                  )}
-                  {selectedDetailModule.material && (
-                    <span className="flex items-center gap-1">
-                      <Boxes className="w-3.5 h-3.5 text-emerald-600" />
-                      <strong>Material:</strong> {selectedDetailModule.material}
-                    </span>
-                  )}
                 </div>
               </DialogHeader>
 
@@ -936,44 +1067,59 @@ export default function LibraryPage() {
                     </h4>
                   </div>
 
-                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                        <tr>
-                          <th className="py-2.5 px-3 w-12 text-center">Item (#)</th>
-                          <th className="py-2.5 px-3 w-1/4">Código</th>
-                          <th className="py-2.5 px-3">Descrição</th>
-                          <th className="py-2.5 px-3 text-right w-16">Qtd</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-slate-700">
-                        {!selectedDetailModule.pecas_mdf ||
-                        !Array.isArray(selectedDetailModule.pecas_mdf) ||
-                        selectedDetailModule.pecas_mdf.length === 0 ? (
-                          <tr>
-                            <td colSpan={4} className="py-6 text-center text-slate-400 italic">
-                              Nenhuma peça de MDF cadastrada para este módulo.
-                            </td>
-                          </tr>
-                        ) : (
-                          selectedDetailModule.pecas_mdf.map((peca, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/80">
-                              <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">
-                                #{idx + 1}
-                              </td>
-                              <td className="py-2 px-3 font-mono font-semibold text-slate-900">
-                                {peca.codigo || `P-${idx + 1}`}
-                              </td>
-                              <td className="py-2 px-3">{peca.descricao || 'Peça MDF'}</td>
-                              <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
-                                {peca.quantidade ?? 1}
-                              </td>
+                  {(() => {
+                    const detailPecas =
+                      (Array.isArray(selectedDetailModule.pecas_mdf) &&
+                      selectedDetailModule.pecas_mdf.length > 0
+                        ? selectedDetailModule.pecas_mdf
+                        : Array.isArray((selectedDetailModule as any).composicao_mdf)
+                          ? (selectedDetailModule as any).composicao_mdf
+                          : null) ??
+                      (Array.isArray(selectedDetailModule.pecas_mdf)
+                        ? selectedDetailModule.pecas_mdf
+                        : null)
+
+                    return (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                            <tr>
+                              <th className="py-2.5 px-3 w-12 text-center">Item (#)</th>
+                              <th className="py-2.5 px-3 w-1/4">Código</th>
+                              <th className="py-2.5 px-3">Descrição</th>
+                              <th className="py-2.5 px-3 text-right w-16">Qtd</th>
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700">
+                            {!detailPecas || detailPecas.length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="py-6 text-center text-slate-400 italic">
+                                  Nenhuma peça de MDF cadastrada para este módulo.
+                                </td>
+                              </tr>
+                            ) : (
+                              detailPecas.map((peca: any, idx: number) => (
+                                <tr key={idx} className="hover:bg-slate-50/80">
+                                  <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">
+                                    #{idx + 1}
+                                  </td>
+                                  <td className="py-2 px-3 font-mono font-semibold text-slate-900">
+                                    {peca.codigo || `P-${idx + 1}`}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    {peca.descricao || peca.nome || 'Peça MDF'}
+                                  </td>
+                                  <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                                    {peca.quantidade ?? peca.qtd ?? 1}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 {/* Seção 2 — Ferragens */}
@@ -990,44 +1136,59 @@ export default function LibraryPage() {
                     </h4>
                   </div>
 
-                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                        <tr>
-                          <th className="py-2.5 px-3 w-1/4">Referência</th>
-                          <th className="py-2.5 px-3">Descrição</th>
-                          <th className="py-2.5 px-3 text-right w-16">Qtd</th>
-                          <th className="py-2.5 px-3 text-center w-20">Unidade</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-slate-700">
-                        {!selectedDetailModule.ferragens ||
-                        !Array.isArray(selectedDetailModule.ferragens) ||
-                        selectedDetailModule.ferragens.length === 0 ? (
-                          <tr>
-                            <td colSpan={4} className="py-6 text-center text-slate-400 italic">
-                              Nenhuma ferragem cadastrada para este módulo.
-                            </td>
-                          </tr>
-                        ) : (
-                          selectedDetailModule.ferragens.map((ferragem, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/80">
-                              <td className="py-2 px-3 font-mono font-semibold text-slate-900">
-                                {ferragem.item || `FERR-${idx + 1}`}
-                              </td>
-                              <td className="py-2 px-3">{ferragem.descricao || 'Ferragem'}</td>
-                              <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
-                                {ferragem.quantidade ?? 1}
-                              </td>
-                              <td className="py-2 px-3 text-center text-slate-500 font-mono text-[11px]">
-                                {ferragem.unidade || 'un'}
-                              </td>
+                  {(() => {
+                    const detailFerragens =
+                      (Array.isArray(selectedDetailModule.ferragens) &&
+                      selectedDetailModule.ferragens.length > 0
+                        ? selectedDetailModule.ferragens
+                        : Array.isArray((selectedDetailModule as any).ferragens_itens)
+                          ? (selectedDetailModule as any).ferragens_itens
+                          : null) ??
+                      (Array.isArray(selectedDetailModule.ferragens)
+                        ? selectedDetailModule.ferragens
+                        : null)
+
+                    return (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                            <tr>
+                              <th className="py-2.5 px-3 w-1/4">Referência</th>
+                              <th className="py-2.5 px-3">Descrição</th>
+                              <th className="py-2.5 px-3 text-right w-16">Qtd</th>
+                              <th className="py-2.5 px-3 text-center w-20">Unidade</th>
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700">
+                            {!detailFerragens || detailFerragens.length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="py-6 text-center text-slate-400 italic">
+                                  Nenhuma ferragem cadastrada para este módulo.
+                                </td>
+                              </tr>
+                            ) : (
+                              detailFerragens.map((ferragem: any, idx: number) => (
+                                <tr key={idx} className="hover:bg-slate-50/80">
+                                  <td className="py-2 px-3 font-mono font-semibold text-slate-900">
+                                    {ferragem.item || ferragem.ref || `FERR-${idx + 1}`}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    {ferragem.descricao || ferragem.item || 'Ferragem'}
+                                  </td>
+                                  <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                                    {ferragem.quantidade ?? ferragem.qtd ?? 1}
+                                  </td>
+                                  <td className="py-2 px-3 text-center text-slate-500 font-mono text-[11px]">
+                                    {ferragem.unidade || 'un'}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
 
@@ -1146,6 +1307,19 @@ export default function LibraryPage() {
                 onChange={(e) => setForm((f) => ({ ...f, nome_template: e.target.value }))}
                 placeholder="Ex.: Roupeiro 2 Portas"
                 className="h-9 text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="form_imagem_url" className="text-xs font-semibold">
+                URL da Imagem de Capa (opcional)
+              </Label>
+              <Input
+                id="form_imagem_url"
+                value={form.imagem_url}
+                onChange={(e) => setForm((f) => ({ ...f, imagem_url: e.target.value }))}
+                placeholder="https://... ou caminho no storage"
+                className="h-9 text-sm font-mono text-xs"
               />
             </div>
 

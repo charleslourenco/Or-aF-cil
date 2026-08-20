@@ -173,37 +173,46 @@ export type Database = {
         Row: {
           assinatura_visual: string[] | null
           categoria: string | null
+          codigo: string | null
           created_at: string
           descricao: string | null
           dimensoes: string | null
+          ferragens: Json | null
           icon_type: string
           id: string
           material: string | null
           nome_template: string
+          pecas_mdf: Json | null
           updated_at: string
         }
         Insert: {
           assinatura_visual?: string[] | null
           categoria?: string | null
+          codigo?: string | null
           created_at?: string
           descricao?: string | null
           dimensoes?: string | null
+          ferragens?: Json | null
           icon_type?: string
           id?: string
           material?: string | null
           nome_template: string
+          pecas_mdf?: Json | null
           updated_at?: string
         }
         Update: {
           assinatura_visual?: string[] | null
           categoria?: string | null
+          codigo?: string | null
           created_at?: string
           descricao?: string | null
           dimensoes?: string | null
+          ferragens?: Json | null
           icon_type?: string
           id?: string
           material?: string | null
           nome_template?: string
+          pecas_mdf?: Json | null
           updated_at?: string
         }
         Relationships: []

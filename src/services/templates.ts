@@ -27,6 +27,7 @@ export interface TemplateEngenharia {
   codigo?: string | null
   pecas_mdf?: PecaMdfItem[] | null
   ferragens?: FerragemItem[] | null
+  imagem_url?: string | null
 }
 
 /** Payload aceito pelas funções de criação/atualização de módulos. */
@@ -41,6 +42,7 @@ export type TemplateEngenhariaInput = {
   codigo?: string | null
   pecas_mdf?: PecaMdfItem[] | null
   ferragens?: FerragemItem[] | null
+  imagem_url?: string | null
 }
 
 /**
@@ -58,7 +60,7 @@ export async function fetchTemplatesEngenharia(): Promise<{
   const { data, error } = await (supabase as any)
     .from('TemplatesEngenharia')
     .select(
-      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens',
+      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens, imagem_url',
     )
     .order('nome_template')
     .limit(100)
@@ -91,9 +93,10 @@ export async function createTemplateEngenharia(
       codigo: payload.codigo ?? null,
       pecas_mdf: payload.pecas_mdf ?? null,
       ferragens: payload.ferragens ?? null,
+      imagem_url: payload.imagem_url ?? null,
     })
     .select(
-      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens',
+      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens, imagem_url',
     )
     .single()
 
@@ -126,10 +129,11 @@ export async function updateTemplateEngenharia(
       codigo: payload.codigo ?? null,
       pecas_mdf: payload.pecas_mdf ?? null,
       ferragens: payload.ferragens ?? null,
+      imagem_url: payload.imagem_url !== undefined ? payload.imagem_url : undefined,
     })
     .eq('id', id)
     .select(
-      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens',
+      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens, imagem_url',
     )
     .single()
 
