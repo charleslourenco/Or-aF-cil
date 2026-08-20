@@ -180,6 +180,7 @@ export type Database = {
           ferragens: Json | null
           icon_type: string
           id: string
+          imagem_url: string | null
           material: string | null
           nome_template: string
           pecas_mdf: Json | null
@@ -195,6 +196,7 @@ export type Database = {
           ferragens?: Json | null
           icon_type?: string
           id?: string
+          imagem_url?: string | null
           material?: string | null
           nome_template: string
           pecas_mdf?: Json | null
@@ -210,6 +212,7 @@ export type Database = {
           ferragens?: Json | null
           icon_type?: string
           id?: string
+          imagem_url?: string | null
           material?: string | null
           nome_template?: string
           pecas_mdf?: Json | null

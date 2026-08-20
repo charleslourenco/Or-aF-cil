@@ -805,6 +805,23 @@ export default function LibraryPage() {
             Tentar novamente
           </Button>
         </div>
+      ) : modulos.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 p-8 shadow-2xs">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4 text-emerald-600 shadow-2xs">
+            <Package className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-900">Sua biblioteca de módulos está vazia</h3>
+          <p className="text-sm text-slate-500 mt-1.5 max-w-md">
+            Faça o upload das fichas técnicas em PDF ou imagem para povoar seu catálogo oficial de
+            fábrica.
+          </p>
+          <Button
+            onClick={openImportModal}
+            className="mt-6 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm h-10 px-5"
+          >
+            <FileUp className="w-4 h-4 mr-2" />+ Importar Primeiro Módulo
+          </Button>
+        </div>
       ) : filteredModules.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Boxes className="w-10 h-10 text-slate-300 mb-3" />
