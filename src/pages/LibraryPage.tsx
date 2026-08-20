@@ -634,75 +634,90 @@ export default function LibraryPage() {
       return
     }
 
-    const rawPecasList = importResult?.pecas_mdf || importResult?.composicao_mdf || []
-    const rawFerragensList = importResult?.ferragens || []
-
-    // Normalização das peças MDF para [{ codigo, descricao, quantidade }]
-    const normalizedPecasMdf: PecaMdfItem[] = rawPecasList.map((peca, idx) => ({
-      codigo:
-        peca.codigo ||
-        (peca.item !== undefined && peca.item !== null ? `ITEM-${peca.item}` : `P-${idx + 1}`),
-      descricao: peca.descricao || peca.nome || 'Peça MDF Padrão',
-      quantidade: peca.quantidade ?? peca.qtd ?? 1,
-    }))
-
-    // Normalização das ferragens para [{ item, descricao, quantidade, unidade }]
-    const normalizedFerragens: FerragemItem[] = rawFerragensList.map((ferragem, idx) => ({
-      item: ferragem.item || ferragem.ref || `FERR-${idx + 1}`,
-      descricao: ferragem.descricao || ferragem.item || ferragem.ref || `Ferragem #${idx + 1}`,
-      quantidade: ferragem.quantidade ?? ferragem.qtd ?? 1,
-      unidade: ferragem.unidade || 'un',
-    }))
-
-    const codigoFinal = previewCodigo.trim() || null
-    const nomeFinal = previewNome.trim()
-
-    const pecasCount = normalizedPecasMdf.length
-    const ferragensCount = normalizedFerragens.length
-    const descricao = `Módulo importado via PDF com ${pecasCount} peça(s) em MDF e ${ferragensCount} item(ns) de ferragens.`
-
-    const catLimpa = previewCategoria.trim() || 'Cozinha'
-    const iconType = inferIconTypeFromCategory(catLimpa)
-
-    const payload: TemplateEngenhariaInput = {
-      codigo: codigoFinal,
-      nome_template: nomeFinal,
-      categoria: catLimpa,
-      dimensoes: previewDimensoes.trim() || '1200x900x600',
-      material: importResult?.material || 'MDF (importado via PDF)',
-      descricao: descricao,
-      icon_type: iconType,
-      assinatura_visual: [catLimpa],
-      pecas_mdf: normalizedPecasMdf.length > 0 ? normalizedPecasMdf : null,
-      ferragens: normalizedFerragens.length > 0 ? normalizedFerragens : null,
-      imagem_url: uploadedImageUrl || null,
-    }
-
     setImportSaving(true)
     setImportError(null)
 
-    const result = await createTemplateEngenharia(payload)
-    setImportSaving(false)
+    try {
+      const rawPecasList = importResult?.pecas_mdf || importResult?.composicao_mdf || []
+      const rawFerragensList = importResult?.ferragens || []
 
-    if (result.error || !result.data) {
-      setImportError(result.error ?? 'Não foi possível salvar o módulo no banco de dados.')
+      // Normalização das peças MDF para [{ codigo, descricao, quantidade }]
+      const normalizedPecasMdf: PecaMdfItem[] = rawPecasList.map((peca, idx) => ({
+        codigo:
+          peca.codigo ||
+          (peca.item !== undefined && peca.item !== null ? `ITEM-${peca.item}` : `P-${idx + 1}`),
+        descricao: peca.descricao || peca.nome || 'Peça MDF Padrão',
+        quantidade: peca.quantidade ?? peca.qtd ?? 1,
+      }))
+
+      // Normalização das ferragens para [{ item, descricao, quantidade, unidade }]
+      const normalizedFerragens: FerragemItem[] = rawFerragensList.map((ferragem, idx) => ({
+        item: ferragem.item || ferragem.ref || `FERR-${idx + 1}`,
+        descricao: ferragem.descricao || ferragem.item || ferragem.ref || `Ferragem #${idx + 1}`,
+        quantidade: ferragem.quantidade ?? ferragem.qtd ?? 1,
+        unidade: ferragem.unidade || 'un',
+      }))
+
+      const codigoFinal = previewCodigo.trim() || null
+      const nomeFinal = previewNome.trim()
+
+      const pecasCount = normalizedPecasMdf.length
+      const ferragensCount = normalizedFerragens.length
+      const descricao = `Módulo importado via PDF com ${pecasCount} peça(s) em MDF e ${ferragensCount} item(ns) de ferragens.`
+
+      const catLimpa = previewCategoria.trim() || 'Cozinha'
+      const iconType = inferIconTypeFromCategory(catLimpa)
+
+      const payload: TemplateEngenhariaInput = {
+        codigo: codigoFinal,
+        nome_template: nomeFinal,
+        categoria: catLimpa,
+        dimensoes: previewDimensoes.trim() || '1200x900x600',
+        material: importResult?.material || 'MDF (importado via PDF)',
+        descricao: descricao,
+        icon_type: iconType,
+        assinatura_visual: [catLimpa],
+        pecas_mdf: normalizedPecasMdf.length > 0 ? normalizedPecasMdf : null,
+        ferragens: normalizedFerragens.length > 0 ? normalizedFerragens : null,
+        imagem_url: uploadedImageUrl || null,
+      }
+
+      const result = await createTemplateEngenharia(payload)
+
+      if (result.error || !result.data) {
+        const errorMsg = result.error ?? 'Não foi possível salvar o módulo no banco de dados.'
+        setImportError(errorMsg)
+        toast({
+          title: 'Erro ao salvar módulo',
+          description: errorMsg,
+          variant: 'destructive',
+        })
+        return
+      }
+
+      // Fecha o modal de importação
+      setImportModalOpen(false)
+
+      // Recarrega a lista do banco
+      await loadModules()
+
+      toast({
+        title: 'Módulo importado com sucesso!',
+        description: `${nomeFinal} adicionado à biblioteca de engenharia.`,
+      })
+    } catch (err: unknown) {
+      console.error('Erro ao salvar módulo importado:', err)
+      const errorMsg =
+        err instanceof Error ? err.message : 'Ocorreu um erro inesperado ao salvar o módulo.'
+      setImportError(errorMsg)
       toast({
         title: 'Erro ao salvar módulo',
-        description: result.error ?? 'Tente novamente.',
+        description: errorMsg,
         variant: 'destructive',
       })
-      return
+    } finally {
+      setImportSaving(false)
     }
-
-    // Recarrega a lista do banco
-    await loadModules()
-
-    toast({
-      title: 'Módulo importado com sucesso!',
-      description: `${nomeFinal} adicionado à biblioteca de engenharia.`,
-    })
-
-    setImportModalOpen(false)
   }
 
   return (
