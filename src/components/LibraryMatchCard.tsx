@@ -21,8 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ModuloBlueprint2D, type ModuloDimensoes } from './ModuloBlueprint2D'
-import { TemplateEngenharia, normalizeIconType } from '@/services/templates'
+import { TemplateEngenharia } from '@/services/templates'
 import { cn } from '@/lib/utils'
 
 interface LibraryMatchCardProps {
@@ -37,8 +36,8 @@ interface LibraryMatchCardProps {
   selectedModuleId?: string
   /** Callback disparado ao escolher manualmente outro módulo. */
   onModuleChange?: (id: string) => void
-  /** Dimensões reais (mm) usadas para desenhar o blueprint proporcional. */
-  dimensoes?: ModuloDimensoes
+  /** Dimensões reais (mm) opcionais passadas ao componente. */
+  dimensoes?: { largura: number; altura: number; profundidade: number }
   /** Justificativa retornada pela IA (GPT-4o Vision) sobre o match do módulo. */
   justificativa?: string | null
 }
@@ -185,14 +184,25 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
         </div>
       ) : isMatched ? (
         <div className="flex-1 flex flex-col justify-between space-y-4 pt-4 animate-fade-in">
-          {/* Visual Blueprint Representation — placeholder visual do módulo base */}
+          {/* Visual Representation — imagem real do módulo ou fallback limpo */}
           <div className="w-full">
-            <ModuloBlueprint2D
-              type={normalizeIconType(selectedModule?.icon_type)}
-              dimensoes={dimensoes}
-              corMdf={selectedModule?.material ?? undefined}
-              className="shadow-inner"
-            />
+            {selectedModule.imagem_url ? (
+              <img
+                src={selectedModule.imagem_url}
+                alt={selectedModule.nome_template || 'Módulo'}
+                className="w-full h-64 object-contain bg-slate-50 rounded-xl border border-slate-200"
+              />
+            ) : (
+              <div className="w-full h-64 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-400 gap-2">
+                <Box className="w-10 h-10" />
+                <span className="text-xs font-medium">Sem imagem técnica</span>
+                {selectedModule?.codigo && (
+                  <span className="text-[10px] font-mono text-slate-300">
+                    {selectedModule.codigo}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Nome do template selecionado no topo da área de detalhes */}
