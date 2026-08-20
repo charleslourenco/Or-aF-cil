@@ -41,63 +41,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ModuloBlueprint2D, type ModuloDimensoes } from '@/components/ModuloBlueprint2D'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase/client'
 import {
   fetchTemplatesEngenharia,
   createTemplateEngenharia,
   updateTemplateEngenharia,
+  deleteTemplateEngenharia,
   normalizeIconType,
   type TemplateEngenharia,
   type TemplateEngenhariaInput,
   type ModuleIconType,
+  type PecaMdfItem,
+  type FerragemItem,
 } from '@/services/templates'
-
-/**
- * Converte a string de dimensões do catálogo (ex.: "2000x1200x600 mm",
- * "2000 x 1200 x 600", "1800X2200X600") em `{ largura, altura, profundidade }`.
- * Ordem interpretada: L x A x P. Cai num fallback padrão se não houver 3 números.
- */
-function parseDimensoes(raw?: string | null): ModuloDimensoes {
-  const fallback: ModuloDimensoes = {
-    largura: 1200,
-    altura: 2000,
-    profundidade: 600,
-  }
-  if (!raw) return fallback
-  const nums = raw.match(/\d+(?:[.,]\d+)?/g)
-  if (!nums || nums.length < 3) return fallback
-  const toNum = (s: string) => Number(s.replace(',', '.'))
-  return {
-    largura: toNum(nums[0]),
-    altura: toNum(nums[1]),
-    profundidade: toNum(nums[2]),
-  }
-}
-
-/** Paleta de cores variadas para os badges de tags. */
-const TAG_COLORS: Record<string, string> = {
-  emerald: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  blue: 'bg-blue-100 text-blue-700 border-blue-200',
-  amber: 'bg-amber-100 text-amber-700 border-amber-200',
-  purple: 'bg-purple-100 text-purple-700 border-purple-200',
-  rose: 'bg-rose-100 text-rose-700 border-rose-200',
-  cyan: 'bg-cyan-100 text-cyan-700 border-cyan-200',
-}
-
-/** Hash determinístico de string -> chave de cor, para cores variadas por tag. */
-function colorForTag(tag: string): string {
-  let hash = 0
-  for (let i = 0; i < tag.length; i++) {
-    hash = (hash << 5) - hash + tag.charCodeAt(i)
-    hash |= 0
-  }
-  const keys = Object.keys(TAG_COLORS)
-  return TAG_COLORS[keys[Math.abs(hash) % keys.length]]
-}
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Trash2 } from 'lucide-react'
 
 interface ModuleFormState {
+  codigo: string
   nome_template: string
   categoria: string
   dimensoes: string
@@ -108,6 +79,7 @@ interface ModuleFormState {
 }
 
 const EMPTY_FORM: ModuleFormState = {
+  codigo: '',
   nome_template: '',
   categoria: '',
   dimensoes: '',
@@ -181,11 +153,18 @@ export default function LibraryPage() {
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
+  // Estado do modal de detalhes do módulo
+  const [detailModalId, setDetailModalId] = useState<string | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
   // Estado do modal de criação/edição padrão
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<ModuleFormState>(EMPTY_FORM)
+  const [formPecasMdf, setFormPecasMdf] = useState<PecaMdfItem[] | null>(null)
+  const [formFerragens, setFormFerragens] = useState<FerragemItem[] | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
   // Estados do Modal de Importação de PDF
@@ -221,10 +200,13 @@ export default function LibraryPage() {
     loadModules()
   }, [loadModules])
 
+  const selectedDetailModule = modulos.find((m) => m.id === detailModalId) || null
+
   const filteredModules = modulos.filter((m) => {
     const term = searchTerm.toLowerCase()
     const tags = (m.assinatura_visual ?? []).join(' ').toLowerCase()
     const matchesSearch =
+      (m.codigo ?? '').toLowerCase().includes(term) ||
       m.nome_template.toLowerCase().includes(term) ||
       (m.descricao ?? '').toLowerCase().includes(term) ||
       (m.material ?? '').toLowerCase().includes(term) ||
@@ -239,6 +221,8 @@ export default function LibraryPage() {
   const openCreate = () => {
     setEditingId(null)
     setForm(EMPTY_FORM)
+    setFormPecasMdf(null)
+    setFormFerragens(null)
     setFormError(null)
     setModalOpen(true)
   }
@@ -246,6 +230,7 @@ export default function LibraryPage() {
   const openEdit = (mod: TemplateEngenharia) => {
     setEditingId(mod.id)
     setForm({
+      codigo: mod.codigo ?? '',
       nome_template: mod.nome_template ?? '',
       categoria: mod.categoria ?? '',
       dimensoes: mod.dimensoes ?? '',
@@ -254,8 +239,36 @@ export default function LibraryPage() {
       assinatura_visual: (mod.assinatura_visual ?? []).join(', '),
       icon_type: normalizeIconType(mod.icon_type),
     })
+    setFormPecasMdf(mod.pecas_mdf ?? null)
+    setFormFerragens(mod.ferragens ?? null)
     setFormError(null)
     setModalOpen(true)
+  }
+
+  const handleDelete = async (id: string) => {
+    setDeleting(true)
+    const { error } = await deleteTemplateEngenharia(id)
+    setDeleting(false)
+
+    if (error) {
+      toast({
+        title: 'Erro ao excluir módulo',
+        description: error,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    toast({
+      title: 'Módulo excluído',
+      description: 'O módulo foi removido da biblioteca com sucesso.',
+    })
+
+    setDeleteConfirmId(null)
+    if (detailModalId === id) {
+      setDetailModalId(null)
+    }
+    await loadModules()
   }
 
   const handleSave = async () => {
@@ -270,6 +283,7 @@ export default function LibraryPage() {
       .filter(Boolean)
 
     const payload: TemplateEngenhariaInput = {
+      codigo: form.codigo.trim() || null,
       nome_template: form.nome_template.trim(),
       categoria: form.categoria.trim() || null,
       dimensoes: form.dimensoes.trim() || null,
@@ -277,6 +291,8 @@ export default function LibraryPage() {
       descricao: form.descricao.trim() || null,
       icon_type: form.icon_type,
       assinatura_visual: tags.length > 0 ? tags : null,
+      pecas_mdf: formPecasMdf,
+      ferragens: formFerragens,
     }
 
     setSaving(true)
@@ -296,14 +312,8 @@ export default function LibraryPage() {
       return
     }
 
-    // Atualiza a lista localmente sem precisar re-fetchear tudo.
-    setModulos((prev) => {
-      const exists = prev.some((m) => m.id === result.data!.id)
-      const next = exists
-        ? prev.map((m) => (m.id === result.data!.id ? result.data! : m))
-        : [...prev, result.data!]
-      return next.sort((a, b) => a.nome_template.localeCompare(b.nome_template))
-    })
+    // Atualiza a lista localmente e recarrega
+    await loadModules()
 
     toast({
       title: editingId !== null ? 'Módulo atualizado' : 'Módulo criado',
@@ -550,28 +560,47 @@ export default function LibraryPage() {
       return
     }
 
-    const pecasList = importResult?.pecas_mdf || importResult?.composicao_mdf || []
-    const ferragensList = importResult?.ferragens || []
+    const rawPecasList = importResult?.pecas_mdf || importResult?.composicao_mdf || []
+    const rawFerragensList = importResult?.ferragens || []
 
-    const nomeCompleto = previewCodigo.trim()
-      ? `${previewCodigo.trim()} - ${previewNome.trim()}`
-      : previewNome.trim()
+    // Normalização das peças MDF para [{ codigo, descricao, quantidade }]
+    const normalizedPecasMdf: PecaMdfItem[] = rawPecasList.map((peca, idx) => ({
+      codigo:
+        peca.codigo ||
+        (peca.item !== undefined && peca.item !== null ? `ITEM-${peca.item}` : `P-${idx + 1}`),
+      descricao: peca.descricao || peca.nome || 'Peça MDF Padrão',
+      quantidade: peca.quantidade ?? peca.qtd ?? 1,
+    }))
 
-    const pecasCount = pecasList.length
-    const ferragensCount = ferragensList.length
+    // Normalização das ferragens para [{ item, descricao, quantidade, unidade }]
+    const normalizedFerragens: FerragemItem[] = rawFerragensList.map((ferragem, idx) => ({
+      item: ferragem.item || ferragem.ref || `FERR-${idx + 1}`,
+      descricao: ferragem.descricao || ferragem.item || ferragem.ref || `Ferragem #${idx + 1}`,
+      quantidade: ferragem.quantidade ?? ferragem.qtd ?? 1,
+      unidade: ferragem.unidade || 'un',
+    }))
+
+    const codigoFinal = previewCodigo.trim() || null
+    const nomeFinal = previewNome.trim()
+
+    const pecasCount = normalizedPecasMdf.length
+    const ferragensCount = normalizedFerragens.length
     const descricao = `Módulo importado via PDF com ${pecasCount} peça(s) em MDF e ${ferragensCount} item(ns) de ferragens.`
 
     const catLimpa = previewCategoria.trim() || 'Cozinha'
     const iconType = inferIconTypeFromCategory(catLimpa)
 
     const payload: TemplateEngenhariaInput = {
-      nome_template: nomeCompleto,
+      codigo: codigoFinal,
+      nome_template: nomeFinal,
       categoria: catLimpa,
       dimensoes: previewDimensoes.trim() || '1200x900x600',
       material: importResult?.material || 'MDF (importado via PDF)',
       descricao: descricao,
       icon_type: iconType,
       assinatura_visual: [catLimpa],
+      pecas_mdf: normalizedPecasMdf.length > 0 ? normalizedPecasMdf : null,
+      ferragens: normalizedFerragens.length > 0 ? normalizedFerragens : null,
     }
 
     setImportSaving(true)
@@ -595,7 +624,7 @@ export default function LibraryPage() {
 
     toast({
       title: 'Módulo importado com sucesso!',
-      description: `${nomeCompleto} adicionado à biblioteca de engenharia.`,
+      description: `${nomeFinal} adicionado à biblioteca de engenharia.`,
     })
 
     setImportModalOpen(false)
@@ -717,108 +746,369 @@ export default function LibraryPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredModules.map((mod) => (
-            <div
-              key={mod.id}
-              className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all overflow-hidden flex flex-col group"
-            >
-              {/* Blueprint preview */}
-              <div className="p-4 bg-slate-50/50 border-b border-slate-100">
-                <ModuloBlueprint2D
-                  type={normalizeIconType(mod.icon_type)}
-                  dimensoes={parseDimensoes(mod.dimensoes)}
-                  corMdf={mod.material ?? undefined}
-                  className="h-44"
-                />
-              </div>
+          {filteredModules.map((mod) => {
+            const pecasCount = Array.isArray(mod.pecas_mdf) ? mod.pecas_mdf.length : null
+            const ferragensCount = Array.isArray(mod.ferragens) ? mod.ferragens.length : null
 
-              {/* Content */}
-              <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                <div>
-                  <div className="flex items-center justify-between gap-2">
+            // Extrai iniciais do nome se não houver código
+            const codigoDisplay =
+              mod.codigo && mod.codigo.trim().length > 0
+                ? mod.codigo.trim()
+                : mod.nome_template
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .slice(0, 3)
+                    .map((w) => w[0]?.toUpperCase())
+                    .join('') || 'MOD'
+
+            return (
+              <div
+                key={mod.id}
+                onClick={() => setDetailModalId(mod.id)}
+                className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-emerald-300 transition-all overflow-hidden flex flex-col group cursor-pointer"
+              >
+                {/* Cabeçalho técnico do card (bg-slate-800) */}
+                <div className="p-5 bg-slate-800 text-white flex flex-col justify-between min-h-[110px] relative">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-lg text-emerald-400 font-mono font-bold tracking-wider">
+                      {codigoDisplay}
+                    </span>
                     {mod.categoria && (
                       <Badge
-                        variant="outline"
-                        className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold uppercase tracking-wider"
+                        variant="secondary"
+                        className="bg-slate-700/80 text-emerald-300 border-slate-600 text-[10px] font-semibold uppercase tracking-wider"
                       >
                         {mod.categoria}
                       </Badge>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => openEdit(mod)}
-                      className="text-slate-400 hover:text-emerald-600 transition-colors p-1 rounded-md hover:bg-emerald-50"
-                      aria-label={`Editar ${mod.nome_template}`}
-                      title="Editar módulo"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
                   </div>
-
-                  <h3 className="font-bold text-base text-slate-900 mt-2 group-hover:text-emerald-700 transition-colors">
+                  <h3 className="font-semibold text-white text-sm mt-2 line-clamp-2 leading-snug">
                     {mod.nome_template}
                   </h3>
-                  {mod.descricao && (
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{mod.descricao}</p>
-                  )}
+                </div>
 
-                  {/* Tags / assinatura_visual */}
-                  {mod.assinatura_visual && mod.assinatura_visual.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-3">
-                      {mod.assinatura_visual.map((tag) => (
-                        <span
-                          key={tag}
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${colorForTag(
-                            tag,
-                          )}`}
+                {/* Corpo do card */}
+                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                  <div className="space-y-3">
+                    {/* Tags em linha */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      {mod.categoria && (
+                        <Badge
+                          variant="outline"
+                          className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-semibold"
                         >
-                          {tag}
+                          {mod.categoria}
+                        </Badge>
+                      )}
+                      {mod.dimensoes && (
+                        <Badge
+                          variant="outline"
+                          className="border-slate-200 bg-slate-50 text-slate-700 text-[10px] font-mono flex items-center gap-1"
+                        >
+                          <Ruler className="w-3 h-3 text-emerald-600" />
+                          {mod.dimensoes}
+                        </Badge>
+                      )}
+                      {mod.material && (
+                        <Badge
+                          variant="outline"
+                          className="border-slate-200 bg-slate-50 text-slate-700 text-[10px] flex items-center gap-1 max-w-[170px] truncate"
+                          title={mod.material}
+                        >
+                          <Boxes className="w-3 h-3 text-emerald-600" />
+                          <span className="truncate">{mod.material}</span>
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Resumo técnico com ícones */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+                      <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                        <span className="text-sm">🧱</span>
+                        <span className="font-medium text-[11px] text-slate-800">
+                          {pecasCount !== null && pecasCount !== undefined
+                            ? `${pecasCount} peças de MDF`
+                            : '— peças de MDF'}
                         </span>
-                      ))}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                        <span className="text-sm">🔩</span>
+                        <span className="font-medium text-[11px] text-slate-800">
+                          {ferragensCount !== null && ferragensCount !== undefined
+                            ? `${ferragensCount} ferragens`
+                            : '— ferragens'}
+                        </span>
+                      </div>
                     </div>
-                  )}
-                </div>
 
-                {/* Specs */}
-                <div className="space-y-2 pt-3 border-t border-slate-100 text-xs">
-                  {mod.dimensoes && (
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span className="flex items-center gap-1.5 text-slate-400">
-                        <Ruler className="w-3.5 h-3.5 text-emerald-600" /> Dimensões:
-                      </span>
-                      <span className="font-mono font-bold text-slate-800">{mod.dimensoes}</span>
-                    </div>
-                  )}
-                  {mod.material && (
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span className="flex items-center gap-1.5 text-slate-400">
-                        <Boxes className="w-3.5 h-3.5 text-emerald-600" /> Material:
-                      </span>
-                      <span
-                        className="font-medium text-slate-700 truncate max-w-[170px]"
-                        title={mod.material}
-                      >
-                        {mod.material}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                    {mod.descricao && (
+                      <p className="text-xs text-slate-500 line-clamp-2 pt-1">{mod.descricao}</p>
+                    )}
+                  </div>
 
-                {/* Action */}
-                <Button
-                  asChild
-                  className="w-full bg-slate-900 hover:bg-emerald-600 text-white text-xs font-semibold rounded-xl transition-colors"
-                >
-                  <Link to={`/novo-orcamento?modulo=${mod.id}`}>
-                    Usar no Orçamento
-                    <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-                  </Link>
-                </Button>
+                  {/* Ações no rodapé do card */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                    <Button
+                      asChild
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full bg-slate-900 hover:bg-emerald-600 text-white text-xs font-semibold rounded-xl transition-colors"
+                    >
+                      <Link to={`/novo-orcamento?modulo=${mod.id}`}>
+                        Usar no Orçamento
+                        <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
+
+      {/* Modal de Detalhes ao Clicar no Card */}
+      <Dialog
+        open={detailModalId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailModalId(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+          {selectedDetailModule && (
+            <>
+              {/* Cabeçalho */}
+              <DialogHeader className="border-b border-slate-100 pb-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-mono font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        {selectedDetailModule.codigo || 'S/ CÓDIGO'}
+                      </span>
+                      {selectedDetailModule.categoria && (
+                        <Badge
+                          variant="outline"
+                          className="bg-slate-100 text-slate-700 border-slate-200 text-xs font-semibold"
+                        >
+                          {selectedDetailModule.categoria}
+                        </Badge>
+                      )}
+                    </div>
+                    <DialogTitle className="text-xl font-bold text-slate-900">
+                      {selectedDetailModule.nome_template}
+                    </DialogTitle>
+                    {selectedDetailModule.descricao && (
+                      <DialogDescription className="text-xs text-slate-500">
+                        {selectedDetailModule.descricao}
+                      </DialogDescription>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 pt-2">
+                  {selectedDetailModule.dimensoes && (
+                    <span className="flex items-center gap-1 font-mono">
+                      <Ruler className="w-3.5 h-3.5 text-emerald-600" />
+                      <strong>Dimensões:</strong> {selectedDetailModule.dimensoes}
+                    </span>
+                  )}
+                  {selectedDetailModule.material && (
+                    <span className="flex items-center gap-1">
+                      <Boxes className="w-3.5 h-3.5 text-emerald-600" />
+                      <strong>Material:</strong> {selectedDetailModule.material}
+                    </span>
+                  )}
+                </div>
+              </DialogHeader>
+
+              {/* Corpo com seções Peças MDF e Ferragens */}
+              <div className="flex-1 overflow-y-auto space-y-5 py-3 pr-1">
+                {/* Seção 1 — Peças de MDF */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
+                      <Layers className="w-4 h-4 text-emerald-600" />
+                      Peças de MDF
+                      <Badge variant="outline" className="text-[10px] ml-1 bg-white">
+                        {Array.isArray(selectedDetailModule.pecas_mdf)
+                          ? `${selectedDetailModule.pecas_mdf.length} itens`
+                          : '0 itens'}
+                      </Badge>
+                    </h4>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                        <tr>
+                          <th className="py-2.5 px-3 w-12 text-center">Item (#)</th>
+                          <th className="py-2.5 px-3 w-1/4">Código</th>
+                          <th className="py-2.5 px-3">Descrição</th>
+                          <th className="py-2.5 px-3 text-right w-16">Qtd</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {!selectedDetailModule.pecas_mdf ||
+                        !Array.isArray(selectedDetailModule.pecas_mdf) ||
+                        selectedDetailModule.pecas_mdf.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="py-6 text-center text-slate-400 italic">
+                              Nenhuma peça de MDF cadastrada para este módulo.
+                            </td>
+                          </tr>
+                        ) : (
+                          selectedDetailModule.pecas_mdf.map((peca, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/80">
+                              <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">
+                                #{idx + 1}
+                              </td>
+                              <td className="py-2 px-3 font-mono font-semibold text-slate-900">
+                                {peca.codigo || `P-${idx + 1}`}
+                              </td>
+                              <td className="py-2 px-3">{peca.descricao || 'Peça MDF'}</td>
+                              <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                                {peca.quantidade ?? 1}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Seção 2 — Ferragens */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
+                      <Wrench className="w-4 h-4 text-emerald-600" />
+                      Ferragens e Acessórios
+                      <Badge variant="outline" className="text-[10px] ml-1 bg-white">
+                        {Array.isArray(selectedDetailModule.ferragens)
+                          ? `${selectedDetailModule.ferragens.length} itens`
+                          : '0 itens'}
+                      </Badge>
+                    </h4>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                        <tr>
+                          <th className="py-2.5 px-3 w-1/4">Referência</th>
+                          <th className="py-2.5 px-3">Descrição</th>
+                          <th className="py-2.5 px-3 text-right w-16">Qtd</th>
+                          <th className="py-2.5 px-3 text-center w-20">Unidade</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {!selectedDetailModule.ferragens ||
+                        !Array.isArray(selectedDetailModule.ferragens) ||
+                        selectedDetailModule.ferragens.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="py-6 text-center text-slate-400 italic">
+                              Nenhuma ferragem cadastrada para este módulo.
+                            </td>
+                          </tr>
+                        ) : (
+                          selectedDetailModule.ferragens.map((ferragem, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/80">
+                              <td className="py-2 px-3 font-mono font-semibold text-slate-900">
+                                {ferragem.item || `FERR-${idx + 1}`}
+                              </td>
+                              <td className="py-2 px-3">{ferragem.descricao || 'Ferragem'}</td>
+                              <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                                {ferragem.quantidade ?? 1}
+                              </td>
+                              <td className="py-2 px-3 text-center text-slate-500 font-mono text-[11px]">
+                                {ferragem.unidade || 'un'}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rodapé do modal de detalhes */}
+              <DialogFooter className="pt-3 border-t border-slate-200 flex sm:justify-between items-center w-full gap-2">
+                <Button
+                  variant="destructive"
+                  onClick={() => setDeleteConfirmId(selectedDetailModule.id)}
+                  className="bg-rose-600 hover:bg-rose-700 text-white text-xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                  Excluir Módulo
+                </Button>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const mod = selectedDetailModule
+                      setDetailModalId(null)
+                      openEdit(mod)
+                    }}
+                    className="text-xs"
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                    Editar Regras
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setDetailModalId(null)}
+                    className="text-xs"
+                  >
+                    Fechar
+                  </Button>
+                </div>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* AlertDialog de Confirmação de Exclusão */}
+      <AlertDialog
+        open={deleteConfirmId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteConfirmId(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-slate-900">
+              Tem certeza que deseja excluir este módulo?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação removerá o módulo permanentemente da biblioteca de engenharia e não pode ser
+              desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={() => {
+                if (deleteConfirmId) {
+                  handleDelete(deleteConfirmId)
+                }
+              }}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Excluindo...
+                </>
+              ) : (
+                'Sim, excluir módulo'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modal de Criação/Edição */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -833,6 +1123,19 @@ export default function LibraryPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="form_codigo" className="text-xs font-semibold">
+                Código Técnico (ex: BAL0305A)
+              </Label>
+              <Input
+                id="form_codigo"
+                value={form.codigo}
+                onChange={(e) => setForm((f) => ({ ...f, codigo: e.target.value }))}
+                placeholder="Ex.: BAL0305A"
+                className="h-9 text-sm font-mono"
+              />
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="nome_template" className="text-xs font-semibold">
                 Nome do módulo <span className="text-rose-500">*</span>

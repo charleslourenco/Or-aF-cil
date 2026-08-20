@@ -2,6 +2,19 @@ import { supabase } from '@/lib/supabase/client'
 
 export type ModuleIconType = 'wardrobe' | 'counter' | 'aerial'
 
+export interface PecaMdfItem {
+  codigo?: string | null
+  descricao?: string | null
+  quantidade?: number | string | null
+}
+
+export interface FerragemItem {
+  item?: string | null
+  descricao?: string | null
+  quantidade?: number | string | null
+  unidade?: string | null
+}
+
 export interface TemplateEngenharia {
   id: string
   nome_template: string
@@ -11,6 +24,9 @@ export interface TemplateEngenharia {
   descricao?: string | null
   icon_type?: string | null
   assinatura_visual?: string[] | null
+  codigo?: string | null
+  pecas_mdf?: PecaMdfItem[] | null
+  ferragens?: FerragemItem[] | null
 }
 
 /** Payload aceito pelas funções de criação/atualização de módulos. */
@@ -22,6 +38,9 @@ export type TemplateEngenhariaInput = {
   descricao?: string | null
   icon_type?: ModuleIconType | null
   assinatura_visual?: string[] | null
+  codigo?: string | null
+  pecas_mdf?: PecaMdfItem[] | null
+  ferragens?: FerragemItem[] | null
 }
 
 /**
@@ -36,10 +55,10 @@ export async function fetchTemplatesEngenharia(): Promise<{
   data: TemplateEngenharia[]
   error: string | null
 }> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('TemplatesEngenharia')
     .select(
-      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual',
+      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens',
     )
     .order('nome_template')
     .limit(100)
@@ -59,7 +78,7 @@ export async function fetchTemplatesEngenharia(): Promise<{
 export async function createTemplateEngenharia(
   payload: TemplateEngenhariaInput,
 ): Promise<{ data: TemplateEngenharia | null; error: string | null }> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('TemplatesEngenharia')
     .insert({
       nome_template: payload.nome_template,
@@ -69,9 +88,12 @@ export async function createTemplateEngenharia(
       descricao: payload.descricao ?? null,
       icon_type: payload.icon_type ?? 'wardrobe',
       assinatura_visual: payload.assinatura_visual ?? null,
+      codigo: payload.codigo ?? null,
+      pecas_mdf: payload.pecas_mdf ?? null,
+      ferragens: payload.ferragens ?? null,
     })
     .select(
-      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual',
+      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens',
     )
     .single()
 
@@ -91,7 +113,7 @@ export async function updateTemplateEngenharia(
   id: string,
   payload: TemplateEngenhariaInput,
 ): Promise<{ data: TemplateEngenharia | null; error: string | null }> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('TemplatesEngenharia')
     .update({
       nome_template: payload.nome_template,
@@ -101,10 +123,13 @@ export async function updateTemplateEngenharia(
       descricao: payload.descricao ?? null,
       icon_type: payload.icon_type ?? 'wardrobe',
       assinatura_visual: payload.assinatura_visual ?? null,
+      codigo: payload.codigo ?? null,
+      pecas_mdf: payload.pecas_mdf ?? null,
+      ferragens: payload.ferragens ?? null,
     })
     .eq('id', id)
     .select(
-      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual',
+      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens',
     )
     .single()
 
@@ -114,6 +139,20 @@ export async function updateTemplateEngenharia(
   }
 
   return { data: data as TemplateEngenharia, error: null }
+}
+
+/**
+ * Exclui (DELETE) um módulo existente na tabela TemplatesEngenharia.
+ */
+export async function deleteTemplateEngenharia(id: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.from('TemplatesEngenharia').delete().eq('id', id)
+
+  if (error) {
+    console.error('Erro ao excluir módulo (TemplatesEngenharia):', error)
+    return { error: error.message }
+  }
+
+  return { error: null }
 }
 
 /** Normaliza o tipo de ícone vindo do banco para os tipos aceitos pelo blueprint. */
