@@ -37,6 +37,7 @@ import { FinalizeQuoteModal } from '@/components/FinalizeQuoteModal'
 import { BudgetItem } from '@/data/mockData'
 import { fetchTemplatesEngenharia, TemplateEngenharia } from '@/services/templates'
 import { toast } from '@/hooks/use-toast'
+import { ToastAction } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { calcularBOM, custoConsolidado, valorConsolidado, type PadraoProjeto } from '@/lib/pricing'
 import { fetchCatalogoMateriais, type CatalogoMaterial } from '@/services/catalogo'
@@ -366,6 +367,23 @@ export default function Index() {
 
     // Captura o estado atual dos módulos para usar de forma síncrona na IA.
     const modulosAtuais = modulosDisponiveis
+
+    // 1. Verificação de biblioteca vazia antes da análise
+    if (modulosAtuais.length === 0) {
+      setIsAnalyzing(false)
+      toast({
+        variant: 'destructive',
+        title: 'Biblioteca de Módulos Vazia',
+        description:
+          'Sua biblioteca de módulos está vazia. Cadastre pelo menos 1 módulo na página Biblioteca para gerar orçamentos.',
+        action: (
+          <ToastAction altText="Ir para Biblioteca" onClick={() => navigate('/biblioteca')}>
+            Ir para Biblioteca
+          </ToastAction>
+        ),
+      })
+      return
+    }
 
     // 🔄 FLUXO DE MATCH AUTOMÁTICO (Lupa Lu):
     // Chama a Edge Function 'analisar-imagem' do Supabase
