@@ -1,6 +1,7 @@
 {
   "_versions": {
     "smart-action": 1,
-    "analisar-imagem": 1
+    "analisar-imagem": 2,
+    "importar-pdf-modulo": 1
   }
 }
