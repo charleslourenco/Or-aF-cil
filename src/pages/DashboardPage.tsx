@@ -369,7 +369,7 @@ export default function DashboardPage() {
                           size="sm"
                           className="text-xs font-medium border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg"
                         >
-                          <Link to="/novo-orcamento">Ver / Editar</Link>
+                          <Link to={`/novo-orcamento?id=${quote.id}`}>Ver / Editar</Link>
                         </Button>
                       </td>
                     </tr>

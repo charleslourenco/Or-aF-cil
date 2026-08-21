@@ -91,12 +91,17 @@ export default function QuotesListPage() {
         title: '✓ Proposta Comercial Gerada',
         description: `Download do PDF para ${orcamento.cliente_nome} concluído.`,
       })
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Erro ao gerar proposta comercial:', err)
+      const errorMsg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : 'Não foi possível gerar a Proposta Comercial.'
       toast({
-        title: 'Erro ao gerar PDF',
-        description:
-          err instanceof Error ? err.message : 'Não foi possível gerar a Proposta Comercial.',
+        title: 'Erro ao gerar Proposta Comercial',
+        description: errorMsg,
         variant: 'destructive',
       })
     } finally {
@@ -112,12 +117,17 @@ export default function QuotesListPage() {
         title: '✓ Análise de Custo Gerada',
         description: `Download do relatório técnico de ${orcamento.cliente_nome} concluído.`,
       })
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Erro ao gerar análise de custo:', err)
+      const errorMsg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : 'Não foi possível gerar a Análise de Custo.'
       toast({
-        title: 'Erro ao gerar PDF',
-        description:
-          err instanceof Error ? err.message : 'Não foi possível gerar a Análise de Custo.',
+        title: 'Erro ao gerar Análise de Custo',
+        description: errorMsg,
         variant: 'destructive',
       })
     } finally {
@@ -399,7 +409,7 @@ export default function QuotesListPage() {
                               size="sm"
                               className="text-xs h-8 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 rounded-lg"
                             >
-                              <Link to={`/novo-orcamento`}>
+                              <Link to={`/novo-orcamento?id=${q.id}`}>
                                 Abrir
                                 <ArrowRight className="w-3.5 h-3.5 ml-1" />
                               </Link>

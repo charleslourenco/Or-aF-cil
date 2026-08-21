@@ -41,7 +41,7 @@ import { LibraryMatchCard } from '@/components/LibraryMatchCard'
 import { PricingTable } from '@/components/PricingTable'
 import { FinalizeQuoteModal } from '@/components/FinalizeQuoteModal'
 import { BudgetItem } from '@/data/mockData'
-import { createOrcamento } from '@/services/orcamentos'
+import { createOrcamento, updateOrcamento, fetchOrcamentoById } from '@/services/orcamentos'
 import { fetchTemplatesEngenharia, TemplateEngenharia } from '@/services/templates'
 import { toast } from '@/hooks/use-toast'
 import { ToastAction } from '@/components/ui/toast'
@@ -61,11 +61,14 @@ export default function Index() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
+  const editingId = searchParams.get('id')
+
   // Form Identification Header state
   const [clientName, setClientName] = useState('')
   const [room, setRoom] = useState('')
   const [ambienteSelecionado, setAmbienteSelecionado] = useState<string>('')
   const [selectedModuleId, setSelectedModuleId] = useState<string>('')
+  const [loadingEditingQuote, setLoadingEditingQuote] = useState<boolean>(false)
 
   // Módulos disponíveis — fetch 100% dinâmico do Supabase (tabela TemplatesEngenharia)
   const [modulosDisponiveis, setModulosDisponiveis] = useState<TemplateEngenharia[]>([])
@@ -159,9 +162,10 @@ export default function Index() {
         }
         setModulosDisponiveis(modulos)
 
-        // Suporte a pré-preenchimento via query param ?modulo=<id>
+        // Suporte a pré-preenchimento via query param ?modulo=<id> (se não estiver em modo edição)
         const modParam = searchParams.get('modulo')
-        if (modParam) {
+        const idParam = searchParams.get('id')
+        if (modParam && !idParam) {
           const encontrado = modulos.find((m) => m.id === modParam)
           if (encontrado) {
             setSelectedModuleId(encontrado.id)
@@ -176,6 +180,125 @@ export default function Index() {
       active = false
     }
   }, [searchParams])
+
+  // FETCH DE ORÇAMENTO EXISTENTE QUANDO ?id= ESTÁ PRESENTE
+  useEffect(() => {
+    let active = true
+    const quoteId = searchParams.get('id')
+    if (!quoteId) return
+
+    setLoadingEditingQuote(true)
+    fetchOrcamentoById(quoteId)
+      .then((orcamento) => {
+        if (!active) return
+        if (!orcamento) {
+          toast({
+            title: 'Orçamento não encontrado',
+            description: `Não foi possível carregar o orçamento #${quoteId.slice(-6)}.`,
+            variant: 'destructive',
+          })
+          return
+        }
+
+        // Preenche campos principais
+        setClientName(orcamento.cliente_nome || '')
+        const amb = orcamento.ambiente || ''
+        setAmbienteSelecionado(amb)
+        setRoom(amb)
+
+        if (orcamento.forma_pagamento) {
+          setFormaPagamento(orcamento.forma_pagamento)
+        }
+        if (orcamento.observacoes) {
+          setObservacoes(orcamento.observacoes)
+        }
+
+        // Tenta associar o módulo se o nome coincidir com algum template da biblioteca
+        if (orcamento.modulo) {
+          // Busca nos módulos disponíveis se já carregados
+          const modEncontrado = modulosDisponiveis.find(
+            (m) =>
+              m.nome_template.toLowerCase() === orcamento.modulo?.toLowerCase() ||
+              m.id === orcamento.modulo,
+          )
+          if (modEncontrado) {
+            setSelectedModuleId(modEncontrado.id)
+          } else if (modulosDisponiveis.length > 0) {
+            setSelectedModuleId(modulosDisponiveis[0].id)
+          }
+        }
+
+        // Se houver bom_json gravado
+        if (
+          orcamento.bom_json &&
+          Array.isArray(orcamento.bom_json) &&
+          orcamento.bom_json.length > 0
+        ) {
+          const manual: BudgetItem[] = []
+          orcamento.bom_json.forEach((item, index) => {
+            const itId = String(item.id || `loaded-${index}`)
+            // Se for um item manual adicionado anteriormente
+            if (itId.startsWith('manual-')) {
+              const unidadeValida =
+                item.unidade === 'm²' || item.unidade === 'm' || item.unidade === 'jogo'
+                  ? item.unidade
+                  : undefined
+
+              manual.push({
+                id: itId,
+                description: item.description || 'Item Manual',
+                material: item.material,
+                espessura: item.espessura,
+                metragem: item.metragem,
+                unidade: unidadeValida,
+                unitCost: Number(item.unitCost) || 0,
+                totalCost: Number(item.totalCost) || 0,
+                markup: Number(item.markup) || 2.5,
+                salePrice: Number(item.salePrice) || 0,
+              })
+            }
+          })
+          if (manual.length > 0) {
+            setManualItems(manual)
+          }
+        }
+
+        // Registra o registro salvo para downloads de PDF e abre a exibição dos resultados
+        setSavedOrcamentoRecord(orcamento)
+        setShowResults(true)
+
+        // Adiciona um arquivo mock/indicador para não barrar validação se re-executado
+        setUploadedFiles([
+          {
+            file: null,
+            previewUrl: 'https://img.usecurling.com/p/800/600?q=wardrobe%20blueprint&color=emerald',
+            name: `Projeto ${orcamento.cliente_nome}`,
+            sizeFormatted: 'Carregado do Banco',
+            isPdf: false,
+          },
+        ])
+
+        toast({
+          title: 'Orçamento Carregado',
+          description: `Editando orçamento de ${orcamento.cliente_nome}.`,
+        })
+      })
+      .catch((err) => {
+        console.error('Erro ao carregar orçamento por ID:', err)
+        toast({
+          title: 'Erro ao carregar orçamento',
+          description: 'Falha ao buscar os dados do orçamento no banco.',
+          variant: 'destructive',
+        })
+      })
+      .finally(() => {
+        if (active) setLoadingEditingQuote(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [searchParams, modulosDisponiveis.length])
 
   // FETCH DO CATÁLOGO DE MATERIAIS — preços reais vindos do Supabase.
   // Em caso de erro ou catálogo vazio, o motor de cálculo usa CUSTOS_UNITARIOS (fallback).
@@ -761,29 +884,49 @@ export default function Index() {
         salePrice: item.salePrice,
       }))
 
-      const created = await createOrcamento({
-        cliente_nome: clientName,
-        ambiente: ambienteSelecionado || room || null,
-        modulo: currentModuleName || null,
-        valor_total: totalSale,
-        status: 'Aprovado',
-        forma_pagamento: formaPagamento || null,
-        observacoes: observacoes || null,
-        bom_json: bomJson,
-        dre_json: dreJson,
-      })
+      let savedRecord: Orcamento | null = null
 
-      if (created) {
-        setSavedOrcamentoRecord(created)
+      if (editingId) {
+        // Atualização de orçamento existente
+        savedRecord = await updateOrcamento(editingId, {
+          cliente_nome: clientName,
+          ambiente: ambienteSelecionado || room || null,
+          modulo: currentModuleName || null,
+          valor_total: totalSale,
+          status: 'Aprovado',
+          forma_pagamento: formaPagamento || null,
+          observacoes: observacoes || null,
+          bom_json: bomJson,
+          dre_json: dreJson,
+        })
+      } else {
+        // Criação de novo orçamento
+        savedRecord = await createOrcamento({
+          cliente_nome: clientName,
+          ambiente: ambienteSelecionado || room || null,
+          modulo: currentModuleName || null,
+          valor_total: totalSale,
+          status: 'Aprovado',
+          forma_pagamento: formaPagamento || null,
+          observacoes: observacoes || null,
+          bom_json: bomJson,
+          dre_json: dreJson,
+        })
+      }
+
+      if (savedRecord) {
+        setSavedOrcamentoRecord(savedRecord)
         setIsQuoteSaved(true)
         toast({
-          title: '✓ Orçamento Salvo com Sucesso!',
-          description: `Orçamento de ${clientName} registrado. Escolha os relatórios em PDF para download.`,
+          title: editingId
+            ? '✓ Orçamento Atualizado com Sucesso!'
+            : '✓ Orçamento Salvo com Sucesso!',
+          description: `Orçamento de ${clientName} ${editingId ? 'atualizado' : 'registrado'}. Escolha os relatórios em PDF para download.`,
         })
       } else {
         toast({
           title: 'Aviso',
-          description: 'Orçamento gerado localmente. Redirecionando para a lista.',
+          description: 'Orçamento processado. Redirecionando para a lista.',
         })
         navigate('/orcamentos')
       }
@@ -804,8 +947,8 @@ export default function Index() {
     try {
       const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
       await gerarPropostaComercial({
-        orcamentoId: savedOrcamentoRecord?.id,
-        codigo: savedOrcamentoRecord?.id?.slice(-6).toUpperCase(),
+        orcamentoId: savedOrcamentoRecord?.id || editingId || undefined,
+        codigo: (savedOrcamentoRecord?.id || editingId || '').slice(-6).toUpperCase() || undefined,
         data: savedOrcamentoRecord?.data || new Date().toISOString(),
         cliente: {
           nome: clientName,
@@ -828,11 +971,17 @@ export default function Index() {
         title: '✓ PDF da Proposta Gerado!',
         description: 'O download do documento comercial foi iniciado.',
       })
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Erro ao gerar proposta comercial:', err)
+      const errorMsg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : 'Não foi possível gerar a Proposta Comercial.'
       toast({
-        title: 'Erro na geração do PDF',
-        description: 'Não foi possível gerar a Proposta Comercial.',
+        title: 'Erro na geração da Proposta',
+        description: errorMsg,
         variant: 'destructive',
       })
     }
@@ -870,8 +1019,8 @@ export default function Index() {
       }
 
       await gerarAnaliseCusto({
-        orcamentoId: savedOrcamentoRecord?.id,
-        codigo: savedOrcamentoRecord?.id?.slice(-6).toUpperCase(),
+        orcamentoId: savedOrcamentoRecord?.id || editingId || undefined,
+        codigo: (savedOrcamentoRecord?.id || editingId || '').slice(-6).toUpperCase() || undefined,
         data: savedOrcamentoRecord?.data || new Date().toISOString(),
         cliente: {
           nome: clientName,
@@ -889,12 +1038,17 @@ export default function Index() {
         title: '✓ PDF de Análise de Custo Gerado!',
         description: 'O relatório de engenharia foi baixado com sucesso.',
       })
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Erro ao gerar análise de custo:', err)
+      const errorMsg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : 'Não foi possível gerar a Análise de Custo.'
       toast({
-        title: 'Erro na geração do PDF',
-        description:
-          err instanceof Error ? err.message : 'Não foi possível gerar a Análise de Custo.',
+        title: 'Erro na geração da Análise de Custo',
+        description: errorMsg,
         variant: 'destructive',
       })
     }
@@ -918,11 +1072,12 @@ export default function Index() {
           <span>Comparador Visual Paramétrico</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-          Novo Orçamento de Marcenaria
+          {editingId ? 'Editar Orçamento de Marcenaria' : 'Novo Orçamento de Marcenaria'}
         </h2>
         <p className="text-sm sm:text-base text-slate-500 max-w-3xl leading-relaxed">
-          Compare o projeto do cliente com o módulo da biblioteca e gere a precificação automática
-          com lista de peças e markup comercial.
+          {editingId
+            ? `Editando dados do orçamento #${editingId.slice(-6).toUpperCase()} — ajuste peças, dimensões e condições comerciais.`
+            : 'Compare o projeto do cliente com o módulo da biblioteca e gere a precificação automática com lista de peças e markup comercial.'}
         </p>
       </div>
       {/* 2. CABEÇALHO DE IDENTIFICAÇÃO */}

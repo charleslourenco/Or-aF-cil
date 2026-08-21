@@ -299,7 +299,17 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       ),
     ])
 
-    autoTable(doc, {
+    const runAutoTable = (options: Record<string, unknown>) => {
+      if (typeof doc.autoTable === 'function') {
+        // @ts-expect-error autoTable supports options as single parameter or doc, options
+        doc.autoTable(options)
+      } else if (typeof autoTable === 'function') {
+        // Fallback chamando o plugin diretamente com doc
+        ;(autoTable as (d: jsPDF, opts: Record<string, unknown>) => void)(doc, options)
+      }
+    }
+
+    runAutoTable({
       startY: y,
       margin: { left: margin, right: margin },
       head: [
@@ -584,7 +594,16 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
       ],
     ]
 
-    autoTable(doc, {
+    const runAutoTable = (options: Record<string, unknown>) => {
+      if (typeof doc.autoTable === 'function') {
+        // @ts-expect-error autoTable supports options as single parameter or doc, options
+        doc.autoTable(options)
+      } else if (typeof autoTable === 'function') {
+        ;(autoTable as (d: jsPDF, opts: Record<string, unknown>) => void)(doc, options)
+      }
+    }
+
+    runAutoTable({
       startY: y,
       margin: { left: margin, right: margin },
       head: [['Estrutura de Resultados (DRE)', 'Valor (R$)', '% da Venda']],
@@ -655,7 +674,7 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
       ]
     })
 
-    autoTable(doc, {
+    runAutoTable({
       startY: y,
       margin: { left: margin, right: margin },
       head: [

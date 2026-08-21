@@ -216,6 +216,72 @@ export async function fetchTicketMedio(): Promise<number | null> {
 /**
  * Cria um novo orçamento na tabela Orcamentos.
  */
+/**
+ * Busca um orçamento específico pelo seu ID (UUID).
+ * Retorna null se não encontrado ou em caso de erro.
+ */
+export async function fetchOrcamentoById(id: string): Promise<Orcamento | null> {
+  try {
+    const { data, error } = await db.from('Orcamentos').select('*').eq('id', id).single()
+
+    if (error) {
+      console.error(`Erro ao buscar orçamento com id ${id}:`, error.message ?? error)
+      return null
+    }
+
+    return data as Orcamento
+  } catch (err) {
+    console.error(`Erro inesperado ao buscar orçamento com id ${id}:`, err)
+    return null
+  }
+}
+
+/**
+ * Atualiza um orçamento existente pelo seu ID.
+ * Retorna o orçamento atualizado ou null em caso de erro.
+ */
+export async function updateOrcamento(
+  id: string,
+  input: Partial<OrcamentoInput>,
+): Promise<Orcamento | null> {
+  try {
+    const updatePayload: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    }
+
+    if (input.cliente_nome !== undefined) updatePayload.cliente_nome = input.cliente_nome
+    if (input.ambiente !== undefined) updatePayload.ambiente = input.ambiente
+    if (input.modulo !== undefined) updatePayload.modulo = input.modulo
+    if (input.data !== undefined) updatePayload.data = input.data
+    if (input.valor_total !== undefined) updatePayload.valor_total = input.valor_total
+    if (input.status !== undefined) updatePayload.status = input.status
+    if (input.forma_pagamento !== undefined) updatePayload.forma_pagamento = input.forma_pagamento
+    if (input.observacoes !== undefined) updatePayload.observacoes = input.observacoes
+    if (input.bom_json !== undefined) updatePayload.bom_json = input.bom_json
+    if (input.dre_json !== undefined) updatePayload.dre_json = input.dre_json
+
+    const { data, error } = await db
+      .from('Orcamentos')
+      .update(updatePayload)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error(`Erro ao atualizar orçamento ${id}:`, error.message ?? error)
+      return null
+    }
+
+    return data as Orcamento
+  } catch (err) {
+    console.error(`Erro inesperado ao atualizar orçamento ${id}:`, err)
+    return null
+  }
+}
+
+/**
+ * Cria um novo orçamento na tabela Orcamentos.
+ */
 export async function createOrcamento(input: OrcamentoInput): Promise<Orcamento | null> {
   try {
     const { data, error } = await db
