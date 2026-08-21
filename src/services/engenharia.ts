@@ -45,6 +45,7 @@ export interface ConfigEngenhariaResult {
 export interface SaveConfigEngenhariaResult {
   success: boolean
   error: string | null
+  configId?: string
 }
 
 /**
@@ -132,14 +133,16 @@ export async function saveConfigEngenharia(
 
   let configId = config.id
 
-  // Verifica se já existe uma linha com esse id
+  // Busca a primeira linha existente na tabela (sem filtro de ID) para evitar duplicatas
   const { data: existing } = await db
     .from('configuracoes_engenharia')
     .select('id')
-    .eq('id', configId)
+    .order('created_at', { ascending: true })
+    .limit(1)
     .maybeSingle()
 
   if (existing) {
+    configId = (existing as { id: string }).id
     const { error: updateError } = await db
       .from('configuracoes_engenharia')
       .update(payload)
@@ -212,5 +215,5 @@ export async function saveConfigEngenharia(
     }
   }
 
-  return { success: true, error: null }
+  return { success: true, error: null, configId }
 }

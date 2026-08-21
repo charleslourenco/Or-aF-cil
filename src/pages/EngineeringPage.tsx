@@ -198,10 +198,28 @@ export default function EngineeringPage() {
       custosFixos,
       comissoesPersonalizadas,
     )
-    setSaving(false)
     if (success) {
+      // Recarrega os dados do banco para garantir que IDs e valores reflitam exatamente o estado persistido
+      const {
+        config: cfg,
+        custosFixos: cf,
+        comissoesPersonalizadas: cps,
+        error: fetchErr,
+      } = await fetchConfigEngenharia()
+
+      if (!fetchErr && cfg) {
+        setConfig(cfg)
+        setCustosFixos(
+          cf.length > 0 ? cf : DEFAULT_CUSTOS.map((c) => ({ ...c, config_id: cfg.id })),
+        )
+        setComissoesPersonalizadas(
+          cps.length > 0 ? cps : DEFAULT_COMISSOES.map((c) => ({ ...c, config_id: cfg.id })),
+        )
+      }
+      setSaving(false)
       toast({ title: 'Configurações salvas com sucesso!' })
     } else {
+      setSaving(false)
       toast({
         title: 'Erro ao salvar. Tente novamente.',
         description: err ?? undefined,

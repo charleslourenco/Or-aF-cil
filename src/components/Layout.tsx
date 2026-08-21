@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   Hammer,
   LogOut,
-  FolderGit2,
   Bell,
   BookOpen,
   Wallet,
@@ -22,14 +21,6 @@ import { useTheme } from '@/components/ThemeProvider'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -52,7 +43,6 @@ const navItems: NavItem[] = [
 
 export default function Layout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [activeProject, setActiveProject] = useState('Obra Ed. Jardins - Apto 402')
   const location = useLocation()
 
   const isCurrent = (href: string) => {
@@ -337,43 +327,6 @@ export default function Layout() {
                   <Moon className="w-4 h-4 text-slate-600" />
                 )}
               </Button>
-              {/* Active Project Selector */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="hidden sm:flex items-center gap-2 text-xs font-medium border-slate-200 text-slate-700 bg-white hover:bg-slate-50 max-w-[220px] truncate rounded-lg shadow-xs"
-                  >
-                    <FolderGit2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                    <span className="truncate">{activeProject}</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  <DropdownMenuLabel className="text-xs text-slate-500">
-                    Selecione o Projeto Ativo
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => setActiveProject('Obra Ed. Jardins - Apto 402')}
-                    className="cursor-pointer text-xs"
-                  >
-                    Obra Ed. Jardins - Apto 402
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setActiveProject('Residência Alphaville - Casa 12')}
-                    className="cursor-pointer text-xs"
-                  >
-                    Residência Alphaville - Casa 12
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setActiveProject('Escritório Comercial Faria Lima')}
-                    className="cursor-pointer text-xs"
-                  >
-                    Escritório Comercial Faria Lima
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
 
               {/* Notification icon */}
               <Button
