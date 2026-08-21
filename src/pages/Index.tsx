@@ -18,10 +18,14 @@ import {
   Star,
   Layers3,
   Package,
+  CreditCard,
+  FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Separator } from '@/components/ui/separator'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   Select,
@@ -116,6 +120,10 @@ export default function Index() {
     espessura: 15,
   })
   const [mdfFundo, setMdfFundo] = useState<string>('MDF 6mm Branco TX')
+
+  // 💳 TERMOS COMERCIAIS
+  const [formaPagamento, setFormaPagamento] = useState('')
+  const [observacoes, setObservacoes] = useState('')
 
   // Section references for scrolling
   const topRef = useRef<HTMLDivElement>(null)
@@ -1285,6 +1293,60 @@ export default function Index() {
               </div>
             </div>
           )}
+
+          {/* Card: Termos Comerciais */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-5">
+            <div className="flex items-center gap-2 pb-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <CreditCard className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-sm sm:text-base font-bold text-slate-900">Termos Comerciais</h4>
+                <p className="text-xs text-slate-500">
+                  Condições de pagamento e observações contratuais para a proposta
+                </p>
+              </div>
+            </div>
+
+            {/* Campo 1: Forma de Pagamento */}
+            <div className="space-y-2">
+              <Label
+                htmlFor="forma-pagamento"
+                className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
+              >
+                <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                Forma de Pagamento
+              </Label>
+              <Input
+                id="forma-pagamento"
+                placeholder="Ex.: 30% de entrada + 4x no cartão"
+                value={formaPagamento}
+                onChange={(e) => setFormaPagamento(e.target.value)}
+                className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              />
+            </div>
+
+            <Separator className="bg-slate-100" />
+
+            {/* Campo 2: Observações / Termos */}
+            <div className="space-y-2">
+              <Label
+                htmlFor="observacoes-termos"
+                className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
+              >
+                <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                Observações / Termos
+              </Label>
+              <Textarea
+                id="observacoes-termos"
+                placeholder="Ex.: Prazo de entrega: 30 dias. Frete incluso para Grande São Paulo. Garantia de 5 anos."
+                value={observacoes}
+                onChange={(e) => setObservacoes(e.target.value)}
+                rows={3}
+                className="rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 resize-y min-h-[90px]"
+              />
+            </div>
+          </div>
         </section>
       )}
       {/* 6. RODAPÉ DE AÇÕES FIXO (Sticky Bottom Bar) */}
