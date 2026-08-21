@@ -9,8 +9,11 @@ export interface BudgetItem {
   material?: string
   espessura?: number
   metragem?: number
-  unidade?: 'm²' | 'm' | 'jogo'
+  unidade?: 'm²' | 'm' | 'jogo' | 'un' | 'par' | string
   isEditing?: boolean
+  /** Flag para itens de estimativa que não estão cadastrados no catálogo */
+  item_nao_cadastrado?: boolean
+  catalogo_id?: string | null
 }
 
 export interface QuoteRecord {

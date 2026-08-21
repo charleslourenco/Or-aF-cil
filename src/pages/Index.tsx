@@ -89,6 +89,21 @@ export default function Index() {
   // Justificativa retornada pela IA (GPT-4o Vision) sobre o match do módulo.
   const [matchJustificativa, setMatchJustificativa] = useState<string | null>(null)
 
+  // Estados de comparação de escala e dimensões retornados pela IA
+  const [fatorEscalaIA, setFatorEscalaIA] = useState<number | null>(null)
+  const [dimensoesOriginaisIA, setDimensoesOriginaisIA] = useState<{
+    largura: number
+    altura: number
+    profundidade: number
+  } | null>(null)
+  const [dimensoesEstimadasIA, setDimensoesEstimadasIA] = useState<{
+    largura: number
+    altura: number
+    profundidade: number
+  } | null>(null)
+  const [isCustomModuleIA, setIsCustomModuleIA] = useState<boolean>(false)
+  const [customModuleNameIA, setCustomModuleNameIA] = useState<string>('')
+
   // Validation errors
   const [errors, setErrors] = useState<{
     clientName?: string
@@ -446,8 +461,22 @@ export default function Index() {
   }, [catalogoMateriais])
 
   // Objeto do módulo selecionado (id + nome_template) derivado do estado dinâmico.
-  const selectedModuleObj: TemplateEngenharia | null =
-    modulosDisponiveis.find((m) => m.id === selectedModuleId) ?? null
+  // Suporte a MODULO-CUSTOM quando a IA não encontra correspondente idêntico na biblioteca.
+  const selectedModuleObj: TemplateEngenharia | null = useMemo(() => {
+    if (selectedModuleId === 'MODULO-CUSTOM') {
+      return {
+        id: 'MODULO-CUSTOM',
+        nome_template: customModuleNameIA || 'Módulo Personalizado (Análise IA)',
+        categoria: 'Personalizado',
+        dimensoes: dimensoesEstimadasIA
+          ? `${dimensoesEstimadasIA.largura}x${dimensoesEstimadasIA.altura}x${dimensoesEstimadasIA.profundidade}`
+          : `${dimensoes.largura}x${dimensoes.altura}x${dimensoes.profundidade}`,
+        descricao: 'Módulo identificado pela IA que não possui correspondente na biblioteca.',
+        material: 'MDF conforme especificação',
+      }
+    }
+    return modulosDisponiveis.find((m) => m.id === selectedModuleId) ?? null
+  }, [selectedModuleId, modulosDisponiveis, customModuleNameIA, dimensoesEstimadasIA, dimensoes])
 
   // ============================================================================
   // 🧮 MOTOR DE CÁLCULO GEOMÉTRICO E PRECIFICAÇÃO DINÂMICA
@@ -471,6 +500,7 @@ export default function Index() {
         padraoProjeto,
         catalogoParaPricing,
         markupEngenharia,
+        fatorEscalaIA ?? 1.0,
       ),
     [
       selectedModuleObj,
@@ -481,6 +511,7 @@ export default function Index() {
       padraoProjeto,
       catalogoParaPricing,
       markupEngenharia,
+      fatorEscalaIA,
     ],
   )
 
@@ -493,6 +524,11 @@ export default function Index() {
     }
     return [...bomItems, ...manualItems]
   }, [savedLoadedItems, bomItems, manualItems])
+
+  // Lista de itens não cadastrados no catálogo (adicionados por estimativa)
+  const itensNaoCadastrados = useMemo(() => {
+    return pricingItems.filter((item) => Boolean(item.item_nao_cadastrado))
+  }, [pricingItems])
 
   // Totais consolidados (custo e valor de venda).
   const totalCusto = useMemo(() => custoConsolidado(pricingItems), [pricingItems])
@@ -533,7 +569,12 @@ export default function Index() {
     setSelectedModuleId(val)
     // Se o usuário explicitamente trocar de módulo, libera o recálculo dinâmico
     setSavedLoadedItems(null)
-    // Troca manual de módulo ⇒ limpa a justificativa da IA.
+    // Troca manual de módulo ⇒ reseta dados exclusivos da IA se trocou para módulo da biblioteca.
+    if (val !== 'MODULO-CUSTOM') {
+      setIsCustomModuleIA(false)
+      setFatorEscalaIA(1.0)
+      setDimensoesOriginaisIA(null)
+    }
     setMatchJustificativa(null)
     if (errors.selectedModule) {
       setErrors((prev) => ({ ...prev, selectedModule: undefined }))
@@ -601,14 +642,19 @@ export default function Index() {
     modulos_detectados?: Array<{
       codigo_modulo: string
       nome: string
+      e_customizado?: boolean
       dimensao_estimada?: { largura: number; altura: number; profundidade: number }
+      dimensoes_originais?: { largura: number; altura: number; profundidade: number }
+      fator_escala?: number
       adaptacoes?: string
     }>
     ferragens_obrigatorias?: Array<{
-      catalogo_id: string
+      catalogo_id: string | null
       descricao: string
       quantidade: number
       justificativa: string
+      item_nao_cadastrado?: boolean
+      preco_custo_estimado?: number
     }>
     justificativa?: string
     id_modulo_encontrado?: string | null
@@ -660,6 +706,10 @@ export default function Index() {
     setUploadedFiles(files ?? [])
     // Limpa a justificativa anterior sempre que novos arquivos chegam.
     setMatchJustificativa(null)
+    setFatorEscalaIA(null)
+    setDimensoesOriginaisIA(null)
+    setDimensoesEstimadasIA(null)
+    setIsCustomModuleIA(false)
 
     if (errors.uploadedFile) {
       setErrors((prev) => ({ ...prev, uploadedFile: undefined }))
@@ -714,20 +764,29 @@ export default function Index() {
           // 1. Seleciona o primeiro módulo detectado
           const primeiroModulo = modulosDetectados[0]
           const codigoModulo = primeiroModulo.codigo_modulo
+          const eCustom = Boolean(primeiroModulo.e_customizado || codigoModulo === 'MODULO-CUSTOM')
 
-          let moduloEncontrado = modulosAtuais.find((m) => m.id === codigoModulo)
-          if (!moduloEncontrado) {
-            moduloEncontrado = modulosAtuais.find(
-              (m) =>
-                m.nome_template.toLowerCase() === codigoModulo.toLowerCase() ||
-                m.nome_template.toLowerCase() === primeiroModulo.nome.toLowerCase(),
-            )
+          setIsCustomModuleIA(eCustom)
+          setCustomModuleNameIA(primeiroModulo.nome || 'Módulo Personalizado (Análise IA)')
+
+          let idFinal = ''
+          if (eCustom) {
+            idFinal = 'MODULO-CUSTOM'
+          } else {
+            let moduloEncontrado = modulosAtuais.find((m) => m.id === codigoModulo)
+            if (!moduloEncontrado) {
+              moduloEncontrado = modulosAtuais.find(
+                (m) =>
+                  m.nome_template.toLowerCase() === codigoModulo.toLowerCase() ||
+                  m.nome_template.toLowerCase() === primeiroModulo.nome.toLowerCase(),
+              )
+            }
+            idFinal = moduloEncontrado ? moduloEncontrado.id : 'MODULO-CUSTOM'
           }
 
-          const idFinal = moduloEncontrado?.id ?? modulosAtuais[0]?.id ?? ''
           setSelectedModuleId(idFinal)
 
-          // 2. Se houver dimensao_estimada, preenche o estado dimensoes
+          // 2. Fator de escala e dimensões (originais vs estimadas)
           if (primeiroModulo.dimensao_estimada) {
             const { largura, altura, profundidade } = primeiroModulo.dimensao_estimada
             setDimensoes({
@@ -735,47 +794,80 @@ export default function Index() {
               altura: altura > 0 ? altura : 2200,
               profundidade: profundidade > 0 ? profundidade : 600,
             })
+            setDimensoesEstimadasIA({
+              largura: largura > 0 ? largura : 1800,
+              altura: altura > 0 ? altura : 2200,
+              profundidade: profundidade > 0 ? profundidade : 600,
+            })
           }
 
-          // 3. Adiciona cada ferragem obrigatória como item manual
+          if (primeiroModulo.dimensoes_originais) {
+            setDimensoesOriginaisIA(primeiroModulo.dimensoes_originais)
+          } else {
+            setDimensoesOriginaisIA(null)
+          }
+
+          const fator =
+            typeof primeiroModulo.fator_escala === 'number' && primeiroModulo.fator_escala > 0
+              ? primeiroModulo.fator_escala
+              : 1.0
+          setFatorEscalaIA(fator)
+
+          // 3. Adiciona cada ferragem obrigatória / material ausente como item manual
           if (ferragensObrigatorias.length > 0) {
             const effectiveMarkup = markupEngenharia > 0 ? markupEngenharia : 2.5
             const novasFerragens: BudgetItem[] = ferragensObrigatorias.map((f, idx) => {
-              // Buscar preco_custo do catalogoMateriais pelo catalogo_id ou usar 0
+              // Buscar preco_custo do catalogoMateriais pelo catalogo_id ou usar estimativa R$ 50,00
               const matNoCatalogo = catalogoMateriais.find(
                 (c) =>
                   c.id === f.catalogo_id ||
                   c.nome_material.toLowerCase() === f.descricao.toLowerCase(),
               )
-              const unitCost = matNoCatalogo ? Number(matNoCatalogo.preco_custo) || 0 : 0
+
+              const isAusente = Boolean(f.item_nao_cadastrado || !matNoCatalogo)
+              const unitCost = matNoCatalogo
+                ? Number(matNoCatalogo.preco_custo) || 0
+                : Number(f.preco_custo_estimado) || 50.0
               const qtd = f.quantidade > 0 ? f.quantidade : 1
               const totalCost = unitCost * qtd
               const salePrice = Math.round(totalCost * effectiveMarkup * 100) / 100
 
               return {
-                id: `ferragem-ia-${f.catalogo_id || 'item'}-${Date.now()}-${idx}`,
+                id: `ferragem-ia-${f.catalogo_id || 'avulso'}-${Date.now()}-${idx}`,
                 description: f.descricao,
-                material: matNoCatalogo?.categoria || 'Ferragem',
+                material: matNoCatalogo?.categoria || 'Ferragem / Insumo',
                 metragem: qtd,
                 unidade:
                   matNoCatalogo?.unidade === 'm²' ||
                   matNoCatalogo?.unidade === 'm' ||
-                  matNoCatalogo?.unidade === 'jogo'
+                  matNoCatalogo?.unidade === 'jogo' ||
+                  matNoCatalogo?.unidade === 'un' ||
+                  matNoCatalogo?.unidade === 'par'
                     ? matNoCatalogo.unidade
-                    : undefined,
+                    : 'un',
                 unitCost,
                 totalCost,
                 markup: effectiveMarkup,
                 salePrice,
+                item_nao_cadastrado: isAusente,
+                catalogo_id: matNoCatalogo ? matNoCatalogo.id : null,
               }
             })
 
             setManualItems((prev) => [...prev, ...novasFerragens])
 
-            toast({
-              title: 'Ferragens Obrigatórias Adicionadas',
-              description: `✓ IA adicionou ${novasFerragens.length} ferragens obrigatórias ao orçamento (ex: corrediças, puxadores)`,
-            })
+            const countAusentes = novasFerragens.filter((i) => i.item_nao_cadastrado).length
+            if (countAusentes > 0) {
+              toast({
+                title: 'Itens Estimados Adicionados',
+                description: `⚠️ ${countAusentes} item(ns) não encontrado(s) no Catálogo foi(ram) adicionado(s) com custo estimado (R$ 50,00).`,
+              })
+            } else {
+              toast({
+                title: 'Ferragens Obrigatórias Adicionadas',
+                description: `✓ IA adicionou ${novasFerragens.length} ferragens obrigatórias ao orçamento (ex: corrediças, puxadores)`,
+              })
+            }
           }
 
           // Se houver mais de 1 módulo detectado, mostra toast avisando
@@ -790,32 +882,19 @@ export default function Index() {
           setIsAnalyzing(false)
 
           toast({
-            title: '✓ Match IA Concluído!',
+            title: eCustom ? '✓ Módulo Personalizado Identificado!' : '✓ Match IA Concluído!',
             description: justificativaGeral,
           })
         } else {
-          // Fallback para resposta antiga ou id_modulo_encontrado
-          const idModuloAntigo = data.id_modulo_encontrado || data.idModulo
-          let moduloEncontrado: TemplateEngenharia | undefined
-
-          if (idModuloAntigo) {
-            moduloEncontrado = modulosAtuais.find((m) => m.id === idModuloAntigo)
-          }
-
-          if (!moduloEncontrado && idModuloAntigo) {
-            moduloEncontrado = modulosAtuais.find(
-              (m) => m.nome_template.toLowerCase() === idModuloAntigo.toLowerCase(),
-            )
-          }
-
-          const idFinal = moduloEncontrado?.id ?? modulosAtuais[0]?.id ?? ''
-
-          setSelectedModuleId(idFinal)
+          // Fallback sem módulos identificados: define como módulo personalizado
+          setSelectedModuleId('MODULO-CUSTOM')
+          setIsCustomModuleIA(true)
+          setCustomModuleNameIA('Módulo Personalizado (Análise IA)')
           setMatchJustificativa(justificativaGeral)
           setIsAnalyzing(false)
 
           toast({
-            title: '✓ Match IA Concluído!',
+            title: '✓ Módulo Personalizado Identificado',
             description: justificativaGeral,
           })
         }
@@ -936,6 +1015,11 @@ export default function Index() {
     setIsAnalyzing(false)
     setManualItems([])
     setMatchJustificativa(null)
+    setFatorEscalaIA(null)
+    setDimensoesOriginaisIA(null)
+    setDimensoesEstimadasIA(null)
+    setIsCustomModuleIA(false)
+    setCustomModuleNameIA('')
     if (analyzeTimeoutRef.current) {
       clearTimeout(analyzeTimeoutRef.current)
       analyzeTimeoutRef.current = null
@@ -1391,6 +1475,11 @@ export default function Index() {
                   />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl">
+                  {selectedModuleId === 'MODULO-CUSTOM' && (
+                    <SelectItem value="MODULO-CUSTOM" className="font-semibold text-amber-700">
+                      ✨ {customModuleNameIA || 'Módulo Personalizado (Análise IA)'}
+                    </SelectItem>
+                  )}
                   {modulosDisponiveis.length === 0 && !loadingModulos && (
                     <div className="px-3 py-2 text-xs text-slate-500">
                       Nenhum módulo disponível na biblioteca.
@@ -1401,6 +1490,11 @@ export default function Index() {
                       {modulo.nome_template}
                     </SelectItem>
                   ))}
+                  {selectedModuleId !== 'MODULO-CUSTOM' && (
+                    <SelectItem value="MODULO-CUSTOM" className="text-slate-600">
+                      + Módulo Personalizado (Sob Medida)
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               {errors.selectedModule && (
@@ -1468,6 +1562,10 @@ export default function Index() {
               selectedModule={selectedModuleObj}
               isAnalyzing={isAnalyzing}
               dimensoes={dimensoes}
+              dimensoesOriginais={dimensoesOriginaisIA}
+              dimensoesEstimadas={dimensoesEstimadasIA}
+              fatorEscala={fatorEscalaIA}
+              isCustomModule={isCustomModuleIA || selectedModuleId === 'MODULO-CUSTOM'}
               onOpenLibraryModal={() => navigate('/biblioteca')}
               modulosDisponiveis={modulosDisponiveis}
               selectedModuleId={selectedModuleId}
@@ -1910,6 +2008,45 @@ export default function Index() {
                 A tabela de peças é calculada em tempo real a partir das medidas e materiais
                 informados acima.
               </p>
+            </div>
+          )}
+
+          {/* ⚠️ ALERTA AMARELO: ITENS NÃO CADASTRADOS NO CATÁLOGO (ADICIONADOS POR ESTIMATIVA) */}
+          {itensNaoCadastrados.length > 0 && (
+            <div className="space-y-2 pt-1 animate-fade-in">
+              {itensNaoCadastrados.map((item, idx) => (
+                <div
+                  key={item.id || idx}
+                  className="flex items-start sm:items-center justify-between gap-3 p-3.5 rounded-xl border text-xs leading-relaxed"
+                  style={{
+                    backgroundColor: '#FEF3C7',
+                    borderColor: '#F59E0B',
+                    color: '#92400E',
+                  }}
+                >
+                  <div className="flex items-start sm:items-center gap-2.5">
+                    <span className="text-base leading-none shrink-0 mt-0.5 sm:mt-0">⚠️</span>
+                    <div>
+                      <span className="font-bold">
+                        Item &quot;{item.description}&quot; adicionado por estimativa
+                      </span>
+                      <span className="text-[11px] opacity-90 block sm:inline sm:ml-1">
+                        (Custo estimado: {formatCurrency(item.unitCost)}). Cadastre este item no
+                        Catálogo de Materiais para precisão de custo.
+                      </span>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/catalogo')}
+                    className="shrink-0 h-7 text-[11px] font-semibold bg-amber-50 hover:bg-amber-100 border-amber-400 text-amber-900 rounded-lg px-2.5 shadow-2xs"
+                  >
+                    Ir ao Catálogo
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
 

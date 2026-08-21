@@ -38,6 +38,14 @@ interface LibraryMatchCardProps {
   onModuleChange?: (id: string) => void
   /** Dimensões reais (mm) opcionais passadas ao componente. */
   dimensoes?: { largura: number; altura: number; profundidade: number }
+  /** Dimensões estimadas da foto retornadas pela IA */
+  dimensoesEstimadas?: { largura: number; altura: number; profundidade: number } | null
+  /** Dimensões originais do módulo da biblioteca */
+  dimensoesOriginais?: { largura: number; altura: number; profundidade: number } | null
+  /** Fator de escala calculado entre a foto estimada e o gabarito original */
+  fatorEscala?: number | null
+  /** Indicador se o módulo atual é um módulo personalizado/customizado pela IA */
+  isCustomModule?: boolean
   /** Justificativa retornada pela IA (GPT-4o Vision) sobre o match do módulo. */
   justificativa?: string | null
 }
@@ -50,6 +58,10 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
   selectedModuleId = '',
   onModuleChange,
   dimensoes = { largura: 1800, altura: 2200, profundidade: 600 },
+  dimensoesEstimadas = null,
+  dimensoesOriginais = null,
+  fatorEscala = null,
+  isCustomModule = false,
   justificativa = null,
 }) => {
   const isMatched = !!selectedModule
@@ -236,32 +248,104 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
             )}
           </div>
 
-          {/* Technical Specs Pill Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 text-slate-700">
-              <Ruler className="w-4 h-4 text-slate-700 shrink-0" />
-              <div className="min-w-0">
-                <span className="text-[10px] uppercase font-semibold text-slate-400 block">
-                  Dimensões (AxLxP)
-                </span>
-                <span className="font-mono font-bold text-slate-800 text-[11px] truncate block">
-                  {selectedModule?.dimensoes || '—'}
-                </span>
-              </div>
-            </div>
+          {/* Technical Specs Pill Grid & Comparação Lado a Lado de Dimensões / Fator de Escala */}
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            {/* Comparação Dimensões Originais vs Dimensões Estimadas da Foto */}
+            {(dimensoesOriginais || selectedModule?.dimensoes) &&
+              (dimensoesEstimadas || dimensoes) && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Ruler className="w-3.5 h-3.5 text-slate-700" />
+                      Comparação de Dimensões (Original vs Estimada)
+                    </span>
+                    {fatorEscala !== null && fatorEscala !== undefined && fatorEscala > 0 && (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full',
+                          fatorEscala > 1.05
+                            ? 'bg-amber-50 text-amber-800 border-amber-300'
+                            : fatorEscala < 0.95
+                              ? 'bg-blue-50 text-blue-800 border-blue-300'
+                              : 'bg-slate-100 text-slate-700 border-slate-300',
+                        )}
+                      >
+                        Fator: {fatorEscala.toFixed(2)}x
+                        {fatorEscala > 1.0
+                          ? ` (+${Math.round((fatorEscala - 1) * 100)}%)`
+                          : fatorEscala < 1.0
+                            ? ` (${Math.round((fatorEscala - 1) * 100)}%)`
+                            : ' (100%)'}
+                      </Badge>
+                    )}
+                  </div>
 
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 text-slate-700">
-              <Layers className="w-4 h-4 text-slate-700 shrink-0" />
-              <div className="min-w-0">
-                <span className="text-[10px] uppercase font-semibold text-slate-400 block">
-                  Material Padrão
-                </span>
-                <span
-                  className="font-medium text-slate-800 text-[11px] truncate block"
-                  title={selectedModule?.material || ''}
-                >
-                  {selectedModule?.material || '—'}
-                </span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[10px] uppercase font-semibold text-slate-400 block">
+                        Dimensões Originais (Biblioteca)
+                      </span>
+                      <span className="font-mono font-bold text-slate-800 text-[11px] block mt-0.5">
+                        {dimensoesOriginais
+                          ? `${dimensoesOriginais.largura}L × ${dimensoesOriginais.altura}A × ${dimensoesOriginais.profundidade}P mm`
+                          : selectedModule?.dimensoes || '—'}
+                      </span>
+                    </div>
+
+                    <div className="p-2 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[10px] uppercase font-semibold text-slate-400 block">
+                        Dimensões Estimadas (Foto)
+                      </span>
+                      <span className="font-mono font-bold text-slate-800 text-[11px] block mt-0.5">
+                        {dimensoesEstimadas
+                          ? `${dimensoesEstimadas.largura}L × ${dimensoesEstimadas.altura}A × ${dimensoesEstimadas.profundidade}P mm`
+                          : `${dimensoes.largura}L × ${dimensoes.altura}A × ${dimensoes.profundidade}P mm`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {fatorEscala !== null &&
+                    fatorEscala !== undefined &&
+                    fatorEscala > 0 &&
+                    Math.abs(fatorEscala - 1) >= 0.02 && (
+                      <p className="text-[11px] text-slate-600 leading-snug">
+                        📐 <strong>Fator de escala aplicado:</strong> {fatorEscala.toFixed(2)}x —
+                        módulo{' '}
+                        {fatorEscala > 1
+                          ? `${Math.round((fatorEscala - 1) * 100)}% maior que o padrão (consumo de MDF e fita ajustado proporcionalmente).`
+                          : `${Math.round((1 - fatorEscala) * 100)}% menor que o padrão (consumo de MDF e fita ajustado proporcionalmente).`}
+                      </p>
+                    )}
+                </div>
+              )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 text-slate-700">
+                <Ruler className="w-4 h-4 text-slate-700 shrink-0" />
+                <div className="min-w-0">
+                  <span className="text-[10px] uppercase font-semibold text-slate-400 block">
+                    Gabarito Padrão
+                  </span>
+                  <span className="font-mono font-bold text-slate-800 text-[11px] truncate block">
+                    {selectedModule?.dimensoes || '—'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 text-slate-700">
+                <Layers className="w-4 h-4 text-slate-700 shrink-0" />
+                <div className="min-w-0">
+                  <span className="text-[10px] uppercase font-semibold text-slate-400 block">
+                    Material Padrão
+                  </span>
+                  <span
+                    className="font-medium text-slate-800 text-[11px] truncate block"
+                    title={selectedModule?.material || ''}
+                  >
+                    {selectedModule?.material || '—'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

@@ -13,11 +13,13 @@ export interface OrcamentoBOMItem {
   material?: string
   espessura?: number
   metragem?: number
-  unidade?: 'm²' | 'm' | 'jogo' | string
+  unidade?: 'm²' | 'm' | 'jogo' | 'un' | 'par' | string
   unitCost?: number
   totalCost?: number
   markup?: number
   salePrice?: number
+  item_nao_cadastrado?: boolean
+  catalogo_id?: string | null
   [key: string]: unknown
 }
 

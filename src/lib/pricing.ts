@@ -170,6 +170,7 @@ export function calcularBOM(
   padraoProjeto: PadraoProjeto,
   catalogoPrecos?: CatalogoMaterial[],
   markup?: number,
+  fatorEscala?: number,
 ): BudgetItem[] {
   // Validação: dimensões e módulo obrigatórios.
   if (!modulo || !dimensoes.largura || !dimensoes.altura || !dimensoes.profundidade) {
@@ -184,10 +185,13 @@ export function calcularBOM(
   const espExt = mdfExterno.espessura
   const espInt = mdfInterno.espessura
 
+  // Fator de escala proporcional (default 1.0 se não fornecido ou inválido)
+  const escala = typeof fatorEscala === 'number' && fatorEscala > 0 ? fatorEscala : 1.0
+
   const pecas: BudgetItem[] = []
 
-  // 1. Laterais Externas: 2x (A × P)
-  const areaLateral = ((A * P) / 1_000_000) * PERDA
+  // 1. Laterais Externas: 2x (A × P) com fator de escala aplicado aos m² de MDF
+  const areaLateral = ((A * P) / 1_000_000) * PERDA * escala
   pecas.push(
     criarPeca(
       'bom-laterais-externas',
@@ -201,9 +205,9 @@ export function calcularBOM(
     ),
   )
 
-  // 2. Base e Topo: 2x ((L - 2×espExt) × P)
+  // 2. Base e Topo: 2x ((L - 2×espExt) × P) com fator de escala aplicado aos m² de MDF
   const larguraInterna = L - 2 * espExt
-  const areaBaseTopo = ((larguraInterna * P) / 1_000_000) * PERDA
+  const areaBaseTopo = ((larguraInterna * P) / 1_000_000) * PERDA * escala
   pecas.push(
     criarPeca(
       'bom-base-topo',
@@ -217,9 +221,9 @@ export function calcularBOM(
     ),
   )
 
-  // 3. Prateleiras Internas: 2x ((L - 2×espExt) × (P - 20))
+  // 3. Prateleiras Internas: 2x ((L - 2×espExt) × (P - 20)) com fator de escala aplicado aos m² de MDF
   const profPrateleira = P - 20
-  const areaPrateleira = ((larguraInterna * profPrateleira) / 1_000_000) * PERDA
+  const areaPrateleira = ((larguraInterna * profPrateleira) / 1_000_000) * PERDA * escala
   pecas.push(
     criarPeca(
       'bom-prateleiras',
@@ -233,8 +237,8 @@ export function calcularBOM(
     ),
   )
 
-  // 4. Fundo: 1x (L × A)
-  const areaFundo = ((L * A) / 1_000_000) * PERDA
+  // 4. Fundo: 1x (L × A) com fator de escala aplicado aos m² de MDF
+  const areaFundo = ((L * A) / 1_000_000) * PERDA * escala
   pecas.push(
     criarPeca(
       'bom-fundo',
@@ -248,11 +252,11 @@ export function calcularBOM(
     ),
   )
 
-  // 5. Fita de Borda — perímetro linear total das arestas visíveis.
+  // 5. Fita de Borda — perímetro linear total das arestas visíveis com fator de escala aplicado aos metros lineares
   //    Laterais: 2×(A×2) (frente e trás de cada lateral)
   //    Base/Topo: 2×((L - 2×espExt)×2) (frente e trás de base e topo)
   //    Prateleiras: 2×(L - 2×espExt) (frente de cada prateleira)
-  const perimetroFitaMm = 2 * (A * 2) + 2 * (larguraInterna * 2) + 2 * larguraInterna
+  const perimetroFitaMm = (2 * (A * 2) + 2 * (larguraInterna * 2) + 2 * larguraInterna) * escala
   const perimetroFitaM = perimetroFitaMm / 1000
   pecas.push(
     criarPeca(
