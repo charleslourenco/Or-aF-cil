@@ -146,6 +146,9 @@ export default function Index() {
   })
   const [mdfFundo, setMdfFundo] = useState<string>('MDF 6mm Branco TX')
 
+  // Estado para armazenar itens carregados diretamente do banco (preserva cotação original)
+  const [savedLoadedItems, setSavedLoadedItems] = useState<BudgetItem[] | null>(null)
+
   // 💳 TERMOS COMERCIAIS
   const [formaPagamento, setFormaPagamento] = useState('')
   const [observacoes, setObservacoes] = useState('')
@@ -219,9 +222,72 @@ export default function Index() {
           setObservacoes(orcamento.observacoes)
         }
 
+        // Restaura dimensões salvas (se disponíveis)
+        if (orcamento.dimensoes_json && typeof orcamento.dimensoes_json === 'object') {
+          const dim = orcamento.dimensoes_json as {
+            largura?: number
+            altura?: number
+            profundidade?: number
+          }
+          setDimensoes({
+            largura: Number(dim.largura) || 1800,
+            altura: Number(dim.altura) || 2200,
+            profundidade: Number(dim.profundidade) || 600,
+          })
+        }
+
+        // Restaura MDF externo salvo
+        if (orcamento.mdf_externo) {
+          try {
+            if (orcamento.mdf_externo.startsWith('{')) {
+              const parsed = JSON.parse(orcamento.mdf_externo)
+              setMdfExterno({
+                cor: parsed.cor || 'Branco TX',
+                espessura: parsed.espessura === 15 ? 15 : 18,
+              })
+            } else {
+              setMdfExterno({
+                cor: orcamento.mdf_externo,
+                espessura: 18,
+              })
+            }
+          } catch {
+            setMdfExterno({ cor: orcamento.mdf_externo, espessura: 18 })
+          }
+        }
+
+        // Restaura MDF interno salvo
+        if (orcamento.mdf_interno) {
+          try {
+            if (orcamento.mdf_interno.startsWith('{')) {
+              const parsed = JSON.parse(orcamento.mdf_interno)
+              setMdfInterno({
+                cor: parsed.cor || 'Branco TX',
+                espessura: parsed.espessura === 18 ? 18 : 15,
+              })
+            } else {
+              setMdfInterno({
+                cor: orcamento.mdf_interno,
+                espessura: 15,
+              })
+            }
+          } catch {
+            setMdfInterno({ cor: orcamento.mdf_interno, espessura: 15 })
+          }
+        }
+
+        // Restaura MDF fundo salvo
+        if (orcamento.mdf_fundo) {
+          setMdfFundo(orcamento.mdf_fundo)
+        }
+
+        // Restaura Padrão de Projeto salvo
+        if (orcamento.padrao_projeto === 'premium' || orcamento.padrao_projeto === 'comercial') {
+          setPadraoProjeto(orcamento.padrao_projeto)
+        }
+
         // Tenta associar o módulo se o nome coincidir com algum template da biblioteca
         if (orcamento.modulo) {
-          // Busca nos módulos disponíveis se já carregados
           const modEncontrado = modulosDisponiveis.find(
             (m) =>
               m.nome_template.toLowerCase() === orcamento.modulo?.toLowerCase() ||
@@ -234,55 +300,44 @@ export default function Index() {
           }
         }
 
-        // Se houver bom_json gravado
+        // BUG 2: Restaurar TODOS os itens do bom_json, preservando o orçamento original salvo
         if (
           orcamento.bom_json &&
           Array.isArray(orcamento.bom_json) &&
           orcamento.bom_json.length > 0
         ) {
-          const manual: BudgetItem[] = []
-          orcamento.bom_json.forEach((item, index) => {
+          const loadedTodosItens: BudgetItem[] = orcamento.bom_json.map((item, index) => {
             const itId = String(item.id || `loaded-${index}`)
-            // Se for um item manual adicionado anteriormente
-            if (itId.startsWith('manual-')) {
-              const unidadeValida =
-                item.unidade === 'm²' || item.unidade === 'm' || item.unidade === 'jogo'
-                  ? item.unidade
-                  : undefined
+            const unidadeValida =
+              item.unidade === 'm²' || item.unidade === 'm' || item.unidade === 'jogo'
+                ? item.unidade
+                : undefined
 
-              manual.push({
-                id: itId,
-                description: item.description || 'Item Manual',
-                material: item.material,
-                espessura: item.espessura,
-                metragem: item.metragem,
-                unidade: unidadeValida,
-                unitCost: Number(item.unitCost) || 0,
-                totalCost: Number(item.totalCost) || 0,
-                markup: Number(item.markup) || 2.5,
-                salePrice: Number(item.salePrice) || 0,
-              })
+            return {
+              id: itId,
+              description: item.description || 'Item Salvo',
+              material: item.material,
+              espessura: item.espessura,
+              metragem:
+                item.metragem !== undefined && item.metragem !== null
+                  ? Number(item.metragem)
+                  : undefined,
+              unidade: unidadeValida,
+              unitCost: Number(item.unitCost) || 0,
+              totalCost: Number(item.totalCost) || 0,
+              markup: Number(item.markup) || 2.5,
+              salePrice: Number(item.salePrice) || 0,
             }
           })
-          if (manual.length > 0) {
-            setManualItems(manual)
-          }
+          setSavedLoadedItems(loadedTodosItens)
         }
 
         // Registra o registro salvo para downloads de PDF e abre a exibição dos resultados
         setSavedOrcamentoRecord(orcamento)
         setShowResults(true)
 
-        // Adiciona um arquivo mock/indicador para não barrar validação se re-executado
-        setUploadedFiles([
-          {
-            file: null,
-            previewUrl: 'https://img.usecurling.com/p/800/600?q=wardrobe%20blueprint&color=emerald',
-            name: `Projeto ${orcamento.cliente_nome}`,
-            sizeFormatted: 'Carregado do Banco',
-            isPdf: false,
-          },
-        ])
+        // BUG 1: Ao carregar um orçamento salvo, NÃO injetar placeholder fake.
+        setUploadedFiles([])
 
         toast({
           title: 'Orçamento Carregado',
@@ -429,10 +484,15 @@ export default function Index() {
     ],
   )
 
-  // Lista final de itens exibida: BOM dinâmica + itens manuais do usuário.
+  // Lista final de itens exibida:
+  // Se savedLoadedItems estiver presente (carregado de orçamento existente), preserva os itens salvos + itens adicionados manualmente.
+  // Caso contrário, usa a BOM recalculada dinamicamente via useMemo + itens manuais.
   const pricingItems = useMemo<BudgetItem[]>(() => {
+    if (savedLoadedItems !== null) {
+      return [...savedLoadedItems, ...manualItems]
+    }
     return [...bomItems, ...manualItems]
-  }, [bomItems, manualItems])
+  }, [savedLoadedItems, bomItems, manualItems])
 
   // Totais consolidados (custo e valor de venda).
   const totalCusto = useMemo(() => custoConsolidado(pricingItems), [pricingItems])
@@ -471,6 +531,8 @@ export default function Index() {
 
   const handleModuleChange = (val: string) => {
     setSelectedModuleId(val)
+    // Se o usuário explicitamente trocar de módulo, libera o recálculo dinâmico
+    setSavedLoadedItems(null)
     // Troca manual de módulo ⇒ limpa a justificativa da IA.
     setMatchJustificativa(null)
     if (errors.selectedModule) {
@@ -800,7 +862,7 @@ export default function Index() {
       newErrors.selectedModule = 'Selecione um módulo da biblioteca'
     }
 
-    if (uploadedFiles.length === 0) {
+    if (uploadedFiles.length === 0 && !editingId) {
       newErrors.uploadedFile = 'Envie ao menos uma foto ou projeto do cliente para comparação'
     }
 
@@ -814,6 +876,9 @@ export default function Index() {
       })
       return
     }
+
+    // Libera o recálculo automático quando o usuário clica em "Gerar Orçamento do Módulo"
+    setSavedLoadedItems(null)
 
     // Success validation -> trigger generation animation
     setIsGenerating(true)
@@ -867,6 +932,7 @@ export default function Index() {
   const handleAddAnotherModule = () => {
     setSelectedModuleId('')
     setUploadedFiles([])
+    setSavedLoadedItems(null)
     setIsAnalyzing(false)
     setManualItems([])
     setMatchJustificativa(null)
@@ -994,6 +1060,9 @@ export default function Index() {
 
       let savedRecord: Orcamento | null = null
 
+      const mdfExternoStr = JSON.stringify(mdfExterno)
+      const mdfInternoStr = JSON.stringify(mdfInterno)
+
       if (editingId) {
         // Atualização de orçamento existente
         savedRecord = await updateOrcamento(editingId, {
@@ -1006,6 +1075,11 @@ export default function Index() {
           observacoes: observacoes || null,
           bom_json: bomJson,
           dre_json: dreJson,
+          dimensoes_json: dimensoes,
+          mdf_externo: mdfExternoStr,
+          mdf_interno: mdfInternoStr,
+          mdf_fundo: mdfFundo,
+          padrao_projeto: padraoProjeto,
         })
       } else {
         // Criação de novo orçamento
@@ -1019,6 +1093,11 @@ export default function Index() {
           observacoes: observacoes || null,
           bom_json: bomJson,
           dre_json: dreJson,
+          dimensoes_json: dimensoes,
+          mdf_externo: mdfExternoStr,
+          mdf_interno: mdfInternoStr,
+          mdf_fundo: mdfFundo,
+          padrao_projeto: padraoProjeto,
         })
       }
 

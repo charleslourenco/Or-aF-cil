@@ -36,6 +36,12 @@ export interface OrcamentoDRE {
   [key: string]: unknown
 }
 
+export interface OrcamentoDimensoes {
+  largura: number
+  altura: number
+  profundidade: number
+}
+
 export interface Orcamento {
   id: string
   numero_sequencial?: number | null
@@ -49,6 +55,11 @@ export interface Orcamento {
   observacoes: string | null
   bom_json: OrcamentoBOMItem[] | null
   dre_json: OrcamentoDRE | null
+  dimensoes_json?: OrcamentoDimensoes | null
+  mdf_externo?: string | null
+  mdf_interno?: string | null
+  mdf_fundo?: string | null
+  padrao_projeto?: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -64,6 +75,11 @@ export interface OrcamentoInput {
   observacoes?: string | null
   bom_json?: OrcamentoBOMItem[] | unknown[] | null
   dre_json?: OrcamentoDRE | Record<string, unknown> | null
+  dimensoes_json?: OrcamentoDimensoes | Record<string, unknown> | null
+  mdf_externo?: string | null
+  mdf_interno?: string | null
+  mdf_fundo?: string | null
+  padrao_projeto?: string | null
 }
 
 // Auxiliar para obter a data ISO do início do mês atual (ex: 2026-08-01T00:00:00.000Z)
@@ -260,6 +276,11 @@ export async function updateOrcamento(
     if (input.observacoes !== undefined) updatePayload.observacoes = input.observacoes
     if (input.bom_json !== undefined) updatePayload.bom_json = input.bom_json
     if (input.dre_json !== undefined) updatePayload.dre_json = input.dre_json
+    if (input.dimensoes_json !== undefined) updatePayload.dimensoes_json = input.dimensoes_json
+    if (input.mdf_externo !== undefined) updatePayload.mdf_externo = input.mdf_externo
+    if (input.mdf_interno !== undefined) updatePayload.mdf_interno = input.mdf_interno
+    if (input.mdf_fundo !== undefined) updatePayload.mdf_fundo = input.mdf_fundo
+    if (input.padrao_projeto !== undefined) updatePayload.padrao_projeto = input.padrao_projeto
 
     const { data, error } = await db
       .from('Orcamentos')
@@ -298,6 +319,11 @@ export async function createOrcamento(input: OrcamentoInput): Promise<Orcamento 
         observacoes: input.observacoes ?? null,
         bom_json: input.bom_json ?? null,
         dre_json: input.dre_json ?? null,
+        dimensoes_json: input.dimensoes_json ?? null,
+        mdf_externo: input.mdf_externo ?? null,
+        mdf_interno: input.mdf_interno ?? null,
+        mdf_fundo: input.mdf_fundo ?? null,
+        padrao_projeto: input.padrao_projeto ?? null,
       })
       .select()
       .single()
