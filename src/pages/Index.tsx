@@ -80,7 +80,7 @@ export default function Index() {
   // Upload state — agora suporta MÚLTIPLAS imagens (array de perspectivas)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileState[]>([])
 
-  // Estado de análise automática da "Lupa Lu" (simulação da chamada OpenAI)
+  // Estado de análise automática da IA (simulação da chamada OpenAI)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const analyzeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -554,7 +554,7 @@ export default function Index() {
 
   /**
    * Fallback mock (sem API key ou em caso de erro da IA): simula a análise da
-   * "Lupa Lu" em 3 segundos e seleciona o primeiro módulo disponível.
+   * IA em 3 segundos e seleciona o primeiro módulo disponível.
    */
   const runMockMatch = (
     modulos: TemplateEngenharia[],
@@ -617,7 +617,7 @@ export default function Index() {
       return
     }
 
-    // 🔄 FLUXO DE MATCH AUTOMÁTICO (Lupa Lu):
+    // 🔄 FLUXO DE MATCH AUTOMÁTICO (IA):
     // Chama a Edge Function 'analisar-imagem' do Supabase
     setIsAnalyzing(true)
 
@@ -770,7 +770,7 @@ export default function Index() {
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     toast({
       title: 'Pronto para novo módulo',
-      description: 'Faça o upload das fotos e a Lupa Lu identificará o módulo automaticamente.',
+      description: 'Faça o upload das fotos e a IA identificará o módulo automaticamente.',
     })
   }
 

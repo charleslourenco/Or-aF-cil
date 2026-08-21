@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils'
 interface LibraryMatchCardProps {
   /** Módulo selecionado dinamicamente (do Supabase). `null` = estado padrão. */
   selectedModule: TemplateEngenharia | null
-  /** Quando true, exibe o esqueleto de análise da Lupa Lu em vez do conteúdo. */
+  /** Quando true, exibe o esqueleto de análise da IA em vez do conteúdo. */
   isAnalyzing?: boolean
   onOpenLibraryModal?: () => void
   /** Lista de módulos disponíveis para o fallback manual "Trocar Módulo". */
@@ -147,10 +147,10 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
         </div>
       )}
 
-      {/* ESTADO DE ANÁLISE — esqueleto pulsante da Lupa Lu */}
+      {/* ESTADO DE ANÁLISE — esqueleto pulsante da IA */}
       {isAnalyzing ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center py-8 px-4">
-          {/* Ícone da lupa girando com halo */}
+          {/* Ícone girando com halo */}
           <div className="relative w-20 h-20 flex items-center justify-center mb-5">
             <div className="absolute inset-0 rounded-full bg-violet-100 animate-ping opacity-60" />
             <div className="absolute inset-2 rounded-full bg-violet-200/60 animate-pulse" />
@@ -162,7 +162,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
           {/* Texto brilhante */}
           <h4 className="text-sm sm:text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-slate-600 to-violet-600 bg-[length:200%_auto] animate-[shimmer_2s_linear_infinite] flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-violet-500" />
-            👁️ Lupa Lu analisando perspectivas e buscando gabarito na biblioteca...
+            👁️ IA analisando perspectivas e buscando gabarito na biblioteca...
           </h4>
 
           <p className="text-xs text-slate-500 mt-2 max-w-[280px]">

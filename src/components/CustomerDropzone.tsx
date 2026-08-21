@@ -383,7 +383,7 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
               <span>
                 {uploadedFiles.length}{' '}
                 {uploadedFiles.length === 1 ? 'perspectiva pronta' : 'perspectivas prontas'} para
-                análise da Lupa Lu
+                análise da IA
               </span>
             </div>
           </div>
@@ -408,7 +408,7 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
             </h4>
 
             <p className="text-xs text-slate-500 mb-3 max-w-[280px]">
-              Envie múltiplas perspectivas (frente, interno, detalhes) para a Lupa Lu identificar o
+              Envie múltiplas perspectivas (frente, interno, detalhes) para a IA identificar o
               módulo automaticamente
             </p>
 
