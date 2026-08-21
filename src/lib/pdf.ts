@@ -88,7 +88,7 @@ function formatPercentual(val: number | null | undefined): string {
 }
 
 /**
- * Carrega uma imagem de URL como HTMLImageElement / Base64 para inclusão segura no jsPDF
+ * Carrega uma imagem de URL como HTMLImageElement para inclusão segura no jsPDF
  */
 async function carregarImagem(url: string): Promise<HTMLImageElement | null> {
   if (!url || typeof url !== 'string' || !url.trim()) return null
@@ -105,7 +105,7 @@ async function carregarImagem(url: string): Promise<HTMLImageElement | null> {
 }
 
 /**
- * Formata data ISO para pt-BR
+ * Formata data ISO para pt-BR (ex: "15/05/2026")
  */
 function formatarData(dataIso?: string | null): string {
   if (!dataIso) {
@@ -121,8 +121,21 @@ function formatarData(dataIso?: string | null): string {
 }
 
 /**
+ * Invoca autoTable com segurança suportando chamada doc.autoTable ou autoTable(doc, ...)
+ */
+function invokeAutoTable(doc: JsPDFWithAutoTable, options: Record<string, unknown>) {
+  if (typeof doc.autoTable === 'function') {
+    // @ts-expect-error autoTable supports options as single parameter or doc, options
+    doc.autoTable(options)
+  } else if (typeof autoTable === 'function') {
+    ;(autoTable as (d: jsPDF, opts: Record<string, unknown>) => void)(doc, options)
+  }
+}
+
+/**
  * 📄 GERAR PROPOSTA COMERCIAL (PDF do Cliente)
- * Visual limpo, comercial, elegante, sem custos fabris ou detalhes técnicos de engenharia.
+ * Identidade Visual: BENDER HAUSSFORM
+ * Cores: Grafite (#0F172A / #1E293B), Dourado/Âmbar (#B45309), Slate (#64748B, #94A3B8, #334155), Fundos claros (#F8FAFC, #E2E8F0)
  */
 export async function gerarPropostaComercial(dados: PropostaComercialData): Promise<void> {
   try {
@@ -132,36 +145,37 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       format: 'a4',
     }) as JsPDFWithAutoTable
 
-    // Garante que o plugin autoTable está anexado à instância jsPDF
     if (!doc.autoTable) {
       doc.autoTable = autoTable
     }
 
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
-    const margin = 20
+    const margin = 15
     const contentWidth = pageWidth - margin * 2
 
     let y = margin
 
-    // 1. CABEÇALHO DA EMPRESA
+    // 1. CABEÇALHO (2 colunas — grid visual)
     const empresa = dados.empresa
     const logoUrl = empresa?.logo_url
 
     let logoCarregada = false
+    let logoRenderWidth = 0
+    let logoRenderHeight = 0
+
     if (logoUrl) {
       try {
         const img = await carregarImagem(logoUrl)
         if (img) {
-          // Renderiza o logo com dimensões proporcionais
-          const logoMaxHeight = 18
+          const logoMaxHeight = 16
           const logoMaxWidth = 45
           let w = img.width
           let h = img.height
           const ratio = Math.min(logoMaxWidth / w, logoMaxHeight / h)
-          w = w * ratio
-          h = h * ratio
-          doc.addImage(img, 'PNG', margin, y, w, h)
+          logoRenderWidth = w * ratio
+          logoRenderHeight = h * ratio
+          doc.addImage(img, 'PNG', margin, y, logoRenderWidth, logoRenderHeight)
           logoCarregada = true
         }
       } catch (e) {
@@ -169,147 +183,179 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       }
     }
 
-    // Nome da Empresa e dados institucionais
-    const empresaNome = empresa?.nome_fantasia || empresa?.razao_social || 'OrçaFácil 3.0'
-    const startTextX = logoCarregada ? margin + 50 : margin
+    // Coluna Direita: Badge / Retângulo escuro
+    const badgeWidth = 55
+    const badgeHeight = 18
+    const badgeX = pageWidth - margin - badgeWidth
+    const badgeY = y
+
+    doc.setFillColor(30, 41, 59) // #1E293B
+    doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, 2, 2, 'F')
+
+    // Linha 1: "ORÇAMENTO"
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(148, 163, 184) // Slate-400
+    doc.text('ORÇAMENTO', badgeX + badgeWidth / 2, badgeY + 4.8, { align: 'center' })
+
+    // Linha 2: Código do orçamento (últimas 6 posições em CAIXA ALTA)
+    const rawCodigo = dados.codigo || dados.orcamentoId || 'ORC000'
+    const codigoOrc = `#${
+      rawCodigo
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .slice(-6)
+        .toUpperCase() || '000000'
+    }`
 
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(logoCarregada ? 14 : 16)
-    doc.setTextColor(5, 150, 105) // Verde Esmeralda (#059669)
-    doc.text(empresaNome, startTextX, y + (logoCarregada ? 4 : 0))
+    doc.setFontSize(12)
+    doc.setTextColor(255, 255, 255) // Branco
+    doc.text(codigoOrc, badgeX + badgeWidth / 2, badgeY + 10.5, { align: 'center' })
 
+    // Linha 3: Data formatada
+    const dataFormatada = formatarData(dados.data)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(148, 163, 184) // Slate-400
+    doc.text(dataFormatada, badgeX + badgeWidth / 2, badgeY + 15.2, { align: 'center' })
+
+    // Coluna Esquerda: Nome fixo "BENDER HAUSSFORM" e dados institucionais
+    const headerLeftMaxW = badgeX - margin - 5
+
+    let textStartY = y
+    if (logoCarregada) {
+      textStartY = y + logoRenderHeight + 3.5
+    }
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(16)
+    doc.setTextColor(15, 23, 42) // #0F172A
+    doc.text('BENDER HAUSSFORM', margin, textStartY + 4)
+
+    let subTextY = textStartY + 8.5
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     doc.setTextColor(100, 116, 139) // Slate-500
 
-    const linhasContato: string[] = []
-    if (empresa?.razao_social && empresa?.razao_social !== empresaNome) {
-      linhasContato.push(empresa.razao_social)
-    }
-    const docFiscal = [
-      empresa?.cnpj ? `CNPJ: ${empresa.cnpj}` : '',
-      empresa?.inscricao_estadual ? `IE: ${empresa.inscricao_estadual}` : '',
-    ]
-      .filter(Boolean)
-      .join(' | ')
-    if (docFiscal) linhasContato.push(docFiscal)
+    // Linha 1: CNPJ + IE
+    const docFiscalParts: string[] = []
+    if (empresa?.cnpj) docFiscalParts.push(`CNPJ: ${empresa.cnpj}`)
+    if (empresa?.inscricao_estadual) docFiscalParts.push(`IE: ${empresa.inscricao_estadual}`)
+    const linha1 =
+      docFiscalParts.length > 0 ? docFiscalParts.join(' | ') : 'Móveis Sob Medida e Alta Marcenaria'
+    doc.text(linha1, margin, subTextY)
+    subTextY += 3.6
 
-    const endereco = [
+    // Linha 2: Endereço completo
+    const enderecoParts = [
       empresa?.logradouro
         ? `${empresa.logradouro}${empresa.numero ? ', ' + empresa.numero : ''}`
         : '',
       empresa?.bairro,
       empresa?.cidade && empresa?.estado ? `${empresa.cidade}/${empresa.estado}` : empresa?.cidade,
       empresa?.cep ? `CEP: ${empresa.cep}` : '',
-    ]
-      .filter(Boolean)
-      .join(' - ')
-    if (endereco) linhasContato.push(endereco)
+    ].filter(Boolean)
+    const linha2 = enderecoParts.join(', ')
+    if (linha2) {
+      const splitLinha2 = doc.splitTextToSize(linha2, headerLeftMaxW)
+      doc.text(splitLinha2, margin, subTextY)
+      subTextY += Array.isArray(splitLinha2) ? splitLinha2.length * 3.6 : 3.6
+    }
 
-    const contatos = [
+    // Linha 3: Telefone, Email, Site, Instagram
+    const contatosParts = [
       empresa?.telefone ? `Tel: ${empresa.telefone}` : '',
       empresa?.email_comercial ? `Email: ${empresa.email_comercial}` : '',
       empresa?.site ? `Site: ${empresa.site}` : '',
       empresa?.instagram ? `Instagram: ${empresa.instagram}` : '',
-    ]
-      .filter(Boolean)
-      .join(' | ')
-    if (contatos) linhasContato.push(contatos)
+    ].filter(Boolean)
+    const linha3 = contatosParts.join(' | ')
+    if (linha3) {
+      const splitLinha3 = doc.splitTextToSize(linha3, headerLeftMaxW)
+      doc.text(splitLinha3, margin, subTextY)
+      subTextY += Array.isArray(splitLinha3) ? splitLinha3.length * 3.6 : 3.6
+    }
 
-    let textY = y + (logoCarregada ? 9 : 6)
-    linhasContato.forEach((linha) => {
-      doc.text(linha, startTextX, textY)
-      textY += 3.8
-    })
+    y = Math.max(subTextY + 2, badgeY + badgeHeight + 5)
 
-    y = Math.max(y + (logoCarregada ? 22 : 18), textY + 2)
-
-    // Linha divisória
-    doc.setDrawColor(226, 232, 240) // Slate-200
+    // Linha divisória após cabeçalho
+    doc.setDrawColor(226, 232, 240) // #E2E8F0
     doc.setLineWidth(0.5)
     doc.line(margin, y, pageWidth - margin, y)
-    y += 7
+    y += 6
 
-    // 2. TÍTULO E DADOS DA PROPOSTA
+    // 2. TÍTULO DA PROPOSTA
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(15)
-    doc.setTextColor(30, 41, 59) // Slate-800
-    doc.text('PROPOSTA COMERCIAL', margin, y)
+    doc.setFontSize(14)
+    doc.setTextColor(15, 23, 42) // #0F172A
+    doc.text('PROPOSTA COMERCIAL', pageWidth / 2, y + 4, { align: 'center' })
+    y += 8
 
-    const codigoOrc =
-      dados.codigo || dados.orcamentoId
-        ? `#${(dados.codigo || dados.orcamentoId || '').slice(-8).toUpperCase()}`
-        : 'ORC-2026'
-    const dataFormatada = formatarData(dados.data)
-
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    doc.setTextColor(100, 116, 139)
-    doc.text(`Data: ${dataFormatada}   |   Orçamento: ${codigoOrc}`, pageWidth - margin, y, {
-      align: 'right',
-    })
-    y += 7
-
-    // Box de Dados do Cliente
-    doc.setFillColor(248, 250, 252) // Slate-50
-    doc.roundedRect(margin, y, contentWidth, 16, 2, 2, 'F')
-    doc.setDrawColor(226, 232, 240)
-    doc.roundedRect(margin, y, contentWidth, 16, 2, 2, 'S')
-
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9)
-    doc.setTextColor(51, 65, 85)
-    doc.text('CLIENTE:', margin + 4, y + 6)
-
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(15, 23, 42)
-    doc.text(dados.cliente.nome || 'Cliente não informado', margin + 22, y + 6)
-
-    const contatosCliente = [
+    // 3. BOX DO CLIENTE
+    const contatosClienteArr = [
       dados.cliente.telefone ? `Tel: ${dados.cliente.telefone}` : '',
       dados.cliente.email ? `Email: ${dados.cliente.email}` : '',
       dados.cliente.endereco ? `End: ${dados.cliente.endereco}` : '',
-    ]
-      .filter(Boolean)
-      .join('   |   ')
+    ].filter(Boolean)
 
-    if (contatosCliente) {
-      doc.setFontSize(8)
-      doc.setTextColor(100, 116, 139)
-      doc.text(contatosCliente, margin + 4, y + 11)
+    const hasExtraClientData = contatosClienteArr.length > 0
+    const clientBoxHeight = hasExtraClientData ? 20 : 14
+
+    doc.setFillColor(248, 250, 252) // #F8FAFC
+    doc.roundedRect(margin, y, contentWidth, clientBoxHeight, 2, 2, 'F')
+    doc.setDrawColor(226, 232, 240) // #E2E8F0
+    doc.setLineWidth(0.3)
+    doc.roundedRect(margin, y, contentWidth, clientBoxHeight, 2, 2, 'S')
+
+    // "CLIENTE:" + Nome do cliente
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(51, 65, 85) // #334155
+    doc.text('CLIENTE:', margin + 5, y + 6)
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(15, 23, 42) // #0F172A
+    doc.text(dados.cliente.nome || 'Cliente não informado', margin + 24, y + 6)
+
+    if (hasExtraClientData) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7.5)
+      doc.setTextColor(100, 116, 139) // #64748B
+      const splitClienteExtra = doc.splitTextToSize(
+        contatosClienteArr.join('   |   '),
+        contentWidth - 10,
+      )
+      doc.text(splitClienteExtra, margin + 5, y + 13)
     }
 
-    y += 22
+    y += clientBoxHeight + 7
 
-    // 3. TABELA DE AMBIENTES E ITENS COMERCIAIS
+    // 4. TÍTULO DA SEÇÃO DA TABELA
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(11)
-    doc.setTextColor(30, 41, 59)
-    doc.text('Relação de Ambientes e Móveis Planejados', margin, y)
+    doc.setFontSize(10)
+    doc.setTextColor(15, 23, 42) // #0F172A
+    doc.text('RELAÇÃO DE AMBIENTES E MÓVEIS PLANEJADOS', margin, y)
     y += 4
 
-    const tableBody = dados.ambientes.map((amb, index) => [
-      String(index + 1),
-      amb.nome || 'Módulo Planejado',
-      amb.descricao || 'Projeto sob medida conforme projeto executivo aprovado',
-      String(amb.quantidade ?? 1),
-      formatMoeda(amb.valorUnitario ?? amb.valorTotal ?? dados.valorTotal),
-      formatMoeda(
-        amb.valorTotal ?? (amb.valorUnitario ?? dados.valorTotal) * (amb.quantidade ?? 1),
-      ),
-    ])
+    // 5. TABELA DE ITENS COM NOVAS LARGURAS FIXAS PROPORCIONAIS
+    const tableBody = dados.ambientes.map((amb, index) => {
+      const qtd = amb.quantidade ?? 1
+      const vUnit =
+        amb.valorUnitario ??
+        (amb.valorTotal ? amb.valorTotal / qtd : dados.valorTotal / (dados.ambientes.length || 1))
+      const vTot = amb.valorTotal ?? vUnit * qtd
+      return [
+        String(index + 1),
+        amb.nome || 'Ambiente / Módulo',
+        amb.descricao || 'Projeto sob medida conforme especificações técnicas aprovadas',
+        String(qtd),
+        formatMoeda(vUnit),
+        formatMoeda(vTot),
+      ]
+    })
 
-    const runAutoTable = (options: Record<string, unknown>) => {
-      if (typeof doc.autoTable === 'function') {
-        // @ts-expect-error autoTable supports options as single parameter or doc, options
-        doc.autoTable(options)
-      } else if (typeof autoTable === 'function') {
-        // Fallback chamando o plugin diretamente com doc
-        ;(autoTable as (d: jsPDF, opts: Record<string, unknown>) => void)(doc, options)
-      }
-    }
-
-    runAutoTable({
+    invokeAutoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
       head: [
@@ -318,153 +364,191 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       body: tableBody,
       theme: 'grid',
       headStyles: {
-        fillColor: [5, 150, 105], // #059669
-        textColor: [255, 255, 255],
+        fillColor: [30, 41, 59], // #1E293B — grafite escuro
+        textColor: [255, 255, 255], // Branco
         fontStyle: 'bold',
-        fontSize: 9,
+        fontSize: 8,
         halign: 'left',
       },
       bodyStyles: {
         textColor: [51, 65, 85],
-        fontSize: 8.5,
-        cellPadding: 3.5,
+        fontSize: 8,
+        cellPadding: 3,
+        valign: 'middle',
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252], // #F8FAFC para linhas pares
       },
       columnStyles: {
-        0: { cellWidth: 12, halign: 'center' },
-        1: { cellWidth: 40, fontStyle: 'bold' },
-        2: { cellWidth: 'auto' },
-        3: { cellWidth: 14, halign: 'center' },
-        4: { cellWidth: 28, halign: 'right' },
-        5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
+        0: { cellWidth: contentWidth * 0.05, halign: 'center' },
+        1: { cellWidth: contentWidth * 0.25, halign: 'left', fontStyle: 'bold' },
+        2: { cellWidth: contentWidth * 0.42, halign: 'left' },
+        3: { cellWidth: contentWidth * 0.08, halign: 'center' },
+        4: { cellWidth: contentWidth * 0.1, halign: 'right' },
+        5: { cellWidth: contentWidth * 0.1, halign: 'right' },
       },
       styles: {
-        lineColor: [226, 232, 240],
-        lineWidth: 0.2,
+        lineColor: [226, 232, 240], // #E2E8F0
+        lineWidth: 0.15,
         font: 'helvetica',
       },
     })
 
-    y = (doc.lastAutoTable?.finalY ?? y) + 8
+    y = (doc.lastAutoTable?.finalY ?? y) + 7
 
-    // 4. BOX DE VALOR TOTAL EM DESTAQUE
-    const boxTotalWidth = 80
-    const boxTotalX = pageWidth - margin - boxTotalWidth
-    doc.setFillColor(240, 253, 244) // Emerald-50
-    doc.setDrawColor(5, 150, 105)
-    doc.setLineWidth(0.8)
-    doc.roundedRect(boxTotalX, y, boxTotalWidth, 18, 2, 2, 'FD')
+    // 6. BOX DE INVESTIMENTO TOTAL (100% da largura útil)
+    const boxTotalHeight = 24
 
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8.5)
-    doc.setTextColor(5, 150, 105)
-    doc.text('INVESTIMENTO TOTAL', boxTotalX + boxTotalWidth / 2, y + 6, { align: 'center' })
-
-    doc.setFontSize(14)
-    doc.setTextColor(6, 78, 59) // Emerald-900
-    doc.text(formatMoeda(dados.valorTotal), boxTotalX + boxTotalWidth / 2, y + 13.5, {
-      align: 'center',
-    })
-
-    y += 24
-
-    // Se o espaço até o final da página for pequeno, pula para nova página
-    if (y > pageHeight - 65) {
+    // Se não houver espaço suficiente para o box de total, condições e assinaturas, adiciona página
+    if (y + boxTotalHeight > pageHeight - 40) {
       doc.addPage()
       y = margin
     }
 
-    // 5. TERMOS COMERCIAIS E FORMA DE PAGAMENTO
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(10)
-    doc.setTextColor(30, 41, 59)
-    doc.text('Condições Comerciais', margin, y)
-    y += 5
+    doc.setFillColor(30, 41, 59) // #1E293B — grafite escuro
+    doc.roundedRect(margin, y, contentWidth, boxTotalHeight, 2, 2, 'F')
+    doc.setDrawColor(180, 83, 9) // #B45309 — dourado âmbar
+    doc.setLineWidth(1.0)
+    doc.roundedRect(margin, y, contentWidth, boxTotalHeight, 2, 2, 'S')
 
+    // Título "INVESTIMENTO TOTAL" em dourado
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(180, 83, 9) // #B45309
+    doc.text('INVESTIMENTO TOTAL', pageWidth / 2, y + 7.5, { align: 'center' })
+
+    // Valor Total em BRANCO
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(20)
+    doc.setTextColor(255, 255, 255) // Branco
+    doc.text(formatMoeda(dados.valorTotal), pageWidth / 2, y + 18, { align: 'center' })
+
+    y += boxTotalHeight + 8
+
+    // 7. FORMA DE PAGAMENTO E OBSERVAÇÕES
     const formaPagamentoTexto =
       dados.formaPagamento?.trim() || 'A combinar com o consultor de vendas.'
     const observacoesTexto =
       dados.observacoes?.trim() ||
       'Proposta válida por 15 dias corridos. Montagem inclusa no local indicado. Garantia de 5 anos para caixaria de MDF e ferragens conforme manual de uso.'
 
-    doc.setFillColor(248, 250, 252)
-    doc.setDrawColor(226, 232, 240)
-    doc.setLineWidth(0.3)
-    doc.roundedRect(margin, y, contentWidth, 26, 2, 2, 'FD')
+    // Medição e quebra de linhas para altura dinâmica do card
+    const cardContentW = contentWidth - 10
+    const labelW = 44
+    const valueW = cardContentW - labelW
 
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8.5)
-    doc.setTextColor(51, 65, 85)
-    doc.text('• Forma de Pagamento:', margin + 4, y + 6)
-    doc.setFont('helvetica', 'normal')
-    doc.text(formaPagamentoTexto, margin + 42, y + 6)
+    const splitForma = doc.splitTextToSize(formaPagamentoTexto, valueW)
+    const splitObs = doc.splitTextToSize(observacoesTexto, valueW)
 
-    doc.setFont('helvetica', 'bold')
-    doc.text('• Observações e Prazos:', margin + 4, y + 13)
-    doc.setFont('helvetica', 'normal')
-    const splitObs = doc.splitTextToSize(observacoesTexto, contentWidth - 48)
-    doc.text(splitObs, margin + 44, y + 13)
+    const formaH = (Array.isArray(splitForma) ? splitForma.length : 1) * 4
+    const obsH = (Array.isArray(splitObs) ? splitObs.length : 1) * 4
+    const condCardHeight = Math.max(22, 10 + formaH + obsH + 4)
 
-    y += 34
-
-    // 6. LINHA DE ASSINATURA DO CLIENTE
-    if (y > pageHeight - 45) {
+    if (y + condCardHeight + 10 > pageHeight - 35) {
       doc.addPage()
-      y = margin + 15
+      y = margin
+    }
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(15, 23, 42) // #0F172A
+    doc.text('CONDIÇÕES COMERCIAIS', margin, y)
+    y += 4
+
+    doc.setFillColor(248, 250, 252) // #F8FAFC
+    doc.roundedRect(margin, y, contentWidth, condCardHeight, 2, 2, 'F')
+    doc.setDrawColor(226, 232, 240) // #E2E8F0
+    doc.setLineWidth(0.3)
+    doc.roundedRect(margin, y, contentWidth, condCardHeight, 2, 2, 'S')
+
+    let condTextY = y + 6.5
+    // Forma de Pagamento
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(51, 65, 85) // #334155
+    doc.text('Forma de Pagamento:', margin + 5, condTextY)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(51, 65, 85)
+    doc.text(splitForma, margin + 5 + labelW, condTextY)
+
+    condTextY += formaH + 2.5
+
+    // Observações e Prazos
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(51, 65, 85)
+    doc.text('Observações e Prazos:', margin + 5, condTextY)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(51, 65, 85)
+    doc.text(splitObs, margin + 5 + labelW, condTextY)
+
+    y += condCardHeight + 10
+
+    // 8. ASSINATURAS (LADO A LADO)
+    // Se espaço restante for < 40mm, pula para nova página
+    if (pageHeight - y < 40) {
+      doc.addPage()
+      y = margin + 10
     }
 
     const sigWidth = 70
-    const sigLeftX = margin + 10
-    const sigRightX = pageWidth - margin - sigWidth - 10
+    const sigLeftX = margin + 5
+    const sigRightX = pageWidth - margin - sigWidth - 5
+    const sigY = y + 16
 
-    doc.setDrawColor(148, 163, 184)
+    // Linhas de assinatura
+    doc.setDrawColor(148, 163, 184) // Slate-400
     doc.setLineWidth(0.4)
-    doc.line(sigLeftX, y + 10, sigLeftX + sigWidth, y + 10)
-    doc.line(sigRightX, y + 10, sigRightX + sigWidth, y + 10)
+    doc.line(sigLeftX, sigY, sigLeftX + sigWidth, sigY)
+    doc.line(sigRightX, sigY, sigRightX + sigWidth, sigY)
+
+    // Textos centralizados acima da linha
+    // Esquerda: "BENDER HAUSSFORM" (bold) / "Representante Comercial" (normal)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(15, 23, 42) // #0F172A
+    doc.text('BENDER HAUSSFORM', sigLeftX + sigWidth / 2, sigY + 4.5, { align: 'center' })
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(7.5)
-    doc.setTextColor(100, 116, 139)
-    doc.text(empresaNome, sigLeftX + sigWidth / 2, y + 14, { align: 'center' })
-    doc.text('Representante Comercial', sigLeftX + sigWidth / 2, y + 17.5, { align: 'center' })
+    doc.setTextColor(100, 116, 139) // Slate-500
+    doc.text('Representante Comercial', sigLeftX + sigWidth / 2, sigY + 8.5, { align: 'center' })
 
-    doc.text(dados.cliente.nome || 'Assinatura do Cliente', sigRightX + sigWidth / 2, y + 14, {
-      align: 'center',
-    })
-    doc.text('De Acordo com a Proposta', sigRightX + sigWidth / 2, y + 17.5, { align: 'center' })
+    // Direita: nome do cliente (bold) / "De Acordo com a Proposta" (normal)
+    const clienteAssinatura = dados.cliente.nome || 'Cliente Responsável'
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(15, 23, 42) // #0F172A
+    doc.text(clienteAssinatura, sigRightX + sigWidth / 2, sigY + 4.5, { align: 'center' })
 
-    // 7. RODAPÉ FIXO EM TODAS AS PÁGINAS
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7.5)
+    doc.setTextColor(100, 116, 139) // Slate-500
+    doc.text('De Acordo com a Proposta', sigRightX + sigWidth / 2, sigY + 8.5, { align: 'center' })
+
+    // 9. RODAPÉ FIXO EM TODAS AS PÁGINAS
     const totalPages = doc.getNumberOfPages()
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i)
-      doc.setDrawColor(226, 232, 240)
+      doc.setDrawColor(226, 232, 240) // #E2E8F0
       doc.setLineWidth(0.3)
-      doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12)
+      doc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10)
 
       doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7.5)
-      doc.setTextColor(148, 163, 184)
-      const rodapeTexto = [
-        empresaNome,
-        empresa?.telefone ? `Tel: ${empresa.telefone}` : '',
-        empresa?.site ? empresa.site : '',
-      ]
-        .filter(Boolean)
-        .join(' • ')
-
-      doc.text(
-        rodapeTexto || 'OrçaFácil 3.0 - Sistema de Engenharia de Marcenaria',
-        margin,
-        pageHeight - 7,
-      )
-      doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, pageHeight - 7, {
+      doc.setFontSize(7)
+      doc.setTextColor(148, 163, 184) // Slate-400
+      doc.text('BENDER HAUSSFORM • Móveis Sob Medida', margin, pageHeight - 6)
+      doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, pageHeight - 6, {
         align: 'right',
       })
     }
 
-    // Download automático
+    // Download automático do PDF
     const sanitizedName = (dados.cliente.nome || 'Cliente').replace(/[^a-zA-Z0-9]/g, '_')
-    const codSugestivo = (dados.codigo || dados.orcamentoId || '0000').slice(-6)
-    doc.save(`Proposta_Comercial_Orcamento_${sanitizedName}_${codSugestivo}.pdf`)
+    const codSugestivo = (dados.codigo || dados.orcamentoId || '000000').slice(-6).toUpperCase()
+    doc.save(`Proposta_Comercial_${sanitizedName}_${codSugestivo}.pdf`)
   } catch (error) {
     console.error('Erro ao gerar proposta comercial em PDF:', error)
     throw error
@@ -474,6 +558,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
 /**
  * 🛠️ GERAR ANÁLISE DE CUSTO (PDF Interno de Engenharia / Fábrica)
  * Contém DRE completa, BOM consolidada, detalhamento de peças, margens, markup e alertas de flutuação.
+ * Identidade Visual BENDER HAUSSFORM: Cores Grafite (#0F172A / #1E293B), Dourado/Âmbar (#B45309), Slate e Neutros.
  */
 export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> {
   try {
@@ -483,26 +568,25 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
       format: 'a4',
     }) as JsPDFWithAutoTable
 
-    // Garante que o plugin autoTable está anexado à instância jsPDF
     if (!doc.autoTable) {
       doc.autoTable = autoTable
     }
 
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
-    const margin = 20
+    const margin = 15
     const contentWidth = pageWidth - margin * 2
 
     let y = margin
 
     // 1. CABEÇALHO TÉCNICO
-    doc.setFillColor(15, 23, 42) // Slate-900
+    doc.setFillColor(15, 23, 42) // #0F172A — Grafite escuro
     doc.rect(margin, y, contentWidth, 16, 'F')
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(12)
     doc.setTextColor(255, 255, 255)
-    doc.text('RELATÓRIO DE ENGENHARIA FINANCEIRA DE PROJETO', margin + 4, y + 7)
+    doc.text('BENDER HAUSSFORM — RELATÓRIO DE ENGENHARIA FINANCEIRA', margin + 4, y + 7)
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
@@ -518,13 +602,13 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
     y += 20
 
     // Identificação do Módulo e Cliente
-    doc.setFillColor(248, 250, 252)
-    doc.setDrawColor(203, 213, 225)
+    doc.setFillColor(248, 250, 252) // #F8FAFC
+    doc.setDrawColor(226, 232, 240) // #E2E8F0
     doc.roundedRect(margin, y, contentWidth, 14, 1.5, 1.5, 'FD')
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8.5)
-    doc.setTextColor(30, 41, 59)
+    doc.setTextColor(15, 23, 42) // #0F172A
     doc.text(`Cliente: ${dados.cliente.nome || 'Não informado'}`, margin + 4, y + 5.5)
 
     const dimText = dados.dimensoes
@@ -534,7 +618,7 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    doc.setTextColor(71, 85, 105)
+    doc.setTextColor(100, 116, 139) // Slate-500
     doc.text(`${modText}   |   ${dimText}`, margin + 4, y + 10.5)
 
     y += 18
@@ -542,7 +626,7 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
     // 2. DRE SINTÉTICA DO PROJETO
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10.5)
-    doc.setTextColor(5, 150, 105) // #059669
+    doc.setTextColor(15, 23, 42) // #0F172A
     doc.text('1. DRE SINTÉTICA DO PROJETO', margin, y)
     y += 4
 
@@ -594,23 +678,14 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
       ],
     ]
 
-    const runAutoTable = (options: Record<string, unknown>) => {
-      if (typeof doc.autoTable === 'function') {
-        // @ts-expect-error autoTable supports options as single parameter or doc, options
-        doc.autoTable(options)
-      } else if (typeof autoTable === 'function') {
-        ;(autoTable as (d: jsPDF, opts: Record<string, unknown>) => void)(doc, options)
-      }
-    }
-
-    runAutoTable({
+    invokeAutoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
       head: [['Estrutura de Resultados (DRE)', 'Valor (R$)', '% da Venda']],
       body: dreRows,
       theme: 'grid',
       headStyles: {
-        fillColor: [30, 41, 59], // Slate-800
+        fillColor: [30, 41, 59], // #1E293B
         textColor: [255, 255, 255],
         fontStyle: 'bold',
         fontSize: 8.5,
@@ -634,19 +709,19 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
 
     y = (doc.lastAutoTable?.finalY ?? y) + 4
 
-    // Destaque de Markup e Preço Final
-    doc.setFillColor(240, 253, 244) // Emerald-50
-    doc.setDrawColor(5, 150, 105)
+    // Destaque de Markup e Preço Final (Cores corrigidas: Fundo #F8FAFC, Borda #B45309, Texto #B45309 e #0F172A)
+    doc.setFillColor(248, 250, 252) // #F8FAFC
+    doc.setDrawColor(180, 83, 9) // #B45309 — Dourado / Âmbar
     doc.setLineWidth(0.6)
     doc.roundedRect(margin, y, contentWidth, 10, 1.5, 1.5, 'FD')
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8.5)
-    doc.setTextColor(5, 150, 105)
+    doc.setTextColor(180, 83, 9) // #B45309 — Dourado
     doc.text(`MARKUP EFETIVO: ${markupEfetivo.toFixed(2)}x`, margin + 6, y + 6.5)
 
     doc.setFontSize(10)
-    doc.setTextColor(6, 78, 59)
+    doc.setTextColor(15, 23, 42) // #0F172A — Grafite Escuro
     doc.text(`PREÇO FINAL SUGERIDO: ${formatMoeda(valorVenda)}`, pageWidth - margin - 6, y + 6.5, {
       align: 'right',
     })
@@ -656,7 +731,7 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
     // 3. BOM GERAL (MATÉRIA-PRIMA CONSOLIDADA)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10.5)
-    doc.setTextColor(5, 150, 105)
+    doc.setTextColor(15, 23, 42) // #0F172A
     doc.text('2. BOM GERAL — MATÉRIA-PRIMA E FERRAGENS (FÁBRICA)', margin, y)
     y += 4
 
@@ -674,7 +749,7 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
       ]
     })
 
-    runAutoTable({
+    invokeAutoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
       head: [
@@ -704,7 +779,7 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
             ],
       theme: 'grid',
       headStyles: {
-        fillColor: [5, 150, 105],
+        fillColor: [30, 41, 59], // #1E293B
         textColor: [255, 255, 255],
         fontStyle: 'bold',
         fontSize: 8,
@@ -741,7 +816,7 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
     // 4. INDICADORES DE SEGURANÇA E FLUTUAÇÃO DE PREÇOS
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10.5)
-    doc.setTextColor(5, 150, 105)
+    doc.setTextColor(15, 23, 42) // #0F172A
     doc.text('3. INDICADORES DE SEGURANÇA OPERACIONAL', margin, y)
     y += 4
 
@@ -774,22 +849,22 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
     const totalPages = doc.getNumberOfPages()
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i)
-      doc.setDrawColor(226, 232, 240)
+      doc.setDrawColor(226, 232, 240) // #E2E8F0
       doc.setLineWidth(0.3)
-      doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12)
+      doc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10)
 
       doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7.5)
-      doc.setTextColor(148, 163, 184)
-      doc.text('CONFIDENCIAL — USO INTERNO DE ENGENHARIA E PRODUÇÃO', margin, pageHeight - 7)
-      doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, pageHeight - 7, {
+      doc.setFontSize(7)
+      doc.setTextColor(148, 163, 184) // Slate-400
+      doc.text('BENDER HAUSSFORM • Relatório de Engenharia e Produção', margin, pageHeight - 6)
+      doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, pageHeight - 6, {
         align: 'right',
       })
     }
 
     // Download automático
-    const codSugestivo = (dados.codigo || dados.orcamentoId || '0000').slice(-6)
-    doc.save(`Analise_Custo_Orcamento_${codSugestivo}.pdf`)
+    const codSugestivo = (dados.codigo || dados.orcamentoId || '000000').slice(-6).toUpperCase()
+    doc.save(`Analise_Custo_${codSugestivo}.pdf`)
   } catch (error) {
     console.error('Erro ao gerar análise de custo em PDF:', error)
     throw error
