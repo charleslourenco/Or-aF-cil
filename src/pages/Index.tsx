@@ -53,11 +53,6 @@ import { supabase } from '@/lib/supabase/client'
 // Ambientes permitidos no Select (array estático conforme especificação).
 const AMBIENTES = ['Cozinha', 'Quarto', 'Sala', 'Banheiro']
 
-// Opções de cor/padrão de MDF (lista de referência — catálogo comercial).
-const MDF_EXTERNO_CORES = ['Branco TX', 'Louro Freijó', 'Grafito', 'Carvalho']
-const MDF_INTERNO_CORES = ['Branco TX', 'Gianduia']
-const MDF_FUNDO_OPCOES = ['MDF 6mm Branco TX', 'MDF 3mm Branco']
-
 export default function Index() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -180,6 +175,15 @@ export default function Index() {
       active = false
     }
   }, [])
+
+  // Listas de opções derivadas dinamicamente do catálogo real de materiais
+  const opcoesMdfEstrutural = useMemo(() => {
+    return catalogoMateriais.filter((m) => m.categoria === 'MDF 15mm' || m.categoria === 'MDF 18mm')
+  }, [catalogoMateriais])
+
+  const opcoesMdfFundo = useMemo(() => {
+    return catalogoMateriais.filter((m) => m.categoria === 'MDF 6mm')
+  }, [catalogoMateriais])
 
   // Objeto do módulo selecionado (id + nome_template) derivado do estado dinâmico.
   const selectedModuleObj: TemplateEngenharia | null =
@@ -1047,20 +1051,28 @@ export default function Index() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <span className="text-[11px] font-semibold text-slate-500">Cor / Padrão</span>
+                  <span className="text-[11px] font-semibold text-slate-500">Material / Cor</span>
                   <Select
                     value={mdfExterno.cor}
-                    onValueChange={(v) => setMdfExterno((prev) => ({ ...prev, cor: v }))}
+                    onValueChange={(v) => {
+                      const mat = opcoesMdfEstrutural.find((item) => item.nome_material === v)
+                      const espessura: 15 | 18 = mat?.categoria === 'MDF 15mm' ? 15 : 18
+                      setMdfExterno({ cor: v, espessura })
+                    }}
                   >
                     <SelectTrigger className="h-10 rounded-lg text-sm bg-white border-slate-300">
-                      <SelectValue />
+                      <SelectValue placeholder="Selecione o MDF externo" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {MDF_EXTERNO_CORES.map((cor) => (
-                        <SelectItem key={cor} value={cor}>
-                          {cor}
-                        </SelectItem>
-                      ))}
+                      {opcoesMdfEstrutural.length === 0 ? (
+                        <SelectItem value="Branco TX">Branco TX</SelectItem>
+                      ) : (
+                        opcoesMdfEstrutural.map((mat) => (
+                          <SelectItem key={mat.id} value={mat.nome_material}>
+                            {mat.nome_material}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1104,20 +1116,28 @@ export default function Index() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <span className="text-[11px] font-semibold text-slate-500">Cor / Padrão</span>
+                  <span className="text-[11px] font-semibold text-slate-500">Material / Cor</span>
                   <Select
                     value={mdfInterno.cor}
-                    onValueChange={(v) => setMdfInterno((prev) => ({ ...prev, cor: v }))}
+                    onValueChange={(v) => {
+                      const mat = opcoesMdfEstrutural.find((item) => item.nome_material === v)
+                      const espessura: 15 | 18 = mat?.categoria === 'MDF 18mm' ? 18 : 15
+                      setMdfInterno({ cor: v, espessura })
+                    }}
                   >
                     <SelectTrigger className="h-10 rounded-lg text-sm bg-white border-slate-300">
-                      <SelectValue />
+                      <SelectValue placeholder="Selecione o MDF interno" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {MDF_INTERNO_CORES.map((cor) => (
-                        <SelectItem key={cor} value={cor}>
-                          {cor}
-                        </SelectItem>
-                      ))}
+                      {opcoesMdfEstrutural.length === 0 ? (
+                        <SelectItem value="Branco TX">Branco TX</SelectItem>
+                      ) : (
+                        opcoesMdfEstrutural.map((mat) => (
+                          <SelectItem key={mat.id} value={mat.nome_material}>
+                            {mat.nome_material}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1163,14 +1183,18 @@ export default function Index() {
                 <span className="text-[11px] font-semibold text-slate-500">Opção</span>
                 <Select value={mdfFundo} onValueChange={setMdfFundo}>
                   <SelectTrigger className="h-10 rounded-lg text-sm bg-white border-slate-300">
-                    <SelectValue />
+                    <SelectValue placeholder="Selecione o MDF de fundo" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
-                    {MDF_FUNDO_OPCOES.map((op) => (
-                      <SelectItem key={op} value={op}>
-                        {op}
-                      </SelectItem>
-                    ))}
+                    {opcoesMdfFundo.length === 0 ? (
+                      <SelectItem value="MDF 6mm Branco TX">MDF 6mm Branco TX</SelectItem>
+                    ) : (
+                      opcoesMdfFundo.map((mat) => (
+                        <SelectItem key={mat.id} value={mat.nome_material}>
+                          {mat.nome_material}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>

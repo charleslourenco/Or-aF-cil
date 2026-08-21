@@ -145,6 +145,38 @@ export type Database = {
           },
         ]
       }
+      custos_variaveis: {
+        Row: {
+          config_id: string
+          created_at: string
+          descricao: string
+          id: string
+          valor: number
+        }
+        Insert: {
+          config_id: string
+          created_at?: string
+          descricao: string
+          id?: string
+          valor?: number
+        }
+        Update: {
+          config_id?: string
+          created_at?: string
+          descricao?: string
+          id?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'custos_variaveis_config_id_fkey'
+            columns: ['config_id']
+            isOneToOne: false
+            referencedRelation: 'configuracoes_engenharia'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       Orcamentos: {
         Row: {
           ambiente: string | null
