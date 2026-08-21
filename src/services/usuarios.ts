@@ -107,7 +107,7 @@ export async function inviteUsuario(
     })
 
     if (!error && data?.success) {
-      return { success: true, userId: data.userId, error: null }
+      return { success: true, userId: data.user?.id || data.userId, error: null }
     }
 
     // Se o backend retornou um erro estruturado no body

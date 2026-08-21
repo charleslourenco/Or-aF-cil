@@ -294,6 +294,36 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          email: string
+          id: string
+          nome: string | null
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          email?: string
+          id: string
+          nome?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          email?: string
+          id?: string
+          nome?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       templatesengenharia: {
         Row: {
           assinatura_visual: Json | null
@@ -374,7 +404,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_admin: { Args: never; Returns: boolean }
+      is_editor_or_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
