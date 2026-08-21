@@ -308,7 +308,7 @@ export default function QuotesListPage() {
                     </tr>
                   ) : (
                     filteredQuotes.map((q) => {
-                      const codigo = `#${q.id.slice(-6).toUpperCase()}`
+                      const codigo = `#${String(q.numero_sequencial ?? 0).padStart(3, '0')}`
                       const totalCost =
                         q.dre_json?.custo_mp ??
                         (q.bom_json ?? []).reduce((acc, it) => acc + (Number(it.totalCost) || 0), 0)

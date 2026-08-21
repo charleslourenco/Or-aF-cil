@@ -22,6 +22,7 @@ export interface PropostaComercialAmbiente {
 
 export interface PropostaComercialData {
   orcamentoId?: string
+  numeroSequencial?: number | null
   codigo?: string
   data?: string
   cliente: {
@@ -39,6 +40,7 @@ export interface PropostaComercialData {
 
 export interface AnaliseCustoData {
   orcamentoId?: string
+  numeroSequencial?: number | null
   codigo?: string
   versaoSistema?: string
   data?: string
@@ -184,7 +186,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     }
 
     // Coluna Direita: Badge / Retângulo escuro
-    const badgeWidth = 55
+    const badgeWidth = 42
     const badgeHeight = 18
     const badgeX = pageWidth - margin - badgeWidth
     const badgeY = y
@@ -198,14 +200,18 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     doc.setTextColor(148, 163, 184) // Slate-400
     doc.text('ORÇAMENTO', badgeX + badgeWidth / 2, badgeY + 4.8, { align: 'center' })
 
-    // Linha 2: Código do orçamento (últimas 6 posições em CAIXA ALTA)
-    const rawCodigo = dados.codigo || dados.orcamentoId || 'ORC000'
-    const codigoOrc = `#${
-      rawCodigo
-        .replace(/[^a-zA-Z0-9]/g, '')
-        .slice(-6)
-        .toUpperCase() || '000000'
-    }`
+    // Linha 2: Código do orçamento (#001 sequencial ou fallback)
+    const codigoOrc =
+      dados.numeroSequencial !== undefined && dados.numeroSequencial !== null
+        ? `#${String(dados.numeroSequencial).padStart(3, '0')}`
+        : dados.codigo
+          ? `#${dados.codigo.replace(/^#/, '')}`
+          : `#${
+              (dados.orcamentoId || '000000')
+                .replace(/[^a-zA-Z0-9]/g, '')
+                .slice(-6)
+                .toUpperCase() || '000'
+            }`
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(12)
@@ -364,16 +370,18 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       body: tableBody,
       theme: 'grid',
       headStyles: {
-        fillColor: [30, 41, 59], // #1E293B — grafite escuro
-        textColor: [255, 255, 255], // Branco
+        fillColor: [241, 245, 249], // #F1F5F9 — cinza suave
+        textColor: [51, 65, 85], // #334155 — slate escuro
         fontStyle: 'bold',
         fontSize: 8,
         halign: 'left',
+        lineWidth: { bottom: 0.5 },
+        lineColor: [203, 213, 225], // #CBD5E1
       },
       bodyStyles: {
         textColor: [51, 65, 85],
         fontSize: 8,
-        cellPadding: 3,
+        cellPadding: { top: 6, right: 8, bottom: 6, left: 8 },
         valign: 'middle',
       },
       alternateRowStyles: {
@@ -405,22 +413,22 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       y = margin
     }
 
-    doc.setFillColor(30, 41, 59) // #1E293B — grafite escuro
+    doc.setFillColor(241, 245, 249) // #F1F5F9 — cinza suave
     doc.roundedRect(margin, y, contentWidth, boxTotalHeight, 2, 2, 'F')
-    doc.setDrawColor(180, 83, 9) // #B45309 — dourado âmbar
-    doc.setLineWidth(1.0)
+    doc.setDrawColor(203, 213, 225) // #CBD5E1 — borda suave
+    doc.setLineWidth(0.5)
     doc.roundedRect(margin, y, contentWidth, boxTotalHeight, 2, 2, 'S')
 
-    // Título "INVESTIMENTO TOTAL" em dourado
+    // Título "INVESTIMENTO TOTAL" em slate-700 (#334155)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    doc.setTextColor(180, 83, 9) // #B45309
+    doc.setTextColor(51, 65, 85) // #334155
     doc.text('INVESTIMENTO TOTAL', pageWidth / 2, y + 7.5, { align: 'center' })
 
-    // Valor Total em BRANCO
+    // Valor Total em Grafite Escuro (#0F172A) bold 20px
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(20)
-    doc.setTextColor(255, 255, 255) // Branco
+    doc.setTextColor(15, 23, 42) // #0F172A
     doc.text(formatMoeda(dados.valorTotal), pageWidth / 2, y + 18, { align: 'center' })
 
     y += boxTotalHeight + 8
@@ -487,8 +495,9 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     y += condCardHeight + 10
 
     // 8. ASSINATURAS (LADO A LADO)
-    // Se espaço restante for < 40mm, pula para nova página
-    if (pageHeight - y < 40) {
+    // Se espaço restante for < 45mm, pula para nova página
+    const minSpace = 45
+    if (pageHeight - y < minSpace) {
       doc.addPage()
       y = margin + 10
     }
@@ -547,7 +556,13 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
 
     // Download automático do PDF
     const sanitizedName = (dados.cliente.nome || 'Cliente').replace(/[^a-zA-Z0-9]/g, '_')
-    const codSugestivo = (dados.codigo || dados.orcamentoId || '000000').slice(-6).toUpperCase()
+    const codSugestivo =
+      dados.numeroSequencial !== undefined && dados.numeroSequencial !== null
+        ? String(dados.numeroSequencial).padStart(3, '0')
+        : (dados.codigo || dados.orcamentoId || '000')
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .slice(-6)
+            .toUpperCase() || '000'
     doc.save(`Proposta_Comercial_${sanitizedName}_${codSugestivo}.pdf`)
   } catch (error) {
     console.error('Erro ao gerar proposta comercial em PDF:', error)
@@ -591,7 +606,13 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     doc.setTextColor(148, 163, 184) // Slate-400
-    const codId = (dados.codigo || dados.orcamentoId || 'ORC-000').slice(-8).toUpperCase()
+    const codId =
+      dados.numeroSequencial !== undefined && dados.numeroSequencial !== null
+        ? String(dados.numeroSequencial).padStart(3, '0')
+        : (dados.codigo || dados.orcamentoId || '000')
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .slice(-8)
+            .toUpperCase() || '000'
     const versao = dados.versaoSistema || 'OrçaFácil v3.0'
     doc.text(
       `ID: #${codId}   |   ${versao}   |   Emissão: ${formatarData(dados.data)}`,
@@ -685,8 +706,8 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
       body: dreRows,
       theme: 'grid',
       headStyles: {
-        fillColor: [30, 41, 59], // #1E293B
-        textColor: [255, 255, 255],
+        fillColor: [241, 245, 249], // #F1F5F9 — tom suave
+        textColor: [51, 65, 85], // #334155
         fontStyle: 'bold',
         fontSize: 8.5,
       },
@@ -709,10 +730,10 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
 
     y = (doc.lastAutoTable?.finalY ?? y) + 4
 
-    // Destaque de Markup e Preço Final (Cores corrigidas: Fundo #F8FAFC, Borda #B45309, Texto #B45309 e #0F172A)
+    // Destaque de Markup e Preço Final (Cores: Fundo #F8FAFC, Borda #B45309 clareada para 0.4, Texto #B45309 e #0F172A)
     doc.setFillColor(248, 250, 252) // #F8FAFC
     doc.setDrawColor(180, 83, 9) // #B45309 — Dourado / Âmbar
-    doc.setLineWidth(0.6)
+    doc.setLineWidth(0.4)
     doc.roundedRect(margin, y, contentWidth, 10, 1.5, 1.5, 'FD')
 
     doc.setFont('helvetica', 'bold')
@@ -779,8 +800,8 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
             ],
       theme: 'grid',
       headStyles: {
-        fillColor: [30, 41, 59], // #1E293B
-        textColor: [255, 255, 255],
+        fillColor: [241, 245, 249], // #F1F5F9 — tom suave
+        textColor: [51, 65, 85], // #334155
         fontStyle: 'bold',
         fontSize: 8,
       },
@@ -863,7 +884,13 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
     }
 
     // Download automático
-    const codSugestivo = (dados.codigo || dados.orcamentoId || '000000').slice(-6).toUpperCase()
+    const codSugestivo =
+      dados.numeroSequencial !== undefined && dados.numeroSequencial !== null
+        ? String(dados.numeroSequencial).padStart(3, '0')
+        : (dados.codigo || dados.orcamentoId || '000')
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .slice(-6)
+            .toUpperCase() || '000'
     doc.save(`Analise_Custo_${codSugestivo}.pdf`)
   } catch (error) {
     console.error('Erro ao gerar análise de custo em PDF:', error)
@@ -883,9 +910,15 @@ export async function downloadPropostaComercialFromOrcamento(
       ? orcamento.valor_total
       : parseFloat(String(orcamento.valor_total || '0')) || 0
 
+  const codigoFormatado =
+    orcamento.numero_sequencial !== undefined && orcamento.numero_sequencial !== null
+      ? String(orcamento.numero_sequencial).padStart(3, '0')
+      : orcamento.id.slice(-6).toUpperCase()
+
   await gerarPropostaComercial({
     orcamentoId: orcamento.id,
-    codigo: orcamento.id.slice(-6).toUpperCase(),
+    numeroSequencial: orcamento.numero_sequencial,
+    codigo: codigoFormatado,
     data: orcamento.data || orcamento.created_at || new Date().toISOString(),
     cliente: {
       nome: orcamento.cliente_nome,
@@ -926,9 +959,15 @@ export async function downloadAnaliseCustoFromOrcamento(
 
     const valorTotalCusto = bom.reduce((acc, it) => acc + (Number(it.totalCost) || 0), 0)
 
+    const codigoFormatado =
+      orcamento.numero_sequencial !== undefined && orcamento.numero_sequencial !== null
+        ? String(orcamento.numero_sequencial).padStart(3, '0')
+        : orcamento.id.slice(-6).toUpperCase()
+
     await gerarAnaliseCusto({
       orcamentoId: orcamento.id,
-      codigo: orcamento.id.slice(-6).toUpperCase(),
+      numeroSequencial: orcamento.numero_sequencial,
+      codigo: codigoFormatado,
       data: orcamento.data || orcamento.created_at || new Date().toISOString(),
       cliente: {
         nome: orcamento.cliente_nome,

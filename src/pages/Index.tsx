@@ -1054,9 +1054,16 @@ export default function Index() {
   const handleDownloadProposta = async () => {
     try {
       const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
+      const numSeq = savedOrcamentoRecord?.numero_sequencial
+      const codigoFormatado =
+        numSeq !== undefined && numSeq !== null
+          ? String(numSeq).padStart(3, '0')
+          : (savedOrcamentoRecord?.id || editingId || '').slice(-6).toUpperCase() || undefined
+
       await gerarPropostaComercial({
         orcamentoId: savedOrcamentoRecord?.id || editingId || undefined,
-        codigo: (savedOrcamentoRecord?.id || editingId || '').slice(-6).toUpperCase() || undefined,
+        numeroSequencial: numSeq,
+        codigo: codigoFormatado,
         data: savedOrcamentoRecord?.data || new Date().toISOString(),
         cliente: {
           nome: clientName,
@@ -1126,9 +1133,16 @@ export default function Index() {
         preco_final: totalSale,
       }
 
+      const numSeq = savedOrcamentoRecord?.numero_sequencial
+      const codigoFormatado =
+        numSeq !== undefined && numSeq !== null
+          ? String(numSeq).padStart(3, '0')
+          : (savedOrcamentoRecord?.id || editingId || '').slice(-6).toUpperCase() || undefined
+
       await gerarAnaliseCusto({
         orcamentoId: savedOrcamentoRecord?.id || editingId || undefined,
-        codigo: (savedOrcamentoRecord?.id || editingId || '').slice(-6).toUpperCase() || undefined,
+        numeroSequencial: numSeq,
+        codigo: codigoFormatado,
         data: savedOrcamentoRecord?.data || new Date().toISOString(),
         cliente: {
           nome: clientName,

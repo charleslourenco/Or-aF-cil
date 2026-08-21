@@ -188,6 +188,7 @@ export type Database = {
           forma_pagamento: string | null
           id: string
           modulo: string | null
+          numero_sequencial: number
           observacoes: string | null
           status: string | null
           updated_at: string | null
@@ -203,6 +204,7 @@ export type Database = {
           forma_pagamento?: string | null
           id?: string
           modulo?: string | null
+          numero_sequencial?: number
           observacoes?: string | null
           status?: string | null
           updated_at?: string | null
@@ -218,6 +220,7 @@ export type Database = {
           forma_pagamento?: string | null
           id?: string
           modulo?: string | null
+          numero_sequencial?: number
           observacoes?: string | null
           status?: string | null
           updated_at?: string | null

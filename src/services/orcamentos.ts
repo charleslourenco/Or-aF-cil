@@ -38,6 +38,7 @@ export interface OrcamentoDRE {
 
 export interface Orcamento {
   id: string
+  numero_sequencial?: number | null
   cliente_nome: string
   ambiente: string | null
   modulo: string | null
