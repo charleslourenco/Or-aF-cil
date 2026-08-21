@@ -1314,7 +1314,7 @@ export default function Index() {
               >
                 <ArrowRight className="w-3.5 h-3.5 text-slate-700" />
                 Largura (L)
-              </label>
+              </Label>
               <div className="relative">
                 <Input
                   id="dim-largura"
@@ -1329,7 +1329,8 @@ export default function Index() {
                     }))
                   }
                   className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 pr-12"
-                />                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                />{' '}
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                   mm
                 </span>
               </div>
@@ -1343,7 +1344,7 @@ export default function Index() {
               >
                 <ArrowUpDown className="w-3.5 h-3.5 text-slate-700" />
                 Altura (A)
-              </label>
+              </Label>
               <div className="relative">
                 <Input
                   id="dim-altura"
@@ -1358,7 +1359,8 @@ export default function Index() {
                     }))
                   }
                   className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 pr-12"
-                />                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                />{' '}
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                   mm
                 </span>
               </div>
@@ -1372,7 +1374,7 @@ export default function Index() {
               >
                 <ArrowDown className="w-3.5 h-3.5 text-slate-700" />
                 Profundidade (P)
-              </label>
+              </Label>
               <div className="relative">
                 <Input
                   id="dim-profundidade"
@@ -1387,7 +1389,8 @@ export default function Index() {
                     }))
                   }
                   className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 pr-12"
-                />                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                />{' '}
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                   mm
                 </span>
               </div>
