@@ -737,15 +737,15 @@ export default function LibraryPage() {
           <Button
             variant="outline"
             onClick={openImportModal}
-            className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold shadow-xs"
+            className="border-slate-700 text-slate-800 hover:bg-slate-100 font-semibold shadow-xs"
           >
-            <FileUp className="w-4 h-4 mr-2 text-emerald-600" />+ Importar Módulo (PDF Promob/Ficha
+            <FileUp className="w-4 h-4 mr-2 text-slate-700" />+ Importar Módulo (PDF Promob/Ficha
             Técnica)
           </Button>
 
           <Button
             onClick={openCreate}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+            className="bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm"
           >
             <PlusCircle className="w-4 h-4 mr-2" />
             Novo Módulo
@@ -774,7 +774,7 @@ export default function LibraryPage() {
               onClick={() => setSelectedCategory(aba)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
                 selectedCategory === aba
-                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  ? 'bg-slate-700 text-white shadow-2xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -822,7 +822,7 @@ export default function LibraryPage() {
         </div>
       ) : modulos.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 p-8 shadow-2xs">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4 text-emerald-600 shadow-2xs">
+          <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center mb-4 text-slate-700 shadow-2xs">
             <Package className="w-8 h-8" />
           </div>
           <h3 className="text-lg font-bold text-slate-900">Sua biblioteca de módulos está vazia</h3>
@@ -832,7 +832,7 @@ export default function LibraryPage() {
           </p>
           <Button
             onClick={openImportModal}
-            className="mt-6 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm h-10 px-5"
+            className="mt-6 bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm h-10 px-5"
           >
             <FileUp className="w-4 h-4 mr-2" />+ Importar Primeiro Módulo
           </Button>
@@ -846,7 +846,7 @@ export default function LibraryPage() {
           <p className="text-xs text-slate-500 mt-1">
             Ajuste a busca ou crie um novo módulo para o catálogo.
           </p>
-          <Button onClick={openCreate} className="mt-4 bg-emerald-600 hover:bg-emerald-700">
+          <Button onClick={openCreate} className="mt-4 bg-slate-700 hover:bg-slate-800">
             <PlusCircle className="w-4 h-4 mr-2" />
             Criar novo módulo
           </Button>
@@ -887,7 +887,7 @@ export default function LibraryPage() {
               <div
                 key={mod.id}
                 onClick={() => setDetailModalId(mod.id)}
-                className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-emerald-300 transition-all overflow-hidden flex flex-col group cursor-pointer"
+                className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-slate-400 transition-all overflow-hidden flex flex-col group cursor-pointer"
               >
                 {/* Cabeçalho do card: Imagem real do módulo com fallback técnico */}
                 <div className="relative w-full h-48 bg-slate-100 flex items-center justify-center overflow-hidden border-b border-slate-100 rounded-t-2xl">
@@ -914,7 +914,7 @@ export default function LibraryPage() {
                       mod.imagem_url ? 'hidden' : 'flex'
                     }`}
                   >
-                    <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center text-slate-500 mb-2 group-hover:border-emerald-300 group-hover:text-emerald-600 transition-colors">
+                    <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center text-slate-500 mb-2 group-hover:border-slate-400 group-hover:text-slate-700 transition-colors">
                       <Compass className="w-7 h-7" />
                     </div>
                     <span className="text-[11px] font-mono font-bold text-slate-600 tracking-wider">
@@ -927,7 +927,7 @@ export default function LibraryPage() {
 
                   {/* Badges flutuantes no topo da imagem */}
                   <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
-                    <span className="px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-xs text-emerald-400 font-mono text-xs font-bold border border-slate-700/60 shadow-xs">
+                    <span className="px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-xs text-slate-500 font-mono text-xs font-bold border border-slate-700/60 shadow-xs">
                       {codigoDisplay}
                     </span>
                     {mod.categoria && (
@@ -945,7 +945,7 @@ export default function LibraryPage() {
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                   <div className="space-y-3">
                     {/* Título do módulo */}
-                    <h3 className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug group-hover:text-emerald-700 transition-colors">
+                    <h3 className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug group-hover:text-slate-800 transition-colors">
                       {mod.nome_template}
                     </h3>
 
@@ -954,7 +954,7 @@ export default function LibraryPage() {
                       {mod.categoria && (
                         <Badge
                           variant="outline"
-                          className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-semibold"
+                          className="bg-slate-100 text-slate-800 border-slate-300 text-[10px] font-semibold"
                         >
                           {mod.categoria}
                         </Badge>
@@ -964,7 +964,7 @@ export default function LibraryPage() {
                           variant="outline"
                           className="border-slate-200 bg-slate-50 text-slate-700 text-[10px] font-mono flex items-center gap-1"
                         >
-                          <Ruler className="w-3 h-3 text-emerald-600" />
+                          <Ruler className="w-3 h-3 text-slate-700" />
                           {mod.dimensoes}
                         </Badge>
                       )}
@@ -974,7 +974,7 @@ export default function LibraryPage() {
                           className="border-slate-200 bg-slate-50 text-slate-700 text-[10px] flex items-center gap-1 max-w-[170px] truncate"
                           title={mod.material}
                         >
-                          <Boxes className="w-3 h-3 text-emerald-600" />
+                          <Boxes className="w-3 h-3 text-slate-700" />
                           <span className="truncate">{mod.material}</span>
                         </Badge>
                       )}
@@ -1006,7 +1006,7 @@ export default function LibraryPage() {
                     <Button
                       asChild
                       onClick={(e) => e.stopPropagation()}
-                      className="w-full bg-slate-900 hover:bg-emerald-600 text-white text-xs font-semibold rounded-xl transition-colors"
+                      className="w-full bg-slate-900 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl transition-colors"
                     >
                       <Link to={`/novo-orcamento?modulo=${mod.id}`}>
                         Usar no Orçamento
@@ -1045,7 +1045,7 @@ export default function LibraryPage() {
                   )}
                   <div className="space-y-1 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-base font-mono font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      <span className="text-base font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
                         {selectedDetailModule.codigo || 'S/ CÓDIGO'}
                       </span>
                       {selectedDetailModule.categoria && (
@@ -1068,13 +1068,13 @@ export default function LibraryPage() {
                     <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 pt-1">
                       {selectedDetailModule.dimensoes && (
                         <span className="flex items-center gap-1 font-mono">
-                          <Ruler className="w-3.5 h-3.5 text-emerald-600" />
+                          <Ruler className="w-3.5 h-3.5 text-slate-700" />
                           <strong>Dimensões:</strong> {selectedDetailModule.dimensoes}
                         </span>
                       )}
                       {selectedDetailModule.material && (
                         <span className="flex items-center gap-1">
-                          <Boxes className="w-3.5 h-3.5 text-emerald-600" />
+                          <Boxes className="w-3.5 h-3.5 text-slate-700" />
                           <strong>Material:</strong> {selectedDetailModule.material}
                         </span>
                       )}
@@ -1089,7 +1089,7 @@ export default function LibraryPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
-                      <Layers className="w-4 h-4 text-emerald-600" />
+                      <Layers className="w-4 h-4 text-slate-700" />
                       Peças de MDF
                       <Badge variant="outline" className="text-[10px] ml-1 bg-white">
                         {Array.isArray(selectedDetailModule.pecas_mdf)
@@ -1141,7 +1141,7 @@ export default function LibraryPage() {
                                   <td className="py-2 px-3">
                                     {peca.descricao || peca.nome || 'Peça MDF'}
                                   </td>
-                                  <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                                  <td className="py-2 px-3 text-right font-mono font-bold text-slate-800">
                                     {peca.quantidade ?? peca.qtd ?? 1}
                                   </td>
                                 </tr>
@@ -1158,7 +1158,7 @@ export default function LibraryPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
-                      <Wrench className="w-4 h-4 text-emerald-600" />
+                      <Wrench className="w-4 h-4 text-slate-700" />
                       Ferragens e Acessórios
                       <Badge variant="outline" className="text-[10px] ml-1 bg-white">
                         {Array.isArray(selectedDetailModule.ferragens)
@@ -1207,7 +1207,7 @@ export default function LibraryPage() {
                                   <td className="py-2 px-3">
                                     {ferragem.descricao || ferragem.item || 'Ferragem'}
                                   </td>
-                                  <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                                  <td className="py-2 px-3 text-right font-mono font-bold text-slate-800">
                                     {ferragem.quantidade ?? ferragem.qtd ?? 1}
                                   </td>
                                   <td className="py-2 px-3 text-center text-slate-500 font-mono text-[11px]">
@@ -1458,7 +1458,7 @@ export default function LibraryPage() {
             <Button
               onClick={handleSave}
               disabled={saving}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="bg-slate-700 hover:bg-slate-800 text-white"
             >
               {saving ? 'Salvando...' : editingId !== null ? 'Salvar alterações' : 'Criar módulo'}
             </Button>
@@ -1471,7 +1471,7 @@ export default function LibraryPage() {
         <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-900 text-lg font-bold">
-              <FileUp className="w-5 h-5 text-emerald-600" />
+              <FileUp className="w-5 h-5 text-slate-700" />
               Importar Módulo de Ficha Técnica (PDF Promob)
             </DialogTitle>
             <DialogDescription>
@@ -1489,10 +1489,10 @@ export default function LibraryPage() {
                 onDragLeave={handleDragLeave}
                 className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer ${
                   importDragOver
-                    ? 'border-emerald-500 bg-emerald-50/70 scale-[0.99]'
+                    ? 'border-slate-600 bg-slate-100/70 scale-[0.99]'
                     : importFile
-                      ? 'border-emerald-400 bg-emerald-50/30'
-                      : 'border-slate-300 hover:border-emerald-400 hover:bg-slate-50/80 bg-white'
+                      ? 'border-slate-500 bg-slate-100/30'
+                      : 'border-slate-300 hover:border-slate-500 hover:bg-slate-50/80 bg-white'
                 }`}
                 onClick={() => {
                   const input = document.getElementById('pdf-file-input') as HTMLInputElement
@@ -1510,9 +1510,7 @@ export default function LibraryPage() {
                 <div className="flex flex-col items-center justify-center space-y-3">
                   <div
                     className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${
-                      importDragOver
-                        ? 'bg-emerald-200 text-emerald-800'
-                        : 'bg-emerald-100 text-emerald-700'
+                      importDragOver ? 'bg-slate-300 text-slate-900' : 'bg-slate-200 text-slate-800'
                     }`}
                   >
                     <FileUp className="w-7 h-7" />
@@ -1532,22 +1530,22 @@ export default function LibraryPage() {
 
                   {importFile && (
                     <div
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-semibold mt-2 border border-emerald-300"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-200 text-slate-900 text-xs font-semibold mt-2 border border-slate-400"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {importFile.name.toLowerCase().endsWith('.pdf') ? (
-                        <FileText className="w-4 h-4 text-emerald-700" />
+                        <FileText className="w-4 h-4 text-slate-800" />
                       ) : (
-                        <ImageIcon className="w-4 h-4 text-emerald-700" />
+                        <ImageIcon className="w-4 h-4 text-slate-800" />
                       )}
                       <span>{importFile.name}</span>
-                      <span className="text-[11px] text-emerald-600 font-mono">
+                      <span className="text-[11px] text-slate-700 font-mono">
                         ({formatFileSize(importFile.size)})
                       </span>
                       <button
                         type="button"
                         onClick={handleResetImportFile}
-                        className="text-emerald-700 hover:text-rose-600 ml-1 p-0.5 rounded"
+                        className="text-slate-800 hover:text-rose-600 ml-1 p-0.5 rounded"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -1561,8 +1559,8 @@ export default function LibraryPage() {
             {importLoading && (
               <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 bg-slate-50 rounded-2xl border border-slate-200">
                 <div className="relative">
-                  <div className="w-16 h-16 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin flex items-center justify-center" />
-                  <Loader2 className="w-6 h-6 text-emerald-600 absolute inset-0 m-auto animate-pulse" />
+                  <div className="w-16 h-16 rounded-full border-4 border-slate-200 border-t-slate-700 animate-spin flex items-center justify-center" />
+                  <Loader2 className="w-6 h-6 text-slate-700 absolute inset-0 m-auto animate-pulse" />
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-bold text-slate-800">
@@ -1576,9 +1574,9 @@ export default function LibraryPage() {
                 {importFile && (
                   <Badge variant="outline" className="text-xs text-slate-600 bg-white">
                     {importFile.name.toLowerCase().endsWith('.pdf') ? (
-                      <FileText className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                      <FileText className="w-3.5 h-3.5 mr-1 text-slate-700" />
                     ) : (
-                      <ImageIcon className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                      <ImageIcon className="w-3.5 h-3.5 mr-1 text-slate-700" />
                     )}
                     {importFile.name}
                   </Badge>
@@ -1590,14 +1588,14 @@ export default function LibraryPage() {
             {importResult && !importLoading && (
               <div className="space-y-5 animate-fade-in">
                 {/* Header do preview com badge de sucesso */}
-                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-100 border border-slate-300">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <CheckCircle2 className="w-5 h-5 text-slate-700 shrink-0" />
                     <div>
-                      <p className="text-xs font-bold text-emerald-900">
+                      <p className="text-xs font-bold text-slate-950">
                         Dados extraídos com sucesso do PDF!
                       </p>
-                      <p className="text-[11px] text-emerald-700">
+                      <p className="text-[11px] text-slate-800">
                         Revise os campos abaixo antes de salvar na biblioteca.
                       </p>
                     </div>
@@ -1606,7 +1604,7 @@ export default function LibraryPage() {
                     variant="ghost"
                     size="sm"
                     onClick={handleResetImportFile}
-                    className="text-emerald-800 hover:text-emerald-950 text-xs h-8"
+                    className="text-slate-900 hover:text-slate-950 text-xs h-8"
                   >
                     Trocar arquivo
                   </Button>
@@ -1686,7 +1684,7 @@ export default function LibraryPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
-                      <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                      <Layers className="w-3.5 h-3.5 text-slate-700" />
                       Peças em MDF extraídas
                       <Badge variant="outline" className="text-[10px] ml-1 bg-white">
                         {(importResult.pecas_mdf || importResult.composicao_mdf || []).length} itens
@@ -1725,7 +1723,7 @@ export default function LibraryPage() {
                                     {cod}
                                   </td>
                                   <td className="py-2 px-3 font-normal">{desc}</td>
-                                  <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                                  <td className="py-2 px-3 text-right font-mono font-bold text-slate-800">
                                     {qtd}
                                   </td>
                                 </tr>
@@ -1742,7 +1740,7 @@ export default function LibraryPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
-                      <Wrench className="w-3.5 h-3.5 text-emerald-600" />
+                      <Wrench className="w-3.5 h-3.5 text-slate-700" />
                       Ferragens extraídas
                       <Badge variant="outline" className="text-[10px] ml-1 bg-white">
                         {(importResult.ferragens || []).length} itens
@@ -1777,7 +1775,7 @@ export default function LibraryPage() {
                             return (
                               <tr key={idx} className="hover:bg-slate-50">
                                 <td className="py-2 px-3 font-normal text-slate-800">{desc}</td>
-                                <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                                <td className="py-2 px-3 text-right font-mono font-bold text-slate-800">
                                   {qtd}
                                   {un}
                                 </td>
@@ -1816,7 +1814,7 @@ export default function LibraryPage() {
               <Button
                 onClick={handleSaveImportedModule}
                 disabled={importSaving || importLoading}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                className="bg-slate-700 hover:bg-slate-800 text-white font-semibold"
               >
                 {importSaving ? (
                   <>
