@@ -313,3 +313,23 @@ export async function createOrcamento(input: OrcamentoInput): Promise<Orcamento 
     return null
   }
 }
+
+/**
+ * Deleta um orçamento da tabela Orcamentos pelo seu ID.
+ * Retorna true se sucesso, false se erro.
+ */
+export async function deleteOrcamento(id: string): Promise<boolean> {
+  try {
+    const { error } = await db.from('Orcamentos').delete().eq('id', id)
+
+    if (error) {
+      console.error(`Erro ao deletar orçamento com id ${id}:`, error.message ?? error)
+      return false
+    }
+
+    return true
+  } catch (err) {
+    console.error(`Erro inesperado ao deletar orçamento com id ${id}:`, err)
+    return false
+  }
+}

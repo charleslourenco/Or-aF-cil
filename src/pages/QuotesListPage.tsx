@@ -14,6 +14,7 @@ import {
   RefreshCw,
   AlertCircle,
   Loader2,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,7 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from '@/hooks/use-toast'
-import { fetchOrcamentos, type Orcamento } from '@/services/orcamentos'
+import { fetchOrcamentos, deleteOrcamento, type Orcamento } from '@/services/orcamentos'
 import { fetchPerfilEmpresa, type PerfilEmpresa } from '@/services/empresa'
 import {
   downloadPropostaComercialFromOrcamento,
@@ -35,6 +36,7 @@ export default function QuotesListPage() {
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
   const [perfilEmpresa, setPerfilEmpresa] = useState<PerfilEmpresa | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -132,6 +134,36 @@ export default function QuotesListPage() {
       })
     } finally {
       setDownloadingId(null)
+    }
+  }
+
+  const handleDelete = async (orcamento: Orcamento) => {
+    const codigo = `#${String(orcamento.numero_sequencial ?? 0).padStart(3, '0')}`
+    setDeletingId(orcamento.id)
+    try {
+      const success = await deleteOrcamento(orcamento.id)
+      if (success) {
+        toast({
+          title: 'Orçamento excluído',
+          description: `Orçamento ${codigo} excluído com sucesso.`,
+        })
+        await loadData()
+      } else {
+        toast({
+          title: 'Erro ao excluir orçamento',
+          description: 'Não foi possível excluir o orçamento.',
+          variant: 'destructive',
+        })
+      }
+    } catch (err) {
+      console.error('Erro ao excluir orçamento:', err)
+      toast({
+        title: 'Erro ao excluir orçamento',
+        description: 'Não foi possível excluir o orçamento.',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -403,17 +435,42 @@ export default function QuotesListPage() {
                           </td>
 
                           <td className="py-3.5 px-4 text-right">
-                            <Button
-                              asChild
-                              variant="outline"
-                              size="sm"
-                              className="text-xs h-8 border-slate-200 hover:bg-slate-100 hover:text-slate-800 hover:border-slate-400 rounded-lg"
-                            >
-                              <Link to={`/novo-orcamento?id=${q.id}`}>
-                                Abrir
-                                <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                              </Link>
-                            </Button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                asChild
+                                variant="outline"
+                                size="sm"
+                                className="text-xs h-8 border-slate-200 hover:bg-slate-100 hover:text-slate-800 hover:border-slate-400 rounded-lg"
+                              >
+                                <Link to={`/novo-orcamento?id=${q.id}`}>
+                                  Abrir
+                                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                                </Link>
+                              </Button>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={deletingId === q.id}
+                                    onClick={() => handleDelete(q)}
+                                    className="h-8 w-8 p-0 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700"
+                                    aria-label="Excluir orçamento"
+                                  >
+                                    {deletingId === q.id ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                  Excluir orçamento
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
                           </td>
                         </tr>
                       )

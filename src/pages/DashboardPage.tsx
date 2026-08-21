@@ -10,10 +10,14 @@ import {
   RefreshCw,
   AlertCircle,
   Clock,
+  Trash2,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import {
   fetchOrcamentos,
@@ -21,6 +25,7 @@ import {
   fetchOrcamentosSomaValor,
   fetchOrcamentosAprovadosCount,
   fetchTicketMedio,
+  deleteOrcamento,
   Orcamento,
 } from '@/services/orcamentos'
 
@@ -101,6 +106,7 @@ export default function DashboardPage() {
   const [aprovadosCount, setAprovadosCount] = useState<number | null>(null)
   const [ticketMedio, setTicketMedio] = useState<number | null>(null)
   const [quotes, setQuotes] = useState<Orcamento[] | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const loadDashboardData = useCallback(async () => {
     setLoading(true)
@@ -143,6 +149,36 @@ export default function DashboardPage() {
     loadDashboardData()
   }, [loadDashboardData])
 
+  const handleDelete = async (quote: Orcamento) => {
+    const codigo = `#${String(quote.numero_sequencial ?? 0).padStart(3, '0')}`
+    setDeletingId(quote.id)
+    try {
+      const success = await deleteOrcamento(quote.id)
+      if (success) {
+        toast({
+          title: 'Orçamento excluído',
+          description: `Orçamento ${codigo} excluído com sucesso.`,
+        })
+        await loadDashboardData()
+      } else {
+        toast({
+          title: 'Erro ao excluir orçamento',
+          description: 'Não foi possível excluir o orçamento.',
+          variant: 'destructive',
+        })
+      }
+    } catch (err) {
+      console.error('Erro ao excluir orçamento:', err)
+      toast({
+        title: 'Erro ao excluir orçamento',
+        description: 'Não foi possível excluir o orçamento.',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   // Formatação dos valores de KPI respeitando as regras especificadas
   const displayTotalCount = totalCount !== null ? totalCount.toString() : '—'
   const displaySomaValor = somaValor !== null ? formatCurrency(somaValor) : '—'
@@ -150,157 +186,33 @@ export default function DashboardPage() {
   const displayTicketMedio = ticketMedio !== null ? formatCurrency(ticketMedio) : '—'
 
   return (
-    <div className="flex flex-col gap-6 w-full">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Painel de Orçamentos</h2>
-          <p className="text-sm text-slate-500">Visão geral das negociações e indicadores do mês</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadDashboardData}
-            disabled={loading}
-            className="border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-xs"
-            title="Atualizar dados"
-          >
-            <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', loading && 'animate-spin')} />
-            Atualizar
-          </Button>
-          <Button
-            asChild
-            className="bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm rounded-lg text-xs"
-          >
-            <Link to="/novo-orcamento" className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Criar Novo Orçamento
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          icon={FileText}
-          iconClassName="text-slate-700"
-          iconBg="bg-slate-100"
-          label="Total de Orçamentos (Mês)"
-          value={displayTotalCount}
-          loading={loading}
-        >
-          <div className="flex items-center gap-1 text-slate-700 text-xs font-semibold">
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>+12% em relação ao mês anterior</span>
+    <TooltipProvider delayDuration={150}>
+      <div className="flex flex-col gap-6 w-full">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+              Painel de Orçamentos
+            </h2>
+            <p className="text-sm text-slate-500">
+              Visão geral das negociações e indicadores do mês
+            </p>
           </div>
-        </KpiCard>
-
-        <KpiCard
-          icon={DollarSign}
-          iconClassName="text-blue-600"
-          iconBg="bg-blue-50"
-          label="Valor Total Orçado"
-          value={displaySomaValor}
-          loading={loading}
-        >
-          <span className="text-xs text-slate-400 font-medium">
-            Soma de todos os orçamentos do mês
-          </span>
-        </KpiCard>
-
-        <KpiCard
-          icon={CheckCircle2}
-          iconClassName="text-slate-700"
-          iconBg="bg-slate-100"
-          label="Propostas Aprovadas"
-          value={displayAprovados}
-          loading={loading}
-        >
-          <Badge className="bg-slate-200 text-slate-800 hover:bg-slate-200 text-xs font-semibold rounded-full px-2.5 py-0.5">
-            Aprovadas
-          </Badge>
-        </KpiCard>
-
-        <KpiCard
-          icon={Layers}
-          iconClassName="text-amber-600"
-          iconBg="bg-amber-50"
-          label="Ticket Médio por Módulo"
-          value={displayTicketMedio}
-          loading={loading}
-        >
-          <span className="text-xs text-slate-400 font-medium">Valor médio por módulo orçado</span>
-        </KpiCard>
-      </div>
-
-      {/* Recent Quotes Section */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-base font-bold text-slate-900">Últimos Orçamentos Gerados</h3>
-          {quotes && quotes.length > 0 && (
-            <span className="text-xs font-medium text-slate-500">
-              {quotes.length}{' '}
-              {quotes.length === 1 ? 'orçamento encontrado' : 'orçamentos encontrados'}
-            </span>
-          )}
-        </div>
-
-        {/* Estado: Carregando (Skeleton) */}
-        {loading && (
-          <div className="p-5 space-y-3">
-            <Skeleton className="h-10 w-full rounded-lg" />
-            <Skeleton className="h-12 w-full rounded-lg" />
-            <Skeleton className="h-12 w-full rounded-lg" />
-            <Skeleton className="h-12 w-full rounded-lg" />
-            <Skeleton className="h-12 w-full rounded-lg" />
-          </div>
-        )}
-
-        {/* Estado: Erro na busca */}
-        {!loading && (quotes === null || hasError) && (
-          <div className="p-8 flex flex-col items-center justify-center text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center text-rose-600">
-              <AlertCircle className="w-6 h-6" />
-            </div>
-            <div className="space-y-1">
-              <h4 className="text-base font-bold text-slate-900">
-                Não foi possível carregar os orçamentos
-              </h4>
-              <p className="text-xs text-slate-500 max-w-sm">
-                Ocorreu uma falha ao se comunicar com o banco de dados. Verifique a conexão e tente
-                novamente.
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={loadDashboardData}
-              className="mt-2 border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-xs"
+              disabled={loading}
+              className="border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-xs"
+              title="Atualizar dados"
             >
-              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-              Tentar Novamente
+              <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', loading && 'animate-spin')} />
+              Atualizar
             </Button>
-          </div>
-        )}
-
-        {/* Estado: Sem orçamentos (Empty State) */}
-        {!loading && quotes !== null && quotes.length === 0 && (
-          <div className="p-12 flex flex-col items-center justify-center text-center space-y-3">
-            <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400">
-              <FileText className="w-7 h-7" />
-            </div>
-            <div className="space-y-1 max-w-sm">
-              <h4 className="text-base font-bold text-slate-900">Nenhum orçamento gerado ainda</h4>
-              <p className="text-xs text-slate-500">
-                Crie seu primeiro orçamento para começar a acompanhar os indicadores da sua
-                marcenaria.
-              </p>
-            </div>
             <Button
               asChild
-              className="mt-2 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm"
+              className="bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm rounded-lg text-xs"
             >
               <Link to="/novo-orcamento" className="flex items-center gap-2">
                 <Plus className="w-4 h-4" />
@@ -308,78 +220,237 @@ export default function DashboardPage() {
               </Link>
             </Button>
           </div>
-        )}
+        </div>
 
-        {/* Estado: Tabela com dados reais */}
-        {!loading && quotes !== null && quotes.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider">
-                  <th className="text-left font-semibold px-5 py-3">Cliente</th>
-                  <th className="text-left font-semibold px-5 py-3">Ambiente</th>
-                  <th className="text-left font-semibold px-5 py-3">Módulo</th>
-                  <th className="text-left font-semibold px-5 py-3">Data</th>
-                  <th className="text-right font-semibold px-5 py-3">Valor Total (R$)</th>
-                  <th className="text-left font-semibold px-5 py-3">Status</th>
-                  <th className="text-right font-semibold px-5 py-3">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {quotes.map((quote) => {
-                  const statusKey = quote.status || 'Rascunho'
-                  const statusClass = statusStyles[statusKey] || 'bg-slate-100 text-slate-600'
-                  const valorNum =
-                    typeof quote.valor_total === 'number'
-                      ? quote.valor_total
-                      : quote.valor_total
-                        ? parseFloat(quote.valor_total)
-                        : 0
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard
+            icon={FileText}
+            iconClassName="text-slate-700"
+            iconBg="bg-slate-100"
+            label="Total de Orçamentos (Mês)"
+            value={displayTotalCount}
+            loading={loading}
+          >
+            <div className="flex items-center gap-1 text-slate-700 text-xs font-semibold">
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>+12% em relação ao mês anterior</span>
+            </div>
+          </KpiCard>
 
-                  return (
-                    <tr key={quote.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="px-5 py-3.5 font-medium text-slate-900">
-                        {quote.cliente_nome || '—'}
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-600">{quote.ambiente || '—'}</td>
-                      <td className="px-5 py-3.5 text-slate-600">{quote.modulo || '—'}</td>
-                      <td className="px-5 py-3.5 text-slate-600">
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          {formatDate(quote.data || quote.created_at)}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-right font-semibold text-slate-900 font-mono">
-                        {formatCurrency(valorNum)}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span
-                          className={cn(
-                            'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                            statusClass,
-                          )}
-                        >
-                          {statusKey}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <Button
-                          asChild
-                          variant="outline"
-                          size="sm"
-                          className="text-xs font-medium border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg"
-                        >
-                          <Link to={`/novo-orcamento?id=${quote.id}`}>Ver / Editar</Link>
-                        </Button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <KpiCard
+            icon={DollarSign}
+            iconClassName="text-blue-600"
+            iconBg="bg-blue-50"
+            label="Valor Total Orçado"
+            value={displaySomaValor}
+            loading={loading}
+          >
+            <span className="text-xs text-slate-400 font-medium">
+              Soma de todos os orçamentos do mês
+            </span>
+          </KpiCard>
+
+          <KpiCard
+            icon={CheckCircle2}
+            iconClassName="text-slate-700"
+            iconBg="bg-slate-100"
+            label="Propostas Aprovadas"
+            value={displayAprovados}
+            loading={loading}
+          >
+            <Badge className="bg-slate-200 text-slate-800 hover:bg-slate-200 text-xs font-semibold rounded-full px-2.5 py-0.5">
+              Aprovadas
+            </Badge>
+          </KpiCard>
+
+          <KpiCard
+            icon={Layers}
+            iconClassName="text-amber-600"
+            iconBg="bg-amber-50"
+            label="Ticket Médio por Módulo"
+            value={displayTicketMedio}
+            loading={loading}
+          >
+            <span className="text-xs text-slate-400 font-medium">
+              Valor médio por módulo orçado
+            </span>
+          </KpiCard>
+        </div>
+
+        {/* Recent Quotes Section */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-900">Últimos Orçamentos Gerados</h3>
+            {quotes && quotes.length > 0 && (
+              <span className="text-xs font-medium text-slate-500">
+                {quotes.length}{' '}
+                {quotes.length === 1 ? 'orçamento encontrado' : 'orçamentos encontrados'}
+              </span>
+            )}
           </div>
-        )}
+
+          {/* Estado: Carregando (Skeleton) */}
+          {loading && (
+            <div className="p-5 space-y-3">
+              <Skeleton className="h-10 w-full rounded-lg" />
+              <Skeleton className="h-12 w-full rounded-lg" />
+              <Skeleton className="h-12 w-full rounded-lg" />
+              <Skeleton className="h-12 w-full rounded-lg" />
+              <Skeleton className="h-12 w-full rounded-lg" />
+            </div>
+          )}
+
+          {/* Estado: Erro na busca */}
+          {!loading && (quotes === null || hasError) && (
+            <div className="p-8 flex flex-col items-center justify-center text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center text-rose-600">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-base font-bold text-slate-900">
+                  Não foi possível carregar os orçamentos
+                </h4>
+                <p className="text-xs text-slate-500 max-w-sm">
+                  Ocorreu uma falha ao se comunicar com o banco de dados. Verifique a conexão e
+                  tente novamente.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadDashboardData}
+                className="mt-2 border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-xs"
+              >
+                <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                Tentar Novamente
+              </Button>
+            </div>
+          )}
+
+          {/* Estado: Sem orçamentos (Empty State) */}
+          {!loading && quotes !== null && quotes.length === 0 && (
+            <div className="p-12 flex flex-col items-center justify-center text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400">
+                <FileText className="w-7 h-7" />
+              </div>
+              <div className="space-y-1 max-w-sm">
+                <h4 className="text-base font-bold text-slate-900">
+                  Nenhum orçamento gerado ainda
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Crie seu primeiro orçamento para começar a acompanhar os indicadores da sua
+                  marcenaria.
+                </p>
+              </div>
+              <Button
+                asChild
+                className="mt-2 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm"
+              >
+                <Link to="/novo-orcamento" className="flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Criar Novo Orçamento
+                </Link>
+              </Button>
+            </div>
+          )}
+
+          {/* Estado: Tabela com dados reais */}
+          {!loading && quotes !== null && quotes.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead>
+                  <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider">
+                    <th className="text-left font-semibold px-5 py-3">Cliente</th>
+                    <th className="text-left font-semibold px-5 py-3">Ambiente</th>
+                    <th className="text-left font-semibold px-5 py-3">Módulo</th>
+                    <th className="text-left font-semibold px-5 py-3">Data</th>
+                    <th className="text-right font-semibold px-5 py-3">Valor Total (R$)</th>
+                    <th className="text-left font-semibold px-5 py-3">Status</th>
+                    <th className="text-right font-semibold px-5 py-3">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {quotes.map((quote) => {
+                    const statusKey = quote.status || 'Rascunho'
+                    const statusClass = statusStyles[statusKey] || 'bg-slate-100 text-slate-600'
+                    const valorNum =
+                      typeof quote.valor_total === 'number'
+                        ? quote.valor_total
+                        : quote.valor_total
+                          ? parseFloat(quote.valor_total)
+                          : 0
+
+                    return (
+                      <tr key={quote.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-5 py-3.5 font-medium text-slate-900">
+                          {quote.cliente_nome || '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-600">{quote.ambiente || '—'}</td>
+                        <td className="px-5 py-3.5 text-slate-600">{quote.modulo || '—'}</td>
+                        <td className="px-5 py-3.5 text-slate-600">
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            {formatDate(quote.data || quote.created_at)}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 text-right font-semibold text-slate-900 font-mono">
+                          {formatCurrency(valorNum)}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span
+                            className={cn(
+                              'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                              statusClass,
+                            )}
+                          >
+                            {statusKey}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              asChild
+                              variant="outline"
+                              size="sm"
+                              className="text-xs font-medium border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg"
+                            >
+                              <Link to={`/novo-orcamento?id=${quote.id}`}>Ver / Editar</Link>
+                            </Button>
+
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={deletingId === quote.id}
+                                  onClick={() => handleDelete(quote)}
+                                  className="h-8 w-8 p-0 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700"
+                                  aria-label="Excluir orçamento"
+                                >
+                                  {deletingId === quote.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                Excluir orçamento
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   )
 }
