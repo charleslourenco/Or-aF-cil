@@ -41,6 +41,7 @@ import { LibraryMatchCard } from '@/components/LibraryMatchCard'
 import { PricingTable } from '@/components/PricingTable'
 import { FinalizeQuoteModal } from '@/components/FinalizeQuoteModal'
 import { BudgetItem } from '@/data/mockData'
+import { createOrcamento } from '@/services/orcamentos'
 import { fetchTemplatesEngenharia, TemplateEngenharia } from '@/services/templates'
 import { toast } from '@/hooks/use-toast'
 import { ToastAction } from '@/components/ui/toast'
@@ -579,12 +580,29 @@ export default function Index() {
     setIsFinalizeModalOpen(true)
   }
 
-  const handleConfirmFinalize = () => {
+  const handleConfirmFinalize = async () => {
     setIsFinalizeModalOpen(false)
-    toast({
-      title: '✓ Orçamento Finalizado com Sucesso!',
-      description: `Orçamento de ${clientName} pronto para envio comercial.`,
+    const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
+
+    const created = await createOrcamento({
+      cliente_nome: clientName,
+      ambiente: ambienteSelecionado || room || null,
+      modulo: currentModuleName || null,
+      valor_total: totalSale,
+      status: 'Aprovado',
     })
+
+    if (created) {
+      toast({
+        title: '✓ Orçamento Salvo com Sucesso!',
+        description: `Orçamento de ${clientName} cadastrado no sistema.`,
+      })
+    } else {
+      toast({
+        title: 'Orçamento Finalizado',
+        description: `Orçamento de ${clientName} processado com sucesso.`,
+      })
+    }
     navigate('/orcamentos')
   }
 

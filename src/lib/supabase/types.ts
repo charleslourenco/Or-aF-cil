@@ -145,6 +145,75 @@ export type Database = {
           },
         ]
       }
+      perfil_empresa: {
+        Row: {
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          cnpj: string | null
+          complemento: string | null
+          created_at: string
+          email_comercial: string | null
+          estado: string | null
+          facebook: string | null
+          id: string
+          inscricao_estadual: string | null
+          instagram: string | null
+          logo_url: string | null
+          logradouro: string | null
+          nome_fantasia: string | null
+          numero: string | null
+          razao_social: string | null
+          site: string | null
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          cnpj?: string | null
+          complemento?: string | null
+          created_at?: string
+          email_comercial?: string | null
+          estado?: string | null
+          facebook?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          instagram?: string | null
+          logo_url?: string | null
+          logradouro?: string | null
+          nome_fantasia?: string | null
+          numero?: string | null
+          razao_social?: string | null
+          site?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          cnpj?: string | null
+          complemento?: string | null
+          created_at?: string
+          email_comercial?: string | null
+          estado?: string | null
+          facebook?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          instagram?: string | null
+          logo_url?: string | null
+          logradouro?: string | null
+          nome_fantasia?: string | null
+          numero?: string | null
+          razao_social?: string | null
+          site?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       templatesengenharia: {
         Row: {
           assinatura_visual: Json | null
