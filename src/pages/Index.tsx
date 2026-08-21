@@ -30,6 +30,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { AmbienteSelector } from '@/components/AmbienteSelector'
 import { CustomerDropzone, UploadedFileState } from '@/components/CustomerDropzone'
 import { LibraryMatchCard } from '@/components/LibraryMatchCard'
 import { PricingTable } from '@/components/PricingTable'
@@ -58,6 +60,7 @@ export default function Index() {
   // Form Identification Header state
   const [clientName, setClientName] = useState('')
   const [room, setRoom] = useState('')
+  const [ambienteSelecionado, setAmbienteSelecionado] = useState<string>('')
   const [selectedModuleId, setSelectedModuleId] = useState<string>('')
 
   // Módulos disponíveis — fetch 100% dinâmico do Supabase (tabela TemplatesEngenharia)
@@ -232,6 +235,15 @@ export default function Index() {
 
   const handleRoomChange = (val: string) => {
     setRoom(val)
+    setAmbienteSelecionado(val)
+    if (errors.room) {
+      setErrors((prev) => ({ ...prev, room: undefined }))
+    }
+  }
+
+  const handleAmbienteSelecionadoChange = (val: string) => {
+    setAmbienteSelecionado(val)
+    setRoom(val)
     if (errors.room) {
       setErrors((prev) => ({ ...prev, room: undefined }))
     }
@@ -247,12 +259,18 @@ export default function Index() {
 
     // Auto-preenche o ambiente quando vazio, com base na categoria do módulo.
     const modulo = modulosDisponiveis.find((m) => m.id === val)
-    if (!room && modulo?.categoria) {
+    if (!ambienteSelecionado && !room && modulo?.categoria) {
       const cat = modulo.categoria.toLowerCase()
-      if (cat.includes('quarto')) setRoom('Quarto')
-      else if (cat.includes('cozinha')) setRoom('Cozinha')
-      else if (cat.includes('sala')) setRoom('Sala')
-      else if (cat.includes('banheiro')) setRoom('Banheiro')
+      let autoAmb = ''
+      if (cat.includes('quarto')) autoAmb = 'Quarto 01'
+      else if (cat.includes('cozinha')) autoAmb = 'Cozinha Principal'
+      else if (cat.includes('sala')) autoAmb = 'Sala de Estar'
+      else if (cat.includes('banheiro')) autoAmb = 'Banheiro Social 01'
+
+      if (autoAmb) {
+        setAmbienteSelecionado(autoAmb)
+        setRoom(autoAmb)
+      }
     }
   }
 
@@ -449,8 +467,11 @@ export default function Index() {
       newErrors.clientName = 'Informe o nome do cliente'
     }
 
-    if (!room) {
+    const effectiveRoom = ambienteSelecionado || room
+    if (!effectiveRoom) {
       newErrors.room = 'Selecione o ambiente do projeto'
+    } else if (!room) {
+      setRoom(effectiveRoom)
     }
 
     if (!selectedModuleId) {
@@ -584,25 +605,37 @@ export default function Index() {
           com lista de peças e markup comercial.
         </p>
       </div>
-
       {/* 2. CABEÇALHO DE IDENTIFICAÇÃO */}
       <section aria-labelledby="identificacao-heading">
         <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm">
-          <div className="flex items-center gap-2 pb-4 mb-5 border-b border-slate-100">
-            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
-              1
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
+                1
+              </div>
+              <h3
+                id="identificacao-heading"
+                className="text-sm sm:text-base font-bold text-slate-900"
+              >
+                Identificação do Orçamento
+              </h3>
+              <span className="text-xs text-slate-400 font-normal hidden sm:inline">
+                • Dados básicos do cliente e ambiente
+              </span>
             </div>
-            <h3
-              id="identificacao-heading"
-              className="text-sm sm:text-base font-bold text-slate-900"
-            >
-              Identificação do Orçamento
-            </h3>
-            <span className="text-xs text-slate-400 font-normal">
-              • Dados básicos do cliente e ambiente
-            </span>
+            {(ambienteSelecionado || room) && (
+              <div className="flex items-center gap-1.5 animate-fade-in">
+                <span className="text-xs text-slate-400 font-medium">Ambiente:</span>
+                <Badge
+                  variant="outline"
+                  className="bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold text-xs px-2.5 py-0.5 gap-1.5 shadow-2xs"
+                >
+                  <Home className="w-3.5 h-3.5 text-emerald-600" />
+                  {ambienteSelecionado || room}
+                </Badge>
+              </div>
+            )}
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Input: Nome do Cliente */}
             <div className="space-y-1.5">
@@ -635,35 +668,21 @@ export default function Index() {
               )}
             </div>
 
-            {/* Select: Ambiente */}
+            {/* Select / Combobox: Ambiente */}
             <div className="space-y-1.5">
               <label
-                htmlFor="roomSelect"
+                htmlFor="ambiente-combobox-header"
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
               >
                 <Home className="w-3.5 h-3.5 text-emerald-600" />
                 Ambiente <span className="text-rose-500">*</span>
               </label>
-              <Select value={room} onValueChange={handleRoomChange}>
-                <SelectTrigger
-                  id="roomSelect"
-                  className={cn(
-                    'h-11 rounded-xl text-sm transition-all',
-                    errors.room
-                      ? 'border-rose-500 ring-2 ring-rose-200 bg-rose-50/20'
-                      : 'border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20',
-                  )}
-                >
-                  <SelectValue placeholder="Selecione o ambiente" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  {AMBIENTES.map((amb) => (
-                    <SelectItem key={amb} value={amb}>
-                      {amb}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AmbienteSelector
+                id="ambiente-combobox-header"
+                value={ambienteSelecionado || room}
+                onChange={handleAmbienteSelecionadoChange}
+                error={errors.room}
+              />
               {errors.room && (
                 <p className="text-[11px] font-medium text-rose-600 flex items-center gap-1 pt-0.5 animate-fade-in">
                   <AlertCircle className="w-3.5 h-3.5" />
@@ -718,7 +737,6 @@ export default function Index() {
           </div>
         </div>
       </section>
-
       {/* 3. ÁREA CENTRAL: O MATCH LADO A LADO (Grid de 2 colunas) */}
       <section aria-labelledby="match-heading" className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -749,6 +767,34 @@ export default function Index() {
                   Projeto de referência enviado para cotar
                 </p>
               </div>
+            </div>
+
+            {/* Seletor suspenso de Ambiente no topo da área de upload */}
+            <div className="mb-4 p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="ambiente-dropzone-top"
+                  className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
+                >
+                  <Home className="w-3.5 h-3.5 text-emerald-600" />
+                  Ambiente do Upload <span className="text-rose-500">*</span>
+                </label>
+                {(ambienteSelecionado || room) && (
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-50 text-emerald-800 border-emerald-200 font-medium text-[11px] gap-1"
+                  >
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    {ambienteSelecionado || room}
+                  </Badge>
+                )}
+              </div>
+              <AmbienteSelector
+                id="ambiente-dropzone-top"
+                value={ambienteSelecionado || room}
+                onChange={handleAmbienteSelecionadoChange}
+                error={errors.room}
+              />
             </div>
 
             <div className="flex-1 min-h-[300px]">
@@ -795,7 +841,6 @@ export default function Index() {
           </div>
         </div>
       </section>
-
       {/* 3a. PAINEL DE DIMENSÕES REAIS DO MÓDULO */}
       <section aria-labelledby="dimensoes-heading" className="space-y-3">
         <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm">
@@ -906,7 +951,6 @@ export default function Index() {
           </div>
         </div>
       </section>
-
       {/* 3b. CARD DE ESPECIFICAÇÃO DE MATERIAIS */}
       <section aria-labelledby="materiais-heading" className="space-y-3">
         <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm">
@@ -1136,7 +1180,6 @@ export default function Index() {
           </div>
         </div>
       </section>
-
       {/* 4. BOTÃO DE AÇÃO PRINCIPAL */}
       <div className="flex flex-col items-center justify-center pt-2 pb-4">
         <Button
@@ -1164,7 +1207,6 @@ export default function Index() {
           Calcula automaticamente caixaria, frentes, puxadores e margem comercial
         </p>
       </div>
-
       {/* 5. RESULTADOS: TABELA DE PRECIFICAÇÃO DINÂMICA */}
       {showResults && (
         <section
@@ -1245,7 +1287,6 @@ export default function Index() {
           )}
         </section>
       )}
-
       {/* 6. RODAPÉ DE AÇÕES FIXO (Sticky Bottom Bar) */}
       <aside
         aria-label="Ações do Orçamento"
@@ -1286,17 +1327,16 @@ export default function Index() {
           </div>
         </div>
       </aside>
-
       {/* Finalize Confirmation Modal */}
       <FinalizeQuoteModal
         isOpen={isFinalizeModalOpen}
         onClose={() => setIsFinalizeModalOpen(false)}
         onConfirm={handleConfirmFinalize}
         clientName={clientName}
-        room={room}
+        room={ambienteSelecionado || room}
         moduleName={currentModuleName}
         items={pricingItems}
-      />
+      />{' '}
     </div>
   )
 }
