@@ -108,6 +108,16 @@ export default function Index() {
   // Perfil da Empresa (para PDFs)
   const [perfilEmpresa, setPerfilEmpresa] = useState<PerfilEmpresa | null>(null)
 
+  // Configurações da Engenharia Financeira (markup, rateio, impostos, comissões)
+  const [markupEngenharia, setMarkupEngenharia] = useState<number>(2.5)
+  const [configEngenhariaCompleta, setConfigEngenhariaCompleta] = useState<{
+    markup_padrao: number
+    impostos_percent: number
+    comissoes_percent: number
+    custo_financeiro_percent: number
+    indice_rateio: number
+  } | null>(null)
+
   // 📐 DIMENSÕES REAIS DO MÓDULO (inputs manuais — defaults paramétricos).
   const [dimensoes, setDimensoes] = useState({
     largura: 1800,
@@ -199,6 +209,49 @@ export default function Index() {
     }
   }, [])
 
+  // FETCH DA CONFIGURAÇÃO DA ENGENHARIA FINANCEIRA (markup, rateio, custos fixos e variáveis)
+  useEffect(() => {
+    let active = true
+    fetchConfigEngenharia()
+      .then(({ config, custosFixos, custosVariaveis, error }) => {
+        if (!active) return
+        if (error || !config) {
+          console.warn(
+            'Não foi possível carregar as configurações de engenharia financeira. Usando fallback markup 2.5x:',
+            error,
+          )
+          return
+        }
+
+        const totalCustosFixos = custosFixos.reduce((s, c) => s + (Number(c.valor) || 0), 0)
+        const totalCustosVariaveis = custosVariaveis.reduce((s, c) => s + (Number(c.valor) || 0), 0)
+        const totalCustosEmpresa = totalCustosFixos + totalCustosVariaveis
+        const meta = Number(config.meta_faturamento) || 0
+        const indiceRateio = meta > 0 ? (totalCustosEmpresa / meta) * 100 : 8.0
+
+        const markup =
+          typeof config.markup_padrao === 'number' && config.markup_padrao > 0
+            ? config.markup_padrao
+            : 2.5
+
+        setMarkupEngenharia(markup)
+        setConfigEngenhariaCompleta({
+          markup_padrao: markup,
+          impostos_percent: config.impostos_percent ?? 10.0,
+          comissoes_percent: config.comissoes_percent ?? 5.0,
+          custo_financeiro_percent: config.custo_financeiro_percent ?? 3.0,
+          indice_rateio: Math.round(indiceRateio * 100) / 100,
+        })
+      })
+      .catch((err) => {
+        console.warn('Erro ao buscar Engenharia Financeira. Fallback markup 2.5x:', err)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
   // Listas de opções derivadas dinamicamente do catálogo real de materiais
   const opcoesMdfEstrutural = useMemo(() => {
     return catalogoMateriais.filter((m) => m.categoria === 'MDF 15mm' || m.categoria === 'MDF 18mm')
@@ -233,6 +286,7 @@ export default function Index() {
         mdfFundo,
         padraoProjeto,
         catalogoParaPricing,
+        markupEngenharia,
       ),
     [
       selectedModuleObj,
@@ -242,6 +296,7 @@ export default function Index() {
       mdfFundo,
       padraoProjeto,
       catalogoParaPricing,
+      markupEngenharia,
     ],
   )
 
@@ -554,13 +609,18 @@ export default function Index() {
       setShowResults(true)
     }
 
+    const effectiveMarkup = markupEngenharia || 2.5
+    const unitCost = 80.0
+    const totalCost = 160.0
+    const salePrice = Math.round(totalCost * effectiveMarkup * 100) / 100
+
     const newItem: BudgetItem = {
       id: `manual-${Date.now()}`,
       description: 'Nova Peça em MDF 18mm',
-      unitCost: 80.0,
-      totalCost: 160.0,
-      markup: 2.5,
-      salePrice: 400.0,
+      unitCost,
+      totalCost,
+      markup: effectiveMarkup,
+      salePrice,
       isEditing: true,
     }
 
@@ -615,11 +675,55 @@ export default function Index() {
       const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
       const totalCost = pricingItems.reduce((acc, it) => acc + (Number(it.totalCost) || 0), 0)
 
-      // Busca parâmetros reais da DRE de configuracoes_engenharia
-      const { config } = await fetchConfigEngenharia()
-      const impostosPercent = config?.impostos_percent ?? 10.0
-      const comissaoPercent = config?.comissoes_percent ?? 5.0
-      const custoFixoPercent = 8.0 // Rateio estimado
+      // Busca parâmetros reais da DRE de configuracoes_engenharia, custos fixos, variáveis e comissões
+      let impostosPercent = 10.0
+      let comissaoPercent = 5.0
+      let custoFixoPercent = 8.0
+      let markupConfig = 2.5
+
+      try {
+        const { config, custosFixos, custosVariaveis, comissoesPersonalizadas } =
+          await fetchConfigEngenharia()
+
+        if (config) {
+          impostosPercent = Number(config.impostos_percent) || 10.0
+          // Soma da comissão base + comissões personalizadas
+          const comissaoBase = Number(config.comissoes_percent) || 0
+          const comissoesExtras = (comissoesPersonalizadas ?? []).reduce(
+            (s, c) => s + (Number(c.percentual) || 0),
+            0,
+          )
+          comissaoPercent = comissaoBase + comissoesExtras || 5.0
+          markupConfig = Number(config.markup_padrao) || 2.5
+
+          // Cálculo do índice de rateio real da Engenharia Financeira
+          const totalCustosFixos = (custosFixos ?? []).reduce(
+            (s, c) => s + (Number(c.valor) || 0),
+            0,
+          )
+          const totalCustosVariaveis = (custosVariaveis ?? []).reduce(
+            (s, c) => s + (Number(c.valor) || 0),
+            0,
+          )
+          const totalCustosEmpresa = totalCustosFixos + totalCustosVariaveis
+          const meta = Number(config.meta_faturamento) || 0
+
+          if (meta > 0) {
+            custoFixoPercent = Math.round((totalCustosEmpresa / meta) * 100 * 100) / 100
+          }
+        } else if (configEngenhariaCompleta) {
+          impostosPercent = configEngenhariaCompleta.impostos_percent
+          comissaoPercent = configEngenhariaCompleta.comissoes_percent
+          custoFixoPercent = configEngenhariaCompleta.indice_rateio
+          markupConfig = configEngenhariaCompleta.markup_padrao
+        } else {
+          console.warn(
+            'Configuração de engenharia não encontrada no Supabase. Usando defaults com aviso.',
+          )
+        }
+      } catch (e) {
+        console.warn('Erro ao buscar configuração da engenharia no finalize. Usando fallback:', e)
+      }
 
       const impostosValor = Math.round(((totalSale * impostosPercent) / 100) * 100) / 100
       const comissaoValor = Math.round(((totalSale * comissaoPercent) / 100) * 100) / 100
@@ -628,7 +732,7 @@ export default function Index() {
         Math.round((totalSale - totalCost - impostosValor - comissaoValor - custoFixoValor) * 100) /
         100
       const lucroPercent = totalSale > 0 ? (lucroValor / totalSale) * 100 : 0
-      const markupEfetivo = totalCost > 0 ? totalSale / totalCost : (config?.markup_padrao ?? 2.5)
+      const markupEfetivo = totalCost > 0 ? totalSale / totalCost : markupConfig
 
       const dreJson: OrcamentoDRE = {
         custo_mp: totalCost,
@@ -738,13 +842,30 @@ export default function Index() {
     try {
       const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
       const totalCost = pricingItems.reduce((acc, it) => acc + (Number(it.totalCost) || 0), 0)
+
+      const impPercent = configEngenhariaCompleta?.impostos_percent ?? 10.0
+      const comPercent = configEngenhariaCompleta?.comissoes_percent ?? 5.0
+      const fixoPercent = configEngenhariaCompleta?.indice_rateio ?? 8.0
+      const markupConfig = configEngenhariaCompleta?.markup_padrao ?? markupEngenharia ?? 2.5
+
+      const impVal = Math.round(((totalSale * impPercent) / 100) * 100) / 100
+      const comVal = Math.round(((totalSale * comPercent) / 100) * 100) / 100
+      const fixoVal = Math.round(((totalSale * fixoPercent) / 100) * 100) / 100
+      const lucroVal = Math.round((totalSale - totalCost - impVal - comVal - fixoVal) * 100) / 100
+      const lucroPct = totalSale > 0 ? (lucroVal / totalSale) * 100 : 0
+      const markupEf = totalCost > 0 ? totalSale / totalCost : markupConfig
+
       const dre = savedOrcamentoRecord?.dre_json || {
         custo_mp: totalCost,
-        impostos: totalSale * 0.1,
-        comissao: totalSale * 0.05,
-        custo_fixo_rateado: totalSale * 0.08,
-        lucro_liquido: totalSale - totalCost - totalSale * 0.23,
-        markup_efetivo: totalCost > 0 ? totalSale / totalCost : 2.5,
+        impostos: impVal,
+        impostos_percent: impPercent,
+        comissao: comVal,
+        comissao_percent: comPercent,
+        custo_fixo_rateado: fixoVal,
+        custo_fixo_percent: fixoPercent,
+        lucro_liquido: lucroVal,
+        lucro_liquido_percent: Math.round(lucroPct * 100) / 100,
+        markup_efetivo: Math.round(markupEf * 100) / 100,
         preco_final: totalSale,
       }
 
@@ -772,7 +893,8 @@ export default function Index() {
       console.error('Erro ao gerar análise de custo:', err)
       toast({
         title: 'Erro na geração do PDF',
-        description: 'Não foi possível gerar a Análise de Custo.',
+        description:
+          err instanceof Error ? err.message : 'Não foi possível gerar a Análise de Custo.',
         variant: 'destructive',
       })
     }

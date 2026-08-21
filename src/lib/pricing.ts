@@ -116,7 +116,7 @@ export function buildCatalogoPriceMap(catalogo: CatalogoMaterial[]): Record<stri
 }
 
 /**
- * Cria uma peça (item) da BOM já precificada.
+ * Cria uma peça (item) da BOM já precificada com o markup fornecido.
  */
 function criarPeca(
   id: string,
@@ -126,9 +126,11 @@ function criarPeca(
   metragem: number,
   unidade: 'm²' | 'm' | 'jogo',
   custoUnitario: number,
+  markup: number = MARKUP_PADRAO,
 ): BudgetItem {
+  const effectiveMarkup = typeof markup === 'number' && markup > 0 ? markup : MARKUP_PADRAO
   const totalCost = round2(metragem * custoUnitario)
-  const salePrice = round2(totalCost * MARKUP_PADRAO)
+  const salePrice = round2(totalCost * effectiveMarkup)
   return {
     id,
     description: descricao,
@@ -138,7 +140,7 @@ function criarPeca(
     unidade,
     unitCost: custoUnitario,
     totalCost,
-    markup: MARKUP_PADRAO,
+    markup: effectiveMarkup,
     salePrice,
   }
 }
@@ -156,6 +158,8 @@ function criarPeca(
  * @param mdfInterno Espessura/cor do MDF interno.
  * @param mdfFundo   Descrição do MDF de fundo (ex.: "MDF 6mm Branco TX").
  * @param padraoProjeto Padrão comercial/premium (reservado p/ ajustes futuros).
+ * @param catalogoPrecos Lista de materiais do catálogo com preços reais.
+ * @param markup     Markup multiplicador vindo das configurações de engenharia (fallback: 2.5).
  */
 export function calcularBOM(
   modulo: { id: string; nome_template?: string } | null | undefined,
@@ -165,11 +169,14 @@ export function calcularBOM(
   mdfFundo: string,
   padraoProjeto: PadraoProjeto,
   catalogoPrecos?: CatalogoMaterial[],
+  markup?: number,
 ): BudgetItem[] {
   // Validação: dimensões e módulo obrigatórios.
   if (!modulo || !dimensoes.largura || !dimensoes.altura || !dimensoes.profundidade) {
     return []
   }
+
+  const effectiveMarkup = typeof markup === 'number' && markup > 0 ? markup : MARKUP_PADRAO
 
   const L = dimensoes.largura
   const A = dimensoes.altura
@@ -190,6 +197,7 @@ export function calcularBOM(
       areaLateral * 2,
       'm²',
       resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+      effectiveMarkup,
     ),
   )
 
@@ -205,6 +213,7 @@ export function calcularBOM(
       areaBaseTopo * 2,
       'm²',
       resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+      effectiveMarkup,
     ),
   )
 
@@ -220,6 +229,7 @@ export function calcularBOM(
       areaPrateleira * 2,
       'm²',
       resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+      effectiveMarkup,
     ),
   )
 
@@ -234,6 +244,7 @@ export function calcularBOM(
       areaFundo,
       'm²',
       resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto),
+      effectiveMarkup,
     ),
   )
 
@@ -252,6 +263,7 @@ export function calcularBOM(
       perimetroFitaM,
       'm',
       resolverCustoUnitario('Fita de Borda', catalogoPrecos, padraoProjeto),
+      effectiveMarkup,
     ),
   )
 
@@ -265,6 +277,7 @@ export function calcularBOM(
       1,
       'jogo',
       resolverCustoUnitario('Ferragens', catalogoPrecos, padraoProjeto),
+      effectiveMarkup,
     ),
   )
 

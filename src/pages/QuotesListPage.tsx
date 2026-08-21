@@ -95,7 +95,8 @@ export default function QuotesListPage() {
       console.error('Erro ao gerar proposta comercial:', err)
       toast({
         title: 'Erro ao gerar PDF',
-        description: 'Não foi possível gerar a Proposta Comercial.',
+        description:
+          err instanceof Error ? err.message : 'Não foi possível gerar a Proposta Comercial.',
         variant: 'destructive',
       })
     } finally {
@@ -115,7 +116,8 @@ export default function QuotesListPage() {
       console.error('Erro ao gerar análise de custo:', err)
       toast({
         title: 'Erro ao gerar PDF',
-        description: 'Não foi possível gerar a Análise de Custo.',
+        description:
+          err instanceof Error ? err.message : 'Não foi possível gerar a Análise de Custo.',
         variant: 'destructive',
       })
     } finally {
