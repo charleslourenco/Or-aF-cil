@@ -27,6 +27,14 @@ export interface CustoFixo {
   created_at?: string
 }
 
+export interface CustoVariavel {
+  id: string
+  config_id: string
+  descricao: string
+  valor: number
+  created_at?: string
+}
+
 export interface ComissaoPersonalizada {
   id: string
   config_id: string
@@ -38,6 +46,7 @@ export interface ComissaoPersonalizada {
 export interface ConfigEngenhariaResult {
   config: ConfigEngenharia | null
   custosFixos: CustoFixo[]
+  custosVariaveis: CustoVariavel[]
   comissoesPersonalizadas: ComissaoPersonalizada[]
   error: string | null
 }
@@ -66,13 +75,20 @@ export async function fetchConfigEngenharia(): Promise<ConfigEngenhariaResult> {
     return {
       config: null,
       custosFixos: [],
+      custosVariaveis: [],
       comissoesPersonalizadas: [],
       error: configError.message,
     }
   }
 
   if (!configData) {
-    return { config: null, custosFixos: [], comissoesPersonalizadas: [], error: null }
+    return {
+      config: null,
+      custosFixos: [],
+      custosVariaveis: [],
+      comissoesPersonalizadas: [],
+      error: null,
+    }
   }
 
   const config = configData as unknown as ConfigEngenharia
@@ -85,7 +101,30 @@ export async function fetchConfigEngenharia(): Promise<ConfigEngenhariaResult> {
 
   if (custosError) {
     console.error('Erro ao buscar custos fixos:', custosError)
-    return { config, custosFixos: [], comissoesPersonalizadas: [], error: custosError.message }
+    return {
+      config,
+      custosFixos: [],
+      custosVariaveis: [],
+      comissoesPersonalizadas: [],
+      error: custosError.message,
+    }
+  }
+
+  const { data: custosVariaveisData, error: custosVariaveisError } = await db
+    .from('custos_variaveis')
+    .select('id, config_id, descricao, valor, created_at')
+    .eq('config_id', config.id)
+    .order('created_at', { ascending: true })
+
+  if (custosVariaveisError) {
+    console.error('Erro ao buscar custos variáveis:', custosVariaveisError)
+    return {
+      config,
+      custosFixos: (custosData ?? []) as unknown as CustoFixo[],
+      custosVariaveis: [],
+      comissoesPersonalizadas: [],
+      error: custosVariaveisError.message,
+    }
   }
 
   const { data: comissoesData, error: comissoesError } = await db
@@ -99,6 +138,7 @@ export async function fetchConfigEngenharia(): Promise<ConfigEngenhariaResult> {
     return {
       config,
       custosFixos: (custosData ?? []) as unknown as CustoFixo[],
+      custosVariaveis: (custosVariaveisData ?? []) as unknown as CustoVariavel[],
       comissoesPersonalizadas: [],
       error: comissoesError.message,
     }
@@ -107,6 +147,7 @@ export async function fetchConfigEngenharia(): Promise<ConfigEngenhariaResult> {
   return {
     config,
     custosFixos: (custosData ?? []) as unknown as CustoFixo[],
+    custosVariaveis: (custosVariaveisData ?? []) as unknown as CustoVariavel[],
     comissoesPersonalizadas: (comissoesData ?? []) as unknown as ComissaoPersonalizada[],
     error: null,
   }
@@ -114,11 +155,12 @@ export async function fetchConfigEngenharia(): Promise<ConfigEngenhariaResult> {
 
 /**
  * Upsert na config (insert se não existir, update caso contrário) e sincroniza
- * os custos fixos (deleta todos do config_id e reinsere a lista).
+ * os custos fixos, custos variáveis e comissões (deleta todos do config_id e reinsere as listas).
  */
 export async function saveConfigEngenharia(
   config: ConfigEngenharia,
   custosFixos: CustoFixo[],
+  custosVariaveis: CustoVariavel[] = [],
   comissoesPersonalizadas: ComissaoPersonalizada[] = [],
 ): Promise<SaveConfigEngenhariaResult> {
   const payload = {
@@ -184,6 +226,34 @@ export async function saveConfigEngenharia(
     if (insertCustosError) {
       console.error('Erro ao inserir custos fixos:', insertCustosError)
       return { success: false, error: insertCustosError.message }
+    }
+  }
+
+  // Sincroniza custos variáveis: deleta todos e reinsere
+  const { error: deleteVariaveisError } = await db
+    .from('custos_variaveis')
+    .delete()
+    .eq('config_id', configId)
+  if (deleteVariaveisError) {
+    console.error('Erro ao remover custos variáveis antigos:', deleteVariaveisError)
+    return { success: false, error: deleteVariaveisError.message }
+  }
+
+  const toInsertVariaveis = custosVariaveis
+    .filter((c) => c.descricao.trim() !== '')
+    .map((c) => ({
+      config_id: configId,
+      descricao: c.descricao.trim(),
+      valor: c.valor,
+    }))
+
+  if (toInsertVariaveis.length > 0) {
+    const { error: insertVariaveisError } = await db
+      .from('custos_variaveis')
+      .insert(toInsertVariaveis)
+    if (insertVariaveisError) {
+      console.error('Erro ao inserir custos variáveis:', insertVariaveisError)
+      return { success: false, error: insertVariaveisError.message }
     }
   }
 

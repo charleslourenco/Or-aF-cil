@@ -11,6 +11,7 @@ import {
   saveConfigEngenharia,
   type ConfigEngenharia,
   type CustoFixo,
+  type CustoVariavel,
   type ComissaoPersonalizada,
 } from '@/services/engenharia'
 
@@ -31,6 +32,8 @@ const DEFAULT_CUSTOS: CustoFixo[] = [
   { id: crypto.randomUUID(), config_id: '', descricao: 'Contador', valor: 500 },
 ]
 
+const DEFAULT_CUSTOS_VARIAVEIS: CustoVariavel[] = []
+
 const DEFAULT_COMISSOES: ComissaoPersonalizada[] = []
 
 // ----- Formatação -----
@@ -50,6 +53,7 @@ const parseNum = (v: string): number => {
 export default function EngineeringPage() {
   const [config, setConfig] = useState<ConfigEngenharia>(DEFAULT_CONFIG)
   const [custosFixos, setCustosFixos] = useState<CustoFixo[]>(DEFAULT_CUSTOS)
+  const [custosVariaveis, setCustosVariaveis] = useState<CustoVariavel[]>(DEFAULT_CUSTOS_VARIAVEIS)
   const [comissoesPersonalizadas, setComissoesPersonalizadas] =
     useState<ComissaoPersonalizada[]>(DEFAULT_COMISSOES)
   const [loading, setLoading] = useState(true)
@@ -68,6 +72,7 @@ export default function EngineeringPage() {
       const {
         config: cfg,
         custosFixos: cf,
+        custosVariaveis: cv,
         comissoesPersonalizadas: cps,
         error: err,
       } = await fetchConfigEngenharia()
@@ -79,6 +84,7 @@ export default function EngineeringPage() {
         setCustosFixos(
           cf.length > 0 ? cf : DEFAULT_CUSTOS.map((c) => ({ ...c, config_id: cfg.id })),
         )
+        setCustosVariaveis(cv.length > 0 ? cv : [])
         setComissoesPersonalizadas(
           cps.length > 0 ? cps : DEFAULT_COMISSOES.map((c) => ({ ...c, config_id: cfg.id })),
         )
@@ -94,8 +100,12 @@ export default function EngineeringPage() {
   // ----- Cálculos derivados (DRE) -----
   const dre = useMemo(() => {
     const totalCustosFixos = round2(custosFixos.reduce((s, c) => s + (Number(c.valor) || 0), 0))
+    const totalCustosVariaveis = round2(
+      custosVariaveis.reduce((s, c) => s + (Number(c.valor) || 0), 0),
+    )
+    const totalCustosEmpresa = round2(totalCustosFixos + totalCustosVariaveis)
     const meta = Number(config.meta_faturamento) || 0
-    const indiceRateio = meta > 0 ? (totalCustosFixos / meta) * 100 : 0
+    const indiceRateio = meta > 0 ? (totalCustosEmpresa / meta) * 100 : 0
     const indiceRateioNum = meta > 0 ? indiceRateio : null
 
     const custoMaterial = Number(custoMaterialSimulador) || 0
@@ -130,6 +140,8 @@ export default function EngineeringPage() {
 
     return {
       totalCustosFixos,
+      totalCustosVariaveis,
+      totalCustosEmpresa,
       indiceRateio,
       indiceRateioNum,
       custoMaterial,
@@ -144,7 +156,14 @@ export default function EngineeringPage() {
       lucroLiquido,
       margemLiquida,
     }
-  }, [config, custosFixos, comissoesPersonalizadas, custoMaterialSimulador, markupSimulador])
+  }, [
+    config,
+    custosFixos,
+    custosVariaveis,
+    comissoesPersonalizadas,
+    custoMaterialSimulador,
+    markupSimulador,
+  ])
 
   // ----- Handlers de custos fixos -----
   const addCustoFixo = () => {
@@ -160,6 +179,26 @@ export default function EngineeringPage() {
 
   const updateCustoFixo = (id: string, field: 'descricao' | 'valor', value: string) => {
     setCustosFixos((prev) =>
+      prev.map((c) =>
+        c.id === id ? { ...c, [field]: field === 'valor' ? parseNum(value) : value } : c,
+      ),
+    )
+  }
+
+  // ----- Handlers de custos variáveis -----
+  const addCustoVariavel = () => {
+    setCustosVariaveis((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), config_id: config.id, descricao: '', valor: 0 },
+    ])
+  }
+
+  const removeCustoVariavel = (id: string) => {
+    setCustosVariaveis((prev) => prev.filter((c) => c.id !== id))
+  }
+
+  const updateCustoVariavel = (id: string, field: 'descricao' | 'valor', value: string) => {
+    setCustosVariaveis((prev) =>
       prev.map((c) =>
         c.id === id ? { ...c, [field]: field === 'valor' ? parseNum(value) : value } : c,
       ),
@@ -196,6 +235,7 @@ export default function EngineeringPage() {
     const { success, error: err } = await saveConfigEngenharia(
       config,
       custosFixos,
+      custosVariaveis,
       comissoesPersonalizadas,
     )
     if (success) {
@@ -203,6 +243,7 @@ export default function EngineeringPage() {
       const {
         config: cfg,
         custosFixos: cf,
+        custosVariaveis: cv,
         comissoesPersonalizadas: cps,
         error: fetchErr,
       } = await fetchConfigEngenharia()
@@ -212,6 +253,7 @@ export default function EngineeringPage() {
         setCustosFixos(
           cf.length > 0 ? cf : DEFAULT_CUSTOS.map((c) => ({ ...c, config_id: cfg.id })),
         )
+        setCustosVariaveis(cv.length > 0 ? cv : [])
         setComissoesPersonalizadas(
           cps.length > 0 ? cps : DEFAULT_COMISSOES.map((c) => ({ ...c, config_id: cfg.id })),
         )
@@ -232,13 +274,20 @@ export default function EngineeringPage() {
     setLoading(true)
     setError(null)
     fetchConfigEngenharia().then(
-      ({ config: cfg, custosFixos: cf, comissoesPersonalizadas: cps, error: err }) => {
+      ({
+        config: cfg,
+        custosFixos: cf,
+        custosVariaveis: cv,
+        comissoesPersonalizadas: cps,
+        error: err,
+      }) => {
         if (err) setError(err)
         else if (cfg) {
           setConfig(cfg)
           setCustosFixos(
             cf.length > 0 ? cf : DEFAULT_CUSTOS.map((c) => ({ ...c, config_id: cfg.id })),
           )
+          setCustosVariaveis(cv.length > 0 ? cv : [])
           setComissoesPersonalizadas(
             cps.length > 0 ? cps : DEFAULT_COMISSOES.map((c) => ({ ...c, config_id: cfg.id })),
           )
@@ -348,8 +397,14 @@ export default function EngineeringPage() {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-slate-800">Custos Fixos da Operação</h4>
+              {/* Subseção: Custos Fixos */}
+              <div className="space-y-3 pt-1 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-slate-800">Custos Fixos da Operação</h4>
+                  <span className="text-xs text-slate-500 font-medium">
+                    Subtotal: {fmtBRL(dre.totalCustosFixos)}
+                  </span>
+                </div>
 
                 <div className="space-y-2">
                   {custosFixos.map((c) => (
@@ -394,11 +449,87 @@ export default function EngineeringPage() {
                 </Button>
               </div>
 
-              <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
-                <span className="text-sm font-medium text-slate-700">Total de Custos Fixos:</span>
-                <span className="text-base font-bold text-slate-900">
-                  {fmtBRL(dre.totalCustosFixos)}
-                </span>
+              {/* Subseção: Custos Variáveis */}
+              <div className="space-y-3 pt-4 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800">Custos Variáveis</h4>
+                    <p className="text-xs text-slate-400">
+                      Ex.: Energia Elétrica, Manutenção, Frete, Embalagens
+                    </p>
+                  </div>
+                  <span className="text-xs text-slate-500 font-medium">
+                    Subtotal: {fmtBRL(dre.totalCustosVariaveis)}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {custosVariaveis.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic py-1">
+                      Nenhum custo variável adicionado.
+                    </p>
+                  ) : (
+                    custosVariaveis.map((c) => (
+                      <div key={c.id} className="flex items-center gap-2">
+                        <Input
+                          type="text"
+                          placeholder="Ex.: Energia Elétrica"
+                          value={c.descricao}
+                          onChange={(e) => updateCustoVariavel(c.id, 'descricao', e.target.value)}
+                          className="flex-1"
+                        />
+                        <div className="relative w-36">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                            R$
+                          </span>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="0,00"
+                            value={c.valor}
+                            onChange={(e) => updateCustoVariavel(c.id, 'valor', e.target.value)}
+                            className="pl-9"
+                          />
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeCustoVariavel(c.id)}
+                          className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 shrink-0"
+                          aria-label="Remover custo variável"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <Button
+                  variant="outline"
+                  onClick={addCustoVariavel}
+                  className="gap-2 w-full sm:w-auto"
+                >
+                  <Plus className="w-4 h-4" />
+                  Adicionar Custo Variável
+                </Button>
+              </div>
+
+              {/* Total de Custos da Empresa */}
+              <div className="rounded-lg bg-slate-100/80 border border-slate-200 px-4 py-3.5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-900">
+                    Total de Custos da Empresa:
+                  </span>
+                  <span className="text-lg font-bold text-slate-900">
+                    {fmtBRL(dre.totalCustosEmpresa)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-slate-500 border-t border-slate-200/60 pt-1.5">
+                  <span>Fixos: {fmtBRL(dre.totalCustosFixos)}</span>
+                  <span>Variáveis: {fmtBRL(dre.totalCustosVariaveis)}</span>
+                </div>
               </div>
 
               {/* Índice de Rateio */}
@@ -407,7 +538,7 @@ export default function EngineeringPage() {
                   <div>
                     <p className="text-sm font-medium text-emerald-800">📐 Índice de Rateio</p>
                     <p className="text-xs text-emerald-600/80 mt-0.5">
-                      (Total Custos Fixos ÷ Meta Faturamento)
+                      (Total Custos da Empresa ÷ Meta Faturamento)
                     </p>
                   </div>
                   <span className="text-2xl font-extrabold text-emerald-700">
