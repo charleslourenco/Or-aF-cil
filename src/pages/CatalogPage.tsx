@@ -113,18 +113,21 @@ export default function CatalogPage() {
   const carregar = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const data = await fetchCatalogoMateriais()
-    if (data === null) {
-      // Serviço sempre retorna array (vazio em erro), então tratamento extra:
-      setError('Não foi possível carregar o catálogo. Verifique sua conexão.')
+    try {
+      const data = await fetchCatalogoMateriais()
+      if (data === null) {
+        setError('Não foi possível carregar o catálogo. Verifique sua conexão com o servidor.')
+        setMateriais([])
+      } else {
+        setMateriais(data)
+      }
+    } catch (err) {
+      console.error('Erro ao carregar catálogo:', err)
+      setError('Ocorreu um erro inesperado ao carregar o catálogo.')
       setMateriais([])
-    } else if (data.length === 0) {
-      // Pode ser tabela vazia OU erro silencioso — tentamos distinguir pelo loading.
-      setMateriais([])
-    } else {
-      setMateriais(data)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
   useEffect(() => {
@@ -187,48 +190,69 @@ export default function CatalogPage() {
       nivel_padrao: form.nivel_padrao,
     }
 
-    const ok = editingId ? await updateMaterial(editingId, payload) : await createMaterial(payload)
+    try {
+      const result = editingId
+        ? await updateMaterial(editingId, payload)
+        : await createMaterial(payload)
 
-    setSaving(false)
+      if (!result) {
+        toast({
+          title: 'Erro ao salvar',
+          description: editingId
+            ? 'Não foi possível atualizar o material. Verifique os dados e tente novamente.'
+            : 'Não foi possível criar o material. Verifique os dados e tente novamente.',
+          variant: 'destructive',
+        })
+        return
+      }
 
-    if (!ok) {
       toast({
-        title: 'Erro ao salvar',
-        description: editingId
-          ? 'Não foi possível atualizar o material.'
-          : 'Não foi possível criar o material.',
+        title: editingId ? 'Material atualizado!' : 'Material cadastrado!',
+        description: `${payload.nome_material} foi salvo no catálogo com sucesso.`,
+      })
+      setModalOpen(false)
+      await carregar()
+    } catch (err) {
+      console.error('Exceção ao salvar material:', err)
+      toast({
+        title: 'Erro inesperado',
+        description: 'Ocorreu um erro ao tentar salvar o material.',
         variant: 'destructive',
       })
-      return
+    } finally {
+      setSaving(false)
     }
-
-    toast({
-      title: editingId ? 'Material atualizado!' : 'Material cadastrado!',
-      description: `${payload.nome_material} foi salvo no catálogo.`,
-    })
-    setModalOpen(false)
-    await carregar()
   }
 
   const handleConfirmarExclusao = async () => {
     if (!deleteTarget) return
     setDeleting(true)
-    const ok = await deleteMaterial(deleteTarget.id)
-    setDeleting(false)
-    if (!ok) {
+    try {
+      const ok = await deleteMaterial(deleteTarget.id)
+      if (!ok) {
+        toast({
+          title: 'Erro ao excluir',
+          description: 'Não foi possível excluir o material. Tente novamente.',
+          variant: 'destructive',
+        })
+        return
+      }
       toast({
-        title: 'Erro ao excluir',
-        description: 'Não foi possível excluir o material.',
+        title: 'Material excluído',
+        description: `${deleteTarget.nome_material} foi removido do catálogo.`,
+      })
+      setDeleteTarget(null)
+      await carregar()
+    } catch (err) {
+      console.error('Exceção ao excluir material:', err)
+      toast({
+        title: 'Erro inesperado',
+        description: 'Ocorreu um erro ao tentar excluir o material.',
         variant: 'destructive',
       })
-      return
+    } finally {
+      setDeleting(false)
     }
-    toast({
-      title: 'Material excluído',
-      description: `${deleteTarget.nome_material} foi removido do catálogo.`,
-    })
-    setDeleteTarget(null)
-    await carregar()
   }
 
   return (
