@@ -40,6 +40,8 @@ import { CustomerDropzone, UploadedFileState } from '@/components/CustomerDropzo
 import { LibraryMatchCard } from '@/components/LibraryMatchCard'
 import { PricingTable } from '@/components/PricingTable'
 import { FinalizeQuoteModal } from '@/components/FinalizeQuoteModal'
+import { AddFromCatalogModal } from '@/components/AddFromCatalogModal'
+import { AddCustomItemModal } from '@/components/AddCustomItemModal'
 import { BudgetItem } from '@/data/mockData'
 import { createOrcamento, updateOrcamento, fetchOrcamentoById } from '@/services/orcamentos'
 import { fetchTemplatesEngenharia, TemplateEngenharia } from '@/services/templates'
@@ -101,6 +103,10 @@ export default function Index() {
 
   // Itens manuais adicionados pelo usuário (somam-se à BOM dinâmica).
   const [manualItems, setManualItems] = useState<BudgetItem[]>([])
+
+  // Modais de adição de itens
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false)
+  const [isCustomItemModalOpen, setIsCustomItemModalOpen] = useState(false)
 
   // Modal confirmation state
   const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false)
@@ -524,17 +530,33 @@ export default function Index() {
 
   /**
    * Executa o match via Edge Function 'analisar-imagem' do Supabase.
-   * Retorna o id do módulo encontrado e a justificativa.
+   * Retorna o payload com modulos_detectados, ferragens_obrigatorias e justificativa.
    */
   const runOpenAIVisionMatch = async (
     fileState: UploadedFileState,
     modulos: TemplateEngenharia[],
-  ): Promise<{ idModulo: string | null; justificativa: string }> => {
+  ): Promise<{
+    modulos_detectados?: Array<{
+      codigo_modulo: string
+      nome: string
+      dimensao_estimada?: { largura: number; altura: number; profundidade: number }
+      adaptacoes?: string
+    }>
+    ferragens_obrigatorias?: Array<{
+      catalogo_id: string
+      descricao: string
+      quantidade: number
+      justificativa: string
+    }>
+    justificativa?: string
+    id_modulo_encontrado?: string | null
+    idModulo?: string | null
+  }> => {
     // Converte a primeira imagem para Base64.
     const imagemBase64 = await fileToBase64(fileState)
 
     const { data, error } = await supabase.functions.invoke('analisar-imagem', {
-      body: { imagemBase64, modulos },
+      body: { imagemBase64, modulos, catalogoMateriais },
     })
 
     if (error) {
@@ -545,11 +567,7 @@ export default function Index() {
       throw new Error(data.error)
     }
 
-    const idModulo: string | null = data?.id_modulo_encontrado ?? null
-    const justificativa: string =
-      data?.justificativa ?? 'Match identificado pela análise visual da IA.'
-
-    return { idModulo, justificativa }
+    return data
   }
 
   /**
@@ -624,31 +642,121 @@ export default function Index() {
     const primeiraImagem = files[0]
 
     runOpenAIVisionMatch(primeiraImagem, modulosAtuais)
-      .then(({ idModulo, justificativa }) => {
-        // Tenta encontrar o módulo pelo ID retornado; se não achar, busca
-        // pelo nome; se ainda assim não achar, mantém o primeiro módulo.
-        let moduloEncontrado: TemplateEngenharia | undefined
+      .then((data) => {
+        const modulosDetectados = data.modulos_detectados
+        const ferragensObrigatorias = data.ferragens_obrigatorias ?? []
+        const justificativaGeral =
+          data.justificativa || 'Match identificado pela análise visual da IA.'
 
-        if (idModulo) {
-          moduloEncontrado = modulosAtuais.find((m) => m.id === idModulo)
+        if (Array.isArray(modulosDetectados) && modulosDetectados.length > 0) {
+          // 1. Seleciona o primeiro módulo detectado
+          const primeiroModulo = modulosDetectados[0]
+          const codigoModulo = primeiroModulo.codigo_modulo
+
+          let moduloEncontrado = modulosAtuais.find((m) => m.id === codigoModulo)
+          if (!moduloEncontrado) {
+            moduloEncontrado = modulosAtuais.find(
+              (m) =>
+                m.nome_template.toLowerCase() === codigoModulo.toLowerCase() ||
+                m.nome_template.toLowerCase() === primeiroModulo.nome.toLowerCase(),
+            )
+          }
+
+          const idFinal = moduloEncontrado?.id ?? modulosAtuais[0]?.id ?? ''
+          setSelectedModuleId(idFinal)
+
+          // 2. Se houver dimensao_estimada, preenche o estado dimensoes
+          if (primeiroModulo.dimensao_estimada) {
+            const { largura, altura, profundidade } = primeiroModulo.dimensao_estimada
+            setDimensoes({
+              largura: largura > 0 ? largura : 1800,
+              altura: altura > 0 ? altura : 2200,
+              profundidade: profundidade > 0 ? profundidade : 600,
+            })
+          }
+
+          // 3. Adiciona cada ferragem obrigatória como item manual
+          if (ferragensObrigatorias.length > 0) {
+            const effectiveMarkup = markupEngenharia > 0 ? markupEngenharia : 2.5
+            const novasFerragens: BudgetItem[] = ferragensObrigatorias.map((f, idx) => {
+              // Buscar preco_custo do catalogoMateriais pelo catalogo_id ou usar 0
+              const matNoCatalogo = catalogoMateriais.find(
+                (c) =>
+                  c.id === f.catalogo_id ||
+                  c.nome_material.toLowerCase() === f.descricao.toLowerCase(),
+              )
+              const unitCost = matNoCatalogo ? Number(matNoCatalogo.preco_custo) || 0 : 0
+              const qtd = f.quantidade > 0 ? f.quantidade : 1
+              const totalCost = unitCost * qtd
+              const salePrice = Math.round(totalCost * effectiveMarkup * 100) / 100
+
+              return {
+                id: `ferragem-ia-${f.catalogo_id || 'item'}-${Date.now()}-${idx}`,
+                description: f.descricao,
+                material: matNoCatalogo?.categoria || 'Ferragem',
+                metragem: qtd,
+                unidade:
+                  matNoCatalogo?.unidade === 'm²' ||
+                  matNoCatalogo?.unidade === 'm' ||
+                  matNoCatalogo?.unidade === 'jogo'
+                    ? matNoCatalogo.unidade
+                    : undefined,
+                unitCost,
+                totalCost,
+                markup: effectiveMarkup,
+                salePrice,
+              }
+            })
+
+            setManualItems((prev) => [...prev, ...novasFerragens])
+
+            toast({
+              title: 'Ferragens Obrigatórias Adicionadas',
+              description: `✓ IA adicionou ${novasFerragens.length} ferragens obrigatórias ao orçamento (ex: corrediças, puxadores)`,
+            })
+          }
+
+          // Se houver mais de 1 módulo detectado, mostra toast avisando
+          if (modulosDetectados.length > 1) {
+            toast({
+              title: `IA detectou ${modulosDetectados.length} módulos no ambiente`,
+              description: `O primeiro (${primeiroModulo.nome}) foi selecionado. Adicione os demais manualmente.`,
+            })
+          }
+
+          setMatchJustificativa(justificativaGeral)
+          setIsAnalyzing(false)
+
+          toast({
+            title: '✓ Match IA Concluído!',
+            description: justificativaGeral,
+          })
+        } else {
+          // Fallback para resposta antiga ou id_modulo_encontrado
+          const idModuloAntigo = data.id_modulo_encontrado || data.idModulo
+          let moduloEncontrado: TemplateEngenharia | undefined
+
+          if (idModuloAntigo) {
+            moduloEncontrado = modulosAtuais.find((m) => m.id === idModuloAntigo)
+          }
+
+          if (!moduloEncontrado && idModuloAntigo) {
+            moduloEncontrado = modulosAtuais.find(
+              (m) => m.nome_template.toLowerCase() === idModuloAntigo.toLowerCase(),
+            )
+          }
+
+          const idFinal = moduloEncontrado?.id ?? modulosAtuais[0]?.id ?? ''
+
+          setSelectedModuleId(idFinal)
+          setMatchJustificativa(justificativaGeral)
+          setIsAnalyzing(false)
+
+          toast({
+            title: '✓ Match IA Concluído!',
+            description: justificativaGeral,
+          })
         }
-
-        if (!moduloEncontrado && idModulo) {
-          moduloEncontrado = modulosAtuais.find(
-            (m) => m.nome_template.toLowerCase() === idModulo.toLowerCase(),
-          )
-        }
-
-        const idFinal = moduloEncontrado?.id ?? modulosAtuais[0]?.id ?? ''
-
-        setSelectedModuleId(idFinal)
-        setMatchJustificativa(justificativa)
-        setIsAnalyzing(false)
-
-        toast({
-          title: '✓ Match IA Concluído!',
-          description: justificativa,
-        })
       })
       .catch((err) => {
         console.error('Falha na análise visual da IA (Edge Function):', err)
@@ -1712,6 +1820,27 @@ export default function Index() {
             </div>
           )}
 
+          {/* 🌟 BOTÕES DE ADIÇÃO MANUAL DE ITENS */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsCatalogModalOpen(true)}
+              className="flex-1 h-11 border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-800 font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2"
+            >
+              <Package className="w-4 h-4 text-slate-700" />+ Adicionar do Catálogo
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsCustomItemModalOpen(true)}
+              className="flex-1 h-11 border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-800 font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4 text-slate-700" />+ Item Avulso (Fora do Catálogo)
+            </Button>
+          </div>
+
           {/* Rodapé de Totais Consolidados — exibido quando há BOM válida */}
           {dimensoesValidas && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1848,6 +1977,34 @@ export default function Index() {
           </div>
         </div>
       </aside>
+      {/* Modais de Adição de Itens */}
+      <AddFromCatalogModal
+        isOpen={isCatalogModalOpen}
+        onClose={() => setIsCatalogModalOpen(false)}
+        catalogoMateriais={catalogoMateriais}
+        markupEngenharia={markupEngenharia}
+        onAddItem={(item) => {
+          setManualItems((prev) => [...prev, item])
+          toast({
+            title: 'Item adicionado',
+            description: `${item.description} foi incluído no orçamento.`,
+          })
+        }}
+      />
+
+      <AddCustomItemModal
+        isOpen={isCustomItemModalOpen}
+        onClose={() => setIsCustomItemModalOpen(false)}
+        markupEngenharia={markupEngenharia}
+        onAddItem={(item) => {
+          setManualItems((prev) => [...prev, item])
+          toast({
+            title: 'Item avulso adicionado',
+            description: `${item.description} foi incluído no orçamento.`,
+          })
+        }}
+      />
+
       {/* Finalize Confirmation Modal */}
       <FinalizeQuoteModal
         isOpen={isFinalizeModalOpen}
@@ -1866,7 +2023,7 @@ export default function Index() {
         items={pricingItems}
         isSaved={isQuoteSaved}
         isSaving={isSavingQuote}
-      />{' '}
+      />
     </div>
   )
 }
