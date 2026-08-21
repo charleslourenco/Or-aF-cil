@@ -19,9 +19,10 @@ import {
 } from 'lucide-react'
 import { useTheme } from '@/components/ThemeProvider'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
 
 interface NavItem {
   name: string
@@ -44,6 +45,7 @@ const navItems: NavItem[] = [
 export default function Layout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const location = useLocation()
+  const { user, profile, signOut } = useAuth()
 
   const isCurrent = (href: string) => {
     if (href === '/' && location.pathname === '/') return true
@@ -246,29 +248,34 @@ export default function Layout() {
           {/* User Footer inside Sidebar */}
           <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-3 min-w-0">
-                <Avatar className="w-9 h-9 border border-slate-200 dark:border-slate-700">
-                  <AvatarImage
-                    src="https://img.usecurling.com/ppl/medium?gender=male&seed=42"
-                    alt="Charles Lourenço da Luz"
-                  />
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <Avatar className="w-9 h-9 border border-slate-200 dark:border-slate-700 shrink-0">
                   <AvatarFallback className="bg-emerald-600 text-white font-bold text-xs">
-                    CL
+                    {(profile?.nome || user?.email || 'U')[0].toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p
                     className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate"
-                    title="Charles Lourenço da Luz"
+                    title={profile?.nome || user?.email?.split('@')[0] || 'Usuário'}
                   >
-                    Charles Lourenço da Luz
+                    {profile?.nome || user?.email?.split('@')[0] || 'Usuário'}
                   </p>
-                  <p
-                    className="text-[11px] text-slate-500 dark:text-slate-400 truncate"
-                    title="Bender Haussform"
-                  >
-                    Bender Haussform
-                  </p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {profile?.role === 'admin' ? (
+                      <Badge className="bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 border-0 text-[10px] px-1.5 py-0 h-4 font-semibold">
+                        Administrador
+                      </Badge>
+                    ) : profile?.role === 'editor' ? (
+                      <Badge className="bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 hover:bg-blue-100 border-0 text-[10px] px-1.5 py-0 h-4 font-semibold">
+                        Editor
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 border-0 text-[10px] px-1.5 py-0 h-4 font-semibold">
+                        Visualizador
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -276,7 +283,9 @@ export default function Layout() {
                 type="button"
                 className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-colors shrink-0"
                 title="Sair do sistema"
-                onClick={() => alert('Sessão ativa como Charles Lourenço da Luz.')}
+                onClick={async () => {
+                  await signOut()
+                }}
               >
                 <LogOut className="w-4 h-4" />
               </button>

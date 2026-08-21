@@ -4,6 +4,10 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ThemeProvider } from '@/components/ThemeProvider'
+import { AuthProvider } from '@/hooks/use-auth'
+import AuthGuard from '@/components/AuthGuard'
+import LoginPage from './pages/LoginPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import Index from './pages/Index'
 import QuotesListPage from './pages/QuotesListPage'
 import LibraryPage from './pages/LibraryPage'
@@ -19,25 +23,37 @@ import Layout from './components/Layout'
 
 const App = () => (
   <ThemeProvider defaultTheme="dark" storageKey="orca-facil-theme">
-    <BrowserRouter>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/novo-orcamento" element={<Index />} />
-            <Route path="/orcamentos" element={<QuotesListPage />} />
-            <Route path="/biblioteca" element={<LibraryPage />} />
-            <Route path="/catalogo" element={<CatalogPage />} />
-            <Route path="/engenharia-financeira" element={<EngineeringPage />} />
-            <Route path="/configuracoes" element={<SettingsPage />} />
-            <Route path="/usuarios" element={<UsersPage />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </TooltipProvider>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/esqueceu-senha" element={<ForgotPasswordPage />} />
+
+            {/* Protected Routes inside AuthGuard */}
+            <Route element={<AuthGuard />}>
+              <Route element={<Layout />}>
+                <Route path="/" element={<DashboardPage />} />
+                <Route path="/painel" element={<DashboardPage />} />
+                <Route path="/novo-orcamento" element={<Index />} />
+                <Route path="/orcamentos" element={<QuotesListPage />} />
+                <Route path="/biblioteca" element={<LibraryPage />} />
+                <Route path="/catalogo" element={<CatalogPage />} />
+                <Route path="/engenharia-financeira" element={<EngineeringPage />} />
+                <Route path="/configuracoes" element={<SettingsPage />} />
+                <Route path="/usuarios" element={<UsersPage />} />
+              </Route>
+            </Route>
+
+            {/* 404 Route */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </TooltipProvider>
+      </BrowserRouter>
+    </AuthProvider>
   </ThemeProvider>
 )
 

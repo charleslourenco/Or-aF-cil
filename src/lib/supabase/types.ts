@@ -180,33 +180,45 @@ export type Database = {
       Orcamentos: {
         Row: {
           ambiente: string | null
+          bom_json: Json | null
           cliente_nome: string
           created_at: string | null
           data: string | null
+          dre_json: Json | null
+          forma_pagamento: string | null
           id: string
           modulo: string | null
+          observacoes: string | null
           status: string | null
           updated_at: string | null
           valor_total: number | null
         }
         Insert: {
           ambiente?: string | null
+          bom_json?: Json | null
           cliente_nome: string
           created_at?: string | null
           data?: string | null
+          dre_json?: Json | null
+          forma_pagamento?: string | null
           id?: string
           modulo?: string | null
+          observacoes?: string | null
           status?: string | null
           updated_at?: string | null
           valor_total?: number | null
         }
         Update: {
           ambiente?: string | null
+          bom_json?: Json | null
           cliente_nome?: string
           created_at?: string | null
           data?: string | null
+          dre_json?: Json | null
+          forma_pagamento?: string | null
           id?: string
           modulo?: string | null
+          observacoes?: string | null
           status?: string | null
           updated_at?: string | null
           valor_total?: number | null
