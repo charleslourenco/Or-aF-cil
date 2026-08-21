@@ -48,6 +48,10 @@ import { ToastAction } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { calcularBOM, custoConsolidado, valorConsolidado, type PadraoProjeto } from '@/lib/pricing'
 import { fetchCatalogoMateriais, type CatalogoMaterial } from '@/services/catalogo'
+import { fetchPerfilEmpresa, type PerfilEmpresa } from '@/services/empresa'
+import { fetchConfigEngenharia } from '@/services/engenharia'
+import { gerarPropostaComercial, gerarAnaliseCusto } from '@/lib/pdf'
+import type { Orcamento, OrcamentoBOMItem, OrcamentoDRE } from '@/services/orcamentos'
 import { supabase } from '@/lib/supabase/client'
 
 // Ambientes permitidos no Select (array estático conforme especificação).
@@ -97,6 +101,12 @@ export default function Index() {
 
   // Modal confirmation state
   const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false)
+  const [isSavingQuote, setIsSavingQuote] = useState(false)
+  const [isQuoteSaved, setIsQuoteSaved] = useState(false)
+  const [savedOrcamentoRecord, setSavedOrcamentoRecord] = useState<Orcamento | null>(null)
+
+  // Perfil da Empresa (para PDFs)
+  const [perfilEmpresa, setPerfilEmpresa] = useState<PerfilEmpresa | null>(null)
 
   // 📐 DIMENSÕES REAIS DO MÓDULO (inputs manuais — defaults paramétricos).
   const [dimensoes, setDimensoes] = useState({
@@ -171,6 +181,19 @@ export default function Index() {
       .catch((err) => {
         console.error('Falha ao carregar catálogo de materiais:', err)
       })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // FETCH DO PERFIL DA EMPRESA (para dados do cabeçalho dos relatórios em PDF)
+  useEffect(() => {
+    let active = true
+    fetchPerfilEmpresa().then(({ data }) => {
+      if (active && data) {
+        setPerfilEmpresa(data)
+      }
+    })
     return () => {
       active = false
     }
@@ -581,33 +604,178 @@ export default function Index() {
       return
     }
 
+    setIsQuoteSaved(false)
+    setSavedOrcamentoRecord(null)
     setIsFinalizeModalOpen(true)
   }
 
   const handleConfirmFinalize = async () => {
-    setIsFinalizeModalOpen(false)
-    const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
+    setIsSavingQuote(true)
+    try {
+      const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
+      const totalCost = pricingItems.reduce((acc, it) => acc + (Number(it.totalCost) || 0), 0)
 
-    const created = await createOrcamento({
-      cliente_nome: clientName,
-      ambiente: ambienteSelecionado || room || null,
-      modulo: currentModuleName || null,
-      valor_total: totalSale,
-      status: 'Aprovado',
-    })
+      // Busca parâmetros reais da DRE de configuracoes_engenharia
+      const { config } = await fetchConfigEngenharia()
+      const impostosPercent = config?.impostos_percent ?? 10.0
+      const comissaoPercent = config?.comissoes_percent ?? 5.0
+      const custoFixoPercent = 8.0 // Rateio estimado
 
-    if (created) {
-      toast({
-        title: '✓ Orçamento Salvo com Sucesso!',
-        description: `Orçamento de ${clientName} cadastrado no sistema.`,
+      const impostosValor = Math.round(((totalSale * impostosPercent) / 100) * 100) / 100
+      const comissaoValor = Math.round(((totalSale * comissaoPercent) / 100) * 100) / 100
+      const custoFixoValor = Math.round(((totalSale * custoFixoPercent) / 100) * 100) / 100
+      const lucroValor =
+        Math.round((totalSale - totalCost - impostosValor - comissaoValor - custoFixoValor) * 100) /
+        100
+      const lucroPercent = totalSale > 0 ? (lucroValor / totalSale) * 100 : 0
+      const markupEfetivo = totalCost > 0 ? totalSale / totalCost : (config?.markup_padrao ?? 2.5)
+
+      const dreJson: OrcamentoDRE = {
+        custo_mp: totalCost,
+        impostos: impostosValor,
+        impostos_percent: impostosPercent,
+        comissao: comissaoValor,
+        comissao_percent: comissaoPercent,
+        custo_fixo_rateado: custoFixoValor,
+        custo_fixo_percent: custoFixoPercent,
+        lucro_liquido: lucroValor,
+        lucro_liquido_percent: Math.round(lucroPercent * 100) / 100,
+        markup_efetivo: Math.round(markupEfetivo * 100) / 100,
+        preco_final: totalSale,
+      }
+
+      const bomJson: OrcamentoBOMItem[] = pricingItems.map((item) => ({
+        id: item.id,
+        description: item.description,
+        material: item.material,
+        espessura: item.espessura,
+        metragem: item.metragem,
+        unidade: item.unidade,
+        unitCost: item.unitCost,
+        totalCost: item.totalCost,
+        markup: item.markup,
+        salePrice: item.salePrice,
+      }))
+
+      const created = await createOrcamento({
+        cliente_nome: clientName,
+        ambiente: ambienteSelecionado || room || null,
+        modulo: currentModuleName || null,
+        valor_total: totalSale,
+        status: 'Aprovado',
+        forma_pagamento: formaPagamento || null,
+        observacoes: observacoes || null,
+        bom_json: bomJson,
+        dre_json: dreJson,
       })
-    } else {
+
+      if (created) {
+        setSavedOrcamentoRecord(created)
+        setIsQuoteSaved(true)
+        toast({
+          title: '✓ Orçamento Salvo com Sucesso!',
+          description: `Orçamento de ${clientName} registrado. Escolha os relatórios em PDF para download.`,
+        })
+      } else {
+        toast({
+          title: 'Aviso',
+          description: 'Orçamento gerado localmente. Redirecionando para a lista.',
+        })
+        navigate('/orcamentos')
+      }
+    } catch (err) {
+      console.error('Erro ao finalizar orçamento:', err)
       toast({
-        title: 'Orçamento Finalizado',
-        description: `Orçamento de ${clientName} processado com sucesso.`,
+        title: 'Erro ao salvar orçamento',
+        description: 'Ocorreu um erro ao gravar os dados. Tente novamente.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSavingQuote(false)
+    }
+  }
+
+  // Handlers para gerar os PDFs no Modal após a finalização
+  const handleDownloadProposta = async () => {
+    try {
+      const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
+      await gerarPropostaComercial({
+        orcamentoId: savedOrcamentoRecord?.id,
+        codigo: savedOrcamentoRecord?.id?.slice(-6).toUpperCase(),
+        data: savedOrcamentoRecord?.data || new Date().toISOString(),
+        cliente: {
+          nome: clientName,
+        },
+        empresa: perfilEmpresa,
+        ambientes: [
+          {
+            nome: ambienteSelecionado || room || 'Ambiente Principal',
+            descricao: `Módulo: ${currentModuleName} (${dimensoes.largura}L × ${dimensoes.altura}A × ${dimensoes.profundidade}P mm)`,
+            quantidade: 1,
+            valorUnitario: totalSale,
+            valorTotal: totalSale,
+          },
+        ],
+        valorTotal: totalSale,
+        formaPagamento: formaPagamento,
+        observacoes: observacoes,
+      })
+      toast({
+        title: '✓ PDF da Proposta Gerado!',
+        description: 'O download do documento comercial foi iniciado.',
+      })
+    } catch (err) {
+      console.error('Erro ao gerar proposta comercial:', err)
+      toast({
+        title: 'Erro na geração do PDF',
+        description: 'Não foi possível gerar a Proposta Comercial.',
+        variant: 'destructive',
       })
     }
-    navigate('/orcamentos')
+  }
+
+  const handleDownloadAnaliseCusto = async () => {
+    try {
+      const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
+      const totalCost = pricingItems.reduce((acc, it) => acc + (Number(it.totalCost) || 0), 0)
+      const dre = savedOrcamentoRecord?.dre_json || {
+        custo_mp: totalCost,
+        impostos: totalSale * 0.1,
+        comissao: totalSale * 0.05,
+        custo_fixo_rateado: totalSale * 0.08,
+        lucro_liquido: totalSale - totalCost - totalSale * 0.23,
+        markup_efetivo: totalCost > 0 ? totalSale / totalCost : 2.5,
+        preco_final: totalSale,
+      }
+
+      await gerarAnaliseCusto({
+        orcamentoId: savedOrcamentoRecord?.id,
+        codigo: savedOrcamentoRecord?.id?.slice(-6).toUpperCase(),
+        data: savedOrcamentoRecord?.data || new Date().toISOString(),
+        cliente: {
+          nome: clientName,
+        },
+        moduloNome: currentModuleName,
+        ambienteNome: ambienteSelecionado || room || 'Ambiente',
+        dimensoes: dimensoes,
+        empresa: perfilEmpresa,
+        dre: dre,
+        bom: pricingItems as OrcamentoBOMItem[],
+        valorTotalVenda: totalSale,
+        valorTotalCusto: totalCost,
+      })
+      toast({
+        title: '✓ PDF de Análise de Custo Gerado!',
+        description: 'O relatório de engenharia foi baixado com sucesso.',
+      })
+    } catch (err) {
+      console.error('Erro ao gerar análise de custo:', err)
+      toast({
+        title: 'Erro na geração do PDF',
+        description: 'Não foi possível gerar a Análise de Custo.',
+        variant: 'destructive',
+      })
+    }
   }
 
   const currentModuleName = selectedModuleObj?.nome_template || 'Módulo Padrão'
@@ -1406,12 +1574,21 @@ export default function Index() {
       {/* Finalize Confirmation Modal */}
       <FinalizeQuoteModal
         isOpen={isFinalizeModalOpen}
-        onClose={() => setIsFinalizeModalOpen(false)}
+        onClose={() => {
+          setIsFinalizeModalOpen(false)
+          if (isQuoteSaved) {
+            navigate('/orcamentos')
+          }
+        }}
         onConfirm={handleConfirmFinalize}
+        onDownloadProposta={handleDownloadProposta}
+        onDownloadAnaliseCusto={handleDownloadAnaliseCusto}
         clientName={clientName}
         room={ambienteSelecionado || room}
         moduleName={currentModuleName}
         items={pricingItems}
+        isSaved={isQuoteSaved}
+        isSaving={isSavingQuote}
       />{' '}
     </div>
   )

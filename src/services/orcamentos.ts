@@ -7,6 +7,35 @@ const db = supabase as any
 
 export type OrcamentoStatus = 'Rascunho' | 'Em Negociação' | 'Aprovado'
 
+export interface OrcamentoBOMItem {
+  id: string
+  description: string
+  material?: string
+  espessura?: number
+  metragem?: number
+  unidade?: 'm²' | 'm' | 'jogo' | string
+  unitCost?: number
+  totalCost?: number
+  markup?: number
+  salePrice?: number
+  [key: string]: unknown
+}
+
+export interface OrcamentoDRE {
+  custo_mp?: number
+  impostos?: number
+  impostos_percent?: number
+  comissao?: number
+  comissao_percent?: number
+  custo_fixo_rateado?: number
+  custo_fixo_percent?: number
+  lucro_liquido?: number
+  lucro_liquido_percent?: number
+  markup_efetivo?: number
+  preco_final?: number
+  [key: string]: unknown
+}
+
 export interface Orcamento {
   id: string
   cliente_nome: string
@@ -15,6 +44,10 @@ export interface Orcamento {
   data: string | null
   valor_total: number | null
   status: OrcamentoStatus | string | null
+  forma_pagamento: string | null
+  observacoes: string | null
+  bom_json: OrcamentoBOMItem[] | null
+  dre_json: OrcamentoDRE | null
   created_at: string | null
   updated_at: string | null
 }
@@ -26,6 +59,10 @@ export interface OrcamentoInput {
   data?: string | null
   valor_total?: number | null
   status?: OrcamentoStatus | string
+  forma_pagamento?: string | null
+  observacoes?: string | null
+  bom_json?: OrcamentoBOMItem[] | unknown[] | null
+  dre_json?: OrcamentoDRE | Record<string, unknown> | null
 }
 
 // Auxiliar para obter a data ISO do início do mês atual (ex: 2026-08-01T00:00:00.000Z)
@@ -190,6 +227,10 @@ export async function createOrcamento(input: OrcamentoInput): Promise<Orcamento 
         data: input.data ?? new Date().toISOString(),
         valor_total: input.valor_total ?? 0,
         status: input.status ?? 'Rascunho',
+        forma_pagamento: input.forma_pagamento ?? null,
+        observacoes: input.observacoes ?? null,
+        bom_json: input.bom_json ?? null,
+        dre_json: input.dre_json ?? null,
       })
       .select()
       .single()
