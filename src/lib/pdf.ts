@@ -381,8 +381,8 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       bodyStyles: {
         textColor: [51, 65, 85],
         fontSize: 8,
-        cellPadding: { top: 6, right: 8, bottom: 6, left: 8 },
-        valign: 'middle',
+        cellPadding: { top: 10, right: 8, bottom: 10, left: 8 },
+        valign: 'top',
       },
       alternateRowStyles: {
         fillColor: [248, 250, 252], // #F8FAFC para linhas pares
@@ -390,14 +390,14 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       columnStyles: {
         0: { cellWidth: contentWidth * 0.05, halign: 'center' },
         1: { cellWidth: contentWidth * 0.25, halign: 'left', fontStyle: 'bold' },
-        2: { cellWidth: contentWidth * 0.42, halign: 'left' },
+        2: { cellWidth: contentWidth * 0.42, halign: 'left', valign: 'top' },
         3: { cellWidth: contentWidth * 0.08, halign: 'center' },
         4: { cellWidth: contentWidth * 0.1, halign: 'right' },
         5: { cellWidth: contentWidth * 0.1, halign: 'right' },
       },
       styles: {
         lineColor: [226, 232, 240], // #E2E8F0
-        lineWidth: 0.15,
+        lineWidth: 0.3,
         font: 'helvetica',
       },
     })

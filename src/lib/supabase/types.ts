@@ -184,12 +184,17 @@ export type Database = {
           cliente_nome: string
           created_at: string | null
           data: string | null
+          dimensoes_json: Json | null
           dre_json: Json | null
           forma_pagamento: string | null
           id: string
+          mdf_externo: string | null
+          mdf_fundo: string | null
+          mdf_interno: string | null
           modulo: string | null
           numero_sequencial: number
           observacoes: string | null
+          padrao_projeto: string | null
           status: string | null
           updated_at: string | null
           valor_total: number | null
@@ -200,12 +205,17 @@ export type Database = {
           cliente_nome: string
           created_at?: string | null
           data?: string | null
+          dimensoes_json?: Json | null
           dre_json?: Json | null
           forma_pagamento?: string | null
           id?: string
+          mdf_externo?: string | null
+          mdf_fundo?: string | null
+          mdf_interno?: string | null
           modulo?: string | null
           numero_sequencial?: number
           observacoes?: string | null
+          padrao_projeto?: string | null
           status?: string | null
           updated_at?: string | null
           valor_total?: number | null
@@ -216,12 +226,17 @@ export type Database = {
           cliente_nome?: string
           created_at?: string | null
           data?: string | null
+          dimensoes_json?: Json | null
           dre_json?: Json | null
           forma_pagamento?: string | null
           id?: string
+          mdf_externo?: string | null
+          mdf_fundo?: string | null
+          mdf_interno?: string | null
           modulo?: string | null
           numero_sequencial?: number
           observacoes?: string | null
+          padrao_projeto?: string | null
           status?: string | null
           updated_at?: string | null
           valor_total?: number | null
