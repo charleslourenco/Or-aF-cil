@@ -302,7 +302,7 @@ export default function EngineeringPage() {
   const lucroColorClass = useMemo(() => {
     if (dre.margemLiquida < 5) return 'bg-rose-50 text-rose-700 border-rose-200'
     if (dre.margemLiquida <= 15) return 'bg-amber-50 text-amber-700 border-amber-200'
-    return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    return 'bg-slate-100 text-slate-800 border-slate-300'
   }, [dre.margemLiquida])
 
   // ===================== LOADING =====================
@@ -533,15 +533,15 @@ export default function EngineeringPage() {
               </div>
 
               {/* Índice de Rateio */}
-              <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100/60 px-4 py-4">
+              <div className="rounded-xl border border-slate-300 bg-gradient-to-br from-slate-100 to-slate-200/60 px-4 py-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-emerald-800">📐 Índice de Rateio</p>
-                    <p className="text-xs text-emerald-600/80 mt-0.5">
+                    <p className="text-sm font-medium text-slate-900">📐 Índice de Rateio</p>
+                    <p className="text-xs text-slate-700/80 mt-0.5">
                       (Total Custos da Empresa ÷ Meta Faturamento)
                     </p>
                   </div>
-                  <span className="text-2xl font-extrabold text-emerald-700">
+                  <span className="text-2xl font-extrabold text-slate-800">
                     {dre.indiceRateioNum === null ? '—' : fmtPct(dre.indiceRateio)}
                   </span>
                 </div>

@@ -10,7 +10,7 @@ interface ModuleBlueprintProps {
 export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
   type,
   className,
-  color = '#059669',
+  color = '#475569',
 }) => {
   if (type === 'empty') {
     return (
@@ -42,7 +42,7 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
     return (
       <div
         className={cn(
-          'relative w-full h-56 bg-gradient-to-b from-emerald-50/50 via-slate-50 to-white rounded-xl border border-emerald-100 flex items-center justify-center p-4 overflow-hidden shadow-inner',
+          'relative w-full h-56 bg-gradient-to-b from-slate-100/50 via-slate-50 to-white rounded-xl border border-slate-200 flex items-center justify-center p-4 overflow-hidden shadow-inner',
           className,
         )}
       >
@@ -92,12 +92,12 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
           <line x1="160" y1="20" x2="160" y2="200" stroke="#0F172A" strokeWidth="3" />
 
           {/* Left Door Handle (Perfil Gola) */}
-          <rect x="146" y="95" width="6" height="50" rx="3" fill="#059669" />
-          <rect x="147" y="98" width="4" height="44" rx="2" fill="#34D399" />
+          <rect x="146" y="95" width="6" height="50" rx="3" fill="#334155" />
+          <rect x="147" y="98" width="4" height="44" rx="2" fill="#64748B" />
 
           {/* Right Door Handle (Perfil Gola) */}
-          <rect x="168" y="95" width="6" height="50" rx="3" fill="#059669" />
-          <rect x="169" y="98" width="4" height="44" rx="2" fill="#34D399" />
+          <rect x="168" y="95" width="6" height="50" rx="3" fill="#334155" />
+          <rect x="169" y="98" width="4" height="44" rx="2" fill="#64748B" />
 
           {/* Base / Rodapé */}
           <rect x="80" y="194" width="160" height="6" fill="#334155" />
@@ -112,12 +112,12 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
               width="44"
               height="18"
               rx="4"
-              fill="#059669"
+              fill="#334155"
               fillOpacity="0.1"
-              stroke="#059669"
+              stroke="#334155"
               strokeWidth="1"
             />
-            <text x="40" y="108" fill="#047857" fontSize="9" fontWeight="bold" textAnchor="middle">
+            <text x="40" y="108" fill="#1E293B" fontSize="9" fontWeight="bold" textAnchor="middle">
               2000 mm
             </text>
             <line
@@ -125,12 +125,12 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
               y1="20"
               x2="64"
               y2="200"
-              stroke="#059669"
+              stroke="#475569"
               strokeWidth="1"
               strokeDasharray="2 2"
             />
-            <line x1="60" y1="20" x2="68" y2="20" stroke="#059669" strokeWidth="1.5" />
-            <line x1="60" y1="200" x2="68" y2="200" stroke="#059669" strokeWidth="1.5" />
+            <line x1="60" y1="20" x2="68" y2="20" stroke="#475569" strokeWidth="1.5" />
+            <line x1="60" y1="200" x2="68" y2="200" stroke="#475569" strokeWidth="1.5" />
 
             <rect
               x="135"
@@ -138,12 +138,12 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
               width="50"
               height="16"
               rx="4"
-              fill="#059669"
+              fill="#334155"
               fillOpacity="0.1"
-              stroke="#059669"
+              stroke="#334155"
               strokeWidth="1"
             />
-            <text x="160" y="13" fill="#047857" fontSize="9" fontWeight="bold" textAnchor="middle">
+            <text x="160" y="13" fill="#1E293B" fontSize="9" fontWeight="bold" textAnchor="middle">
               1200 mm
             </text>
           </g>
@@ -163,7 +163,7 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
     return (
       <div
         className={cn(
-          'relative w-full h-56 bg-gradient-to-b from-emerald-50/50 via-slate-50 to-white rounded-xl border border-emerald-100 flex items-center justify-center p-4 overflow-hidden shadow-inner',
+          'relative w-full h-56 bg-gradient-to-b from-slate-100/50 via-slate-50 to-white rounded-xl border border-slate-200 flex items-center justify-center p-4 overflow-hidden shadow-inner',
           className,
         )}
       >
@@ -211,7 +211,7 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
             stroke="#64748B"
             strokeWidth="1.5"
           />
-          <rect x="94" y="88" width="32" height="6" rx="2" fill="#059669" />
+          <rect x="94" y="88" width="32" height="6" rx="2" fill="#334155" />
 
           {/* Gavetão Inferior Esquerda */}
           <rect
@@ -224,7 +224,7 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
             stroke="#64748B"
             strokeWidth="1.5"
           />
-          <rect x="94" y="146" width="32" height="6" rx="2" fill="#059669" />
+          <rect x="94" y="146" width="32" height="6" rx="2" fill="#334155" />
 
           {/* Portas Direitas */}
           <rect
@@ -238,8 +238,8 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
             strokeWidth="1.5"
           />
           <line x1="210" y1="67" x2="210" y2="176" stroke="#CBD5E1" strokeWidth="1.5" />
-          <rect x="202" y="112" width="4" height="24" rx="2" fill="#059669" />
-          <rect x="214" y="112" width="4" height="24" rx="2" fill="#059669" />
+          <rect x="202" y="112" width="4" height="24" rx="2" fill="#334155" />
+          <rect x="214" y="112" width="4" height="24" rx="2" fill="#334155" />
 
           {/* Pés Reguláveis */}
           <rect x="75" y="184" width="14" height="18" rx="2" fill="#334155" />
@@ -247,10 +247,10 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
           <rect x="231" y="184" width="14" height="18" rx="2" fill="#334155" />
 
           {/* Medidas */}
-          <text x="160" y="36" fill="#047857" fontSize="9" fontWeight="bold" textAnchor="middle">
+          <text x="160" y="36" fill="#1E293B" fontSize="9" fontWeight="bold" textAnchor="middle">
             1200 mm (L)
           </text>
-          <text x="35" y="125" fill="#047857" fontSize="9" fontWeight="bold" textAnchor="middle">
+          <text x="35" y="125" fill="#1E293B" fontSize="9" fontWeight="bold" textAnchor="middle">
             850 mm (A)
           </text>
         </svg>
@@ -262,7 +262,7 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
   return (
     <div
       className={cn(
-        'relative w-full h-56 bg-gradient-to-b from-emerald-50/50 via-slate-50 to-white rounded-xl border border-emerald-100 flex items-center justify-center p-4 overflow-hidden shadow-inner',
+        'relative w-full h-56 bg-gradient-to-b from-slate-100/50 via-slate-50 to-white rounded-xl border border-slate-200 flex items-center justify-center p-4 overflow-hidden shadow-inner',
         className,
       )}
     >
@@ -303,27 +303,27 @@ export const ModuleBlueprint: React.FC<ModuleBlueprintProps> = ({
           height="94"
           rx="2"
           fill="#FFFFFF"
-          stroke="#059669"
+          stroke="#334155"
           strokeWidth="2"
         />
 
         {/* Puxador Horizontal inferior */}
-        <rect x="110" y="132" width="100" height="6" rx="3" fill="#059669" />
+        <rect x="110" y="132" width="100" height="6" rx="3" fill="#334155" />
 
         {/* Símbolo de Abertura Basculante (Pistão a Gás) */}
         <path
           d="M160 115 L160 80 M160 80 L152 88 M160 80 L168 88"
-          stroke="#059669"
+          stroke="#334155"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <text x="160" y="74" fill="#047857" fontSize="9" fontWeight="bold" textAnchor="middle">
+        <text x="160" y="74" fill="#1E293B" fontSize="9" fontWeight="bold" textAnchor="middle">
           PISTÃO A GÁS
         </text>
 
         {/* Medidas */}
-        <text x="160" y="176" fill="#047857" fontSize="9" fontWeight="bold" textAnchor="middle">
+        <text x="160" y="176" fill="#1E293B" fontSize="9" fontWeight="bold" textAnchor="middle">
           900 x 600 x 350 mm
         </text>
         <rect x="210" y="184" width="85" height="18" rx="4" fill="#0F172A" />

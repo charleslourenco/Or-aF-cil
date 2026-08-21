@@ -63,7 +63,7 @@ import {
 /** Estilos de badge por categoria (cores conforme especificação). */
 const CATEGORIA_BADGE: Record<string, string> = {
   'MDF 15mm': 'bg-blue-100 text-blue-700 border-blue-200',
-  'MDF 18mm': 'bg-green-100 text-green-700 border-green-200',
+  'MDF 18mm': 'bg-slate-200 text-slate-800 border-slate-300',
   'MDF 6mm': 'bg-purple-100 text-purple-700 border-purple-200',
   'Fita de Borda': 'bg-orange-100 text-orange-700 border-orange-200',
   Ferragem: 'bg-slate-700 text-white border-slate-700',
@@ -269,7 +269,7 @@ export default function CatalogPage() {
         </div>
         <Button
           onClick={abrirModalNovo}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl h-11 px-5 shadow-sm"
+          className="bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl h-11 px-5 shadow-sm"
         >
           <Plus className="w-4 h-4 mr-1.5" />
           Novo Material
@@ -284,11 +284,11 @@ export default function CatalogPage() {
             placeholder="Buscar por nome do material..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            className="h-11 rounded-xl pl-9 border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+            className="h-11 rounded-xl pl-9 border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
           />
         </div>
         <Select value={categoriaFiltro} onValueChange={setCategoriaFiltro}>
-          <SelectTrigger className="h-11 rounded-xl border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20">
+          <SelectTrigger className="h-11 rounded-xl border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20">
             <SelectValue placeholder="Categoria" />
           </SelectTrigger>
           <SelectContent className="rounded-xl">
@@ -347,7 +347,7 @@ export default function CatalogPage() {
           {materiais.length === 0 ? (
             <Button
               onClick={abrirModalNovo}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl"
+              className="bg-slate-700 hover:bg-slate-800 text-white rounded-xl"
             >
               <Plus className="w-4 h-4 mr-1.5" />
               Adicionar primeiro material
@@ -418,7 +418,7 @@ export default function CatalogPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50"
+                          className="h-8 w-8 text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                           onClick={() => abrirModalEdicao(m)}
                           aria-label={`Editar ${m.nome_material}`}
                         >
@@ -466,7 +466,7 @@ export default function CatalogPage() {
                 placeholder="Ex.: MDF 15mm Branco TX"
                 value={form.nome_material}
                 onChange={(e) => setForm((prev) => ({ ...prev, nome_material: e.target.value }))}
-                className="h-11 rounded-xl border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                className="h-11 rounded-xl border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
               />
             </div>
 
@@ -525,7 +525,7 @@ export default function CatalogPage() {
                   placeholder="0,00"
                   value={form.preco_custo}
                   onChange={(e) => setForm((prev) => ({ ...prev, preco_custo: e.target.value }))}
-                  className="h-11 rounded-xl border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 pr-10"
+                  className="h-11 rounded-xl border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 pr-10"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                   R$
@@ -546,14 +546,14 @@ export default function CatalogPage() {
               >
                 <ToggleGroupItem
                   value="padrao"
-                  className="flex-1 h-9 text-xs font-semibold data-[state=on]:bg-emerald-600 data-[state=on]:text-white rounded-lg inline-flex items-center gap-1"
+                  className="flex-1 h-9 text-xs font-semibold data-[state=on]:bg-slate-700 data-[state=on]:text-white rounded-lg inline-flex items-center gap-1"
                 >
                   <Star className="w-3.5 h-3.5" />
                   Padrão
                 </ToggleGroupItem>
                 <ToggleGroupItem
                   value="premium"
-                  className="flex-1 h-9 text-xs font-semibold data-[state=on]:bg-emerald-600 data-[state=on]:text-white rounded-lg inline-flex items-center gap-1"
+                  className="flex-1 h-9 text-xs font-semibold data-[state=on]:bg-slate-700 data-[state=on]:text-white rounded-lg inline-flex items-center gap-1"
                 >
                   <Star className="w-3.5 h-3.5" />
                   <Star className="w-3.5 h-3.5 -ml-1.5" />
@@ -575,7 +575,7 @@ export default function CatalogPage() {
             <Button
               onClick={handleSalvar}
               disabled={saving}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl min-w-[120px]"
+              className="bg-slate-700 hover:bg-slate-800 text-white rounded-xl min-w-[120px]"
             >
               {saving ? (
                 <>

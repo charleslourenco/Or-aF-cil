@@ -49,11 +49,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 selection:bg-emerald-500 selection:text-white">
+    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 selection:bg-slate-600 selection:text-white">
       {/* Background soft glow decoration */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -left-40 w-96 h-96 bg-slate-600/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-slate-700/10 rounded-full blur-3xl" />
       </div>
 
       <div className="w-full max-w-md relative z-10">
@@ -61,16 +61,16 @@ export default function LoginPage() {
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-800 p-8 sm:p-10 text-slate-900 dark:text-slate-100">
           {/* Logo & Header */}
           <div className="flex flex-col items-center text-center mb-8">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white shadow-lg shadow-emerald-500/25 mb-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white shadow-lg shadow-slate-600/25 mb-4">
               <Hammer className="w-7 h-7" />
             </div>
             <div className="flex items-center gap-1.5">
               <span className="font-extrabold text-2xl tracking-tight text-slate-900 dark:text-white">
                 OrçaFácil
               </span>
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="inline-block w-2 h-2 rounded-full bg-slate-600" />
             </div>
-            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mt-0.5">
+            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mt-0.5">
               Módulos Sob Medida
             </span>
             <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mt-5">
@@ -99,7 +99,7 @@ export default function LoginPage() {
                   placeholder="seu@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 h-11 bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 rounded-xl focus-visible:ring-emerald-500 text-sm"
+                  className="pl-10 h-11 bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 rounded-xl focus-visible:ring-slate-600 text-sm"
                   autoComplete="email"
                   required
                 />
@@ -124,7 +124,7 @@ export default function LoginPage() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10 h-11 bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 rounded-xl focus-visible:ring-emerald-500 text-sm"
+                  className="pl-10 pr-10 h-11 bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 rounded-xl focus-visible:ring-slate-600 text-sm"
                   autoComplete="current-password"
                   required
                 />
@@ -143,7 +143,7 @@ export default function LoginPage() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition-all hover:shadow-lg hover:shadow-emerald-600/30 active:scale-[0.99] mt-2 flex items-center justify-center gap-2"
+              className="w-full h-11 bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl shadow-md shadow-slate-700/20 transition-all hover:shadow-lg hover:shadow-slate-700/30 active:scale-[0.99] mt-2 flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -170,7 +170,7 @@ export default function LoginPage() {
           <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-center">
             <Link
               to="/esqueceu-senha"
-              className="text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:underline inline-block transition-colors"
+              className="text-xs font-medium text-slate-700 dark:text-slate-300 hover:underline inline-block transition-colors"
             >
               Esqueceu a senha?
             </Link>

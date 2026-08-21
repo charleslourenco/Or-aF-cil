@@ -286,8 +286,8 @@ export default function SettingsPage() {
     <div className="space-y-6 pb-20 max-w-5xl mx-auto">
       {/* Cabeçalho da página */}
       <div className="space-y-1">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold mb-1">
-          <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold mb-1">
+          <Building2 className="w-3.5 h-3.5 text-slate-700" />
           <span>Configurações Corporativas</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -301,7 +301,7 @@ export default function SettingsPage() {
 
       {loading ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 flex flex-col items-center justify-center text-center space-y-3 shadow-xs">
-          <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+          <Loader2 className="w-8 h-8 text-slate-700 animate-spin" />
           <p className="text-sm font-semibold text-slate-700">Carregando dados da empresa...</p>
         </div>
       ) : (
@@ -314,7 +314,7 @@ export default function SettingsPage() {
             className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
           >
             <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-800 flex items-center justify-center shrink-0">
                 <Building2 className="w-5 h-5" />
               </div>
               <div>
@@ -334,7 +334,7 @@ export default function SettingsPage() {
               {/* Upload de Logomarca */}
               <div className="space-y-2">
                 <Label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
-                  <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+                  <ImageIcon className="w-3.5 h-3.5 text-slate-700" />
                   Logomarca da Empresa
                 </Label>
 
@@ -370,7 +370,7 @@ export default function SettingsPage() {
                         onClick={() => fileInputRef.current?.click()}
                         className="h-9 px-4 rounded-xl border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-1.5"
                       >
-                        <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                        <Upload className="w-3.5 h-3.5 text-slate-700" />
                         {previewLogo ? 'Alterar Logomarca' : 'Selecionar Logomarca'}
                       </Button>
 
@@ -408,7 +408,7 @@ export default function SettingsPage() {
                     placeholder="Ex.: Silva & Santos Móveis Planejados LTDA"
                     value={razaoSocial}
                     onChange={(e) => setRazaoSocial(e.target.value)}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
 
@@ -424,7 +424,7 @@ export default function SettingsPage() {
                     placeholder="Ex.: Arte & Madeira Marcenaria"
                     value={nomeFantasia}
                     onChange={(e) => setNomeFantasia(e.target.value)}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
               </div>
@@ -439,7 +439,7 @@ export default function SettingsPage() {
             className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
           >
             <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-800 flex items-center justify-center shrink-0">
                 <FileText className="w-5 h-5" />
               </div>
               <div>
@@ -461,7 +461,7 @@ export default function SettingsPage() {
                   htmlFor="cnpj"
                   className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
                 >
-                  <Hash className="w-3.5 h-3.5 text-emerald-600" />
+                  <Hash className="w-3.5 h-3.5 text-slate-700" />
                   CNPJ
                 </Label>
                 <Input
@@ -470,7 +470,7 @@ export default function SettingsPage() {
                   value={cnpj}
                   maxLength={18}
                   onChange={(e) => setCnpj(maskCNPJ(e.target.value))}
-                  className="h-11 rounded-xl text-sm font-mono border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                  className="h-11 rounded-xl text-sm font-mono border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                 />
               </div>
 
@@ -479,7 +479,7 @@ export default function SettingsPage() {
                   htmlFor="inscricao_estadual"
                   className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
                 >
-                  <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                  <FileText className="w-3.5 h-3.5 text-slate-700" />
                   Inscrição Estadual (IE)
                 </Label>
                 <Input
@@ -487,7 +487,7 @@ export default function SettingsPage() {
                   placeholder="Ex.: 123.456.789.110 ou Isento"
                   value={inscricaoEstadual}
                   onChange={(e) => setInscricaoEstadual(e.target.value)}
-                  className="h-11 rounded-xl text-sm font-mono border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                  className="h-11 rounded-xl text-sm font-mono border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                 />
               </div>
             </div>
@@ -501,7 +501,7 @@ export default function SettingsPage() {
             className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
           >
             <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-800 flex items-center justify-center shrink-0">
                 <MapPin className="w-5 h-5" />
               </div>
               <div>
@@ -529,7 +529,7 @@ export default function SettingsPage() {
                     placeholder="Ex.: Av. dos Marceneiros"
                     value={logradouro}
                     onChange={(e) => setLogradouro(e.target.value)}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
 
@@ -545,7 +545,7 @@ export default function SettingsPage() {
                     placeholder="Ex.: 1500"
                     value={numero}
                     onChange={(e) => setNumero(e.target.value)}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
 
@@ -561,7 +561,7 @@ export default function SettingsPage() {
                     placeholder="Ex.: Galpão 3, Sala 12"
                     value={complemento}
                     onChange={(e) => setComplemento(e.target.value)}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
               </div>
@@ -580,7 +580,7 @@ export default function SettingsPage() {
                     placeholder="Ex.: Distrito Industrial"
                     value={bairro}
                     onChange={(e) => setBairro(e.target.value)}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
 
@@ -596,7 +596,7 @@ export default function SettingsPage() {
                     placeholder="Ex.: São Paulo"
                     value={cidade}
                     onChange={(e) => setCidade(e.target.value)}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
 
@@ -637,7 +637,7 @@ export default function SettingsPage() {
                     value={cep}
                     maxLength={9}
                     onChange={(e) => setCep(maskCEP(e.target.value))}
-                    className="h-11 rounded-xl text-sm font-mono border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm font-mono border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
               </div>
@@ -652,7 +652,7 @@ export default function SettingsPage() {
             className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
           >
             <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-800 flex items-center justify-center shrink-0">
                 <Share2 className="w-5 h-5" />
               </div>
               <div>
@@ -672,7 +672,7 @@ export default function SettingsPage() {
                     htmlFor="telefone"
                     className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
                   >
-                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                    <Phone className="w-3.5 h-3.5 text-slate-700" />
                     Telefone / WhatsApp
                   </Label>
                   <Input
@@ -681,7 +681,7 @@ export default function SettingsPage() {
                     value={telefone}
                     maxLength={15}
                     onChange={(e) => setTelefone(maskPhone(e.target.value))}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
 
@@ -690,7 +690,7 @@ export default function SettingsPage() {
                     htmlFor="email_comercial"
                     className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
                   >
-                    <Mail className="w-3.5 h-3.5 text-emerald-600" />
+                    <Mail className="w-3.5 h-3.5 text-slate-700" />
                     E-mail Comercial
                   </Label>
                   <Input
@@ -699,7 +699,7 @@ export default function SettingsPage() {
                     placeholder="contato@marcenaria.com.br"
                     value={emailComercial}
                     onChange={(e) => setEmailComercial(e.target.value)}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
               </div>
@@ -710,7 +710,7 @@ export default function SettingsPage() {
                     htmlFor="instagram"
                     className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
                   >
-                    <Instagram className="w-3.5 h-3.5 text-emerald-600" />
+                    <Instagram className="w-3.5 h-3.5 text-slate-700" />
                     Instagram
                   </Label>
                   <Input
@@ -718,7 +718,7 @@ export default function SettingsPage() {
                     placeholder="@marcenaria"
                     value={instagram}
                     onChange={(e) => setInstagram(e.target.value)}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
 
@@ -727,7 +727,7 @@ export default function SettingsPage() {
                     htmlFor="facebook"
                     className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
                   >
-                    <Facebook className="w-3.5 h-3.5 text-emerald-600" />
+                    <Facebook className="w-3.5 h-3.5 text-slate-700" />
                     Facebook
                   </Label>
                   <Input
@@ -735,7 +735,7 @@ export default function SettingsPage() {
                     placeholder="facebook.com/marcenaria"
                     value={facebook}
                     onChange={(e) => setFacebook(e.target.value)}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
 
@@ -744,7 +744,7 @@ export default function SettingsPage() {
                     htmlFor="site"
                     className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
                   >
-                    <Globe className="w-3.5 h-3.5 text-emerald-600" />
+                    <Globe className="w-3.5 h-3.5 text-slate-700" />
                     Site Oficial (URL)
                   </Label>
                   <Input
@@ -753,7 +753,7 @@ export default function SettingsPage() {
                     placeholder="https://www.marcenaria.com.br"
                     value={site}
                     onChange={(e) => setSite(e.target.value)}
-                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                    className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                   />
                 </div>
               </div>
@@ -769,7 +769,7 @@ export default function SettingsPage() {
               size="lg"
               onClick={handleSave}
               disabled={saving}
-              className="w-full sm:w-auto h-12 px-8 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto h-12 px-8 bg-slate-700 hover:bg-slate-800 active:scale-[0.99] text-white font-bold text-sm rounded-xl shadow-lg shadow-slate-700/25 transition-all flex items-center justify-center gap-2"
             >
               {saving ? (
                 <>

@@ -25,7 +25,7 @@ import {
 } from '@/services/orcamentos'
 
 const statusStyles: Record<string, string> = {
-  Aprovado: 'bg-green-100 text-green-700',
+  Aprovado: 'bg-slate-200 text-slate-800',
   'Em Negociação': 'bg-amber-100 text-amber-700',
   Rascunho: 'bg-slate-100 text-slate-600',
 }
@@ -171,7 +171,7 @@ export default function DashboardPage() {
           </Button>
           <Button
             asChild
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm rounded-lg text-xs"
+            className="bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm rounded-lg text-xs"
           >
             <Link to="/novo-orcamento" className="flex items-center gap-2">
               <Plus className="w-4 h-4" />
@@ -185,13 +185,13 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           icon={FileText}
-          iconClassName="text-emerald-600"
-          iconBg="bg-emerald-50"
+          iconClassName="text-slate-700"
+          iconBg="bg-slate-100"
           label="Total de Orçamentos (Mês)"
           value={displayTotalCount}
           loading={loading}
         >
-          <div className="flex items-center gap-1 text-green-600 text-xs font-semibold">
+          <div className="flex items-center gap-1 text-slate-700 text-xs font-semibold">
             <TrendingUp className="w-3.5 h-3.5" />
             <span>+12% em relação ao mês anterior</span>
           </div>
@@ -212,13 +212,13 @@ export default function DashboardPage() {
 
         <KpiCard
           icon={CheckCircle2}
-          iconClassName="text-green-600"
-          iconBg="bg-green-50"
+          iconClassName="text-slate-700"
+          iconBg="bg-slate-100"
           label="Propostas Aprovadas"
           value={displayAprovados}
           loading={loading}
         >
-          <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs font-semibold rounded-full px-2.5 py-0.5">
+          <Badge className="bg-slate-200 text-slate-800 hover:bg-slate-200 text-xs font-semibold rounded-full px-2.5 py-0.5">
             Aprovadas
           </Badge>
         </KpiCard>
@@ -300,7 +300,7 @@ export default function DashboardPage() {
             </div>
             <Button
               asChild
-              className="mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg shadow-sm"
+              className="mt-2 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm"
             >
               <Link to="/novo-orcamento" className="flex items-center gap-2">
                 <Plus className="w-4 h-4" />

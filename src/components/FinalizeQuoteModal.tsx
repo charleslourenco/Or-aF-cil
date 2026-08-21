@@ -70,7 +70,7 @@ export const FinalizeQuoteModal: React.FC<FinalizeQuoteModalProps> = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg rounded-2xl p-6 bg-white">
         <DialogHeader className="space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto sm:mx-0 shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-slate-200 text-slate-800 flex items-center justify-center mx-auto sm:mx-0 shadow-xs">
             <CheckCircle2 className="w-6 h-6" />
           </div>
           <DialogTitle className="text-xl font-bold text-slate-900">
@@ -118,16 +118,16 @@ export const FinalizeQuoteModal: React.FC<FinalizeQuoteModalProps> = ({
           </div>
 
           {/* Pricing Highlight */}
-          <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 text-white rounded-xl p-4 shadow-md space-y-2">
-            <div className="flex items-center justify-between text-xs text-emerald-100">
+          <div className="bg-gradient-to-br from-slate-700 to-slate-900 text-white rounded-xl p-4 shadow-md space-y-2">
+            <div className="flex items-center justify-between text-xs text-slate-200">
               <span>Custo Fabril Total ({items.length} itens)</span>
               <span className="font-mono">{formatCurrency(totalCost)}</span>
             </div>
-            <div className="flex items-center justify-between text-xs text-emerald-100">
+            <div className="flex items-center justify-between text-xs text-slate-200">
               <span>Margem Bruta Estimada</span>
               <span className="font-mono">{formatCurrency(totalProfit)}</span>
             </div>
-            <div className="flex items-center justify-between text-base font-bold pt-2 border-t border-emerald-500/50">
+            <div className="flex items-center justify-between text-base font-bold pt-2 border-t border-slate-600/50">
               <span className="text-white">Valor Final de Venda</span>
               <span className="font-mono text-xl text-white">{formatCurrency(totalSale)}</span>
             </div>
@@ -137,8 +137,8 @@ export const FinalizeQuoteModal: React.FC<FinalizeQuoteModalProps> = ({
         {/* Actions or PDF Download Buttons */}
         {isSaved ? (
           <div className="space-y-3 pt-2">
-            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div className="p-3 bg-slate-100 rounded-xl border border-slate-300 text-slate-900 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-slate-700 shrink-0" />
               <span>
                 Orçamento salvo com sucesso no banco de dados! Baixe os relatórios abaixo:
               </span>
@@ -158,7 +158,7 @@ export const FinalizeQuoteModal: React.FC<FinalizeQuoteModalProps> = ({
                   }
                 }}
                 disabled={downloadingProposta}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-10 rounded-xl shadow-sm flex items-center justify-center gap-2"
+                className="bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs h-10 rounded-xl shadow-sm flex items-center justify-center gap-2"
               >
                 {downloadingProposta ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -187,7 +187,7 @@ export const FinalizeQuoteModal: React.FC<FinalizeQuoteModalProps> = ({
                 {downloadingCusto ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <FileSpreadsheet className="w-4 h-4 text-slate-700" />
                 )}
                 Baixar Análise de Custo (PDF)
               </Button>
@@ -220,7 +220,7 @@ export const FinalizeQuoteModal: React.FC<FinalizeQuoteModalProps> = ({
               type="button"
               onClick={onConfirm}
               disabled={isSaving}
-              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5"
+              className="w-full sm:w-auto bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs shadow-md shadow-slate-700/20 flex items-center justify-center gap-1.5"
             >
               {isSaving ? (
                 <>

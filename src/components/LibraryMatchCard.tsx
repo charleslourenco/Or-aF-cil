@@ -62,7 +62,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
-              <Box className="w-4 h-4 text-emerald-600" />
+              <Box className="w-4 h-4 text-slate-700" />
               Módulo Identificado na Biblioteca
             </h3>
           </div>
@@ -81,7 +81,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
               onClick={() => setShowSwap((v) => !v)}
               className={cn(
                 'h-8 px-2.5 text-[11px] font-semibold rounded-full border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs',
-                showSwap && 'bg-emerald-50 border-emerald-300 text-emerald-700',
+                showSwap && 'bg-slate-100 border-slate-400 text-slate-800',
               )}
             >
               <Repeat2 className="w-3.5 h-3.5 mr-1" />
@@ -101,9 +101,9 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
           ) : isMatched ? (
             <Badge
               variant="outline"
-              className="bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-fade-in"
+              className="bg-slate-100 text-slate-800 border-slate-400 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-fade-in"
             >
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />✓ Match Encontrado
+              <CheckCircle className="w-3.5 h-3.5 text-slate-700" />✓ Match Encontrado
             </Badge>
           ) : (
             <Badge
@@ -118,9 +118,9 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
 
       {/* Select inline de "Trocar Módulo" — força a escolha manual de outro gabarito. */}
       {showSwap && onModuleChange && (
-        <div className="flex items-center gap-2 px-3 py-2.5 mt-3 mb-1 bg-emerald-50/60 border border-emerald-200 rounded-xl animate-fade-in">
-          <Box className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span className="text-[11px] font-semibold text-emerald-800 shrink-0 hidden sm:inline">
+        <div className="flex items-center gap-2 px-3 py-2.5 mt-3 mb-1 bg-slate-100/60 border border-slate-300 rounded-xl animate-fade-in">
+          <Box className="w-4 h-4 text-slate-700 shrink-0" />
+          <span className="text-[11px] font-semibold text-slate-900 shrink-0 hidden sm:inline">
             Selecionar manualmente:
           </span>
           <Select
@@ -130,7 +130,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
               setShowSwap(false)
             }}
           >
-            <SelectTrigger className="h-9 rounded-lg text-xs flex-1 min-w-0 bg-white border-emerald-200">
+            <SelectTrigger className="h-9 rounded-lg text-xs flex-1 min-w-0 bg-white border-slate-300">
               <SelectValue placeholder="Escolha outro gabarito..." />
             </SelectTrigger>
             <SelectContent className="rounded-xl">
@@ -154,13 +154,13 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
           <div className="relative w-20 h-20 flex items-center justify-center mb-5">
             <div className="absolute inset-0 rounded-full bg-violet-100 animate-ping opacity-60" />
             <div className="absolute inset-2 rounded-full bg-violet-200/60 animate-pulse" />
-            <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
+            <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-slate-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
               <Eye className="w-7 h-7 text-white" />
             </div>
           </div>
 
           {/* Texto brilhante */}
-          <h4 className="text-sm sm:text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-emerald-600 to-violet-600 bg-[length:200%_auto] animate-[shimmer_2s_linear_infinite] flex items-center gap-1.5">
+          <h4 className="text-sm sm:text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-slate-600 to-violet-600 bg-[length:200%_auto] animate-[shimmer_2s_linear_infinite] flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-violet-500" />
             👁️ Lupa Lu analisando perspectivas e buscando gabarito na biblioteca...
           </h4>
@@ -226,8 +226,8 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
 
             {/* Balão de justificativa retornada pela IA (GPT-4o Vision) */}
             {justificativa && (
-              <div className="mt-2.5 flex items-start gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs leading-relaxed animate-fade-in">
-                <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="mt-2.5 flex items-start gap-2 p-3 bg-slate-100 border border-slate-300 rounded-xl text-slate-900 text-xs leading-relaxed animate-fade-in">
+                <Sparkles className="w-4 h-4 text-slate-700 shrink-0 mt-0.5" />
                 <span>
                   <span className="font-bold">Justificativa da IA: </span>
                   {justificativa}
@@ -239,7 +239,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
           {/* Technical Specs Pill Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
             <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 text-slate-700">
-              <Ruler className="w-4 h-4 text-emerald-600 shrink-0" />
+              <Ruler className="w-4 h-4 text-slate-700 shrink-0" />
               <div className="min-w-0">
                 <span className="text-[10px] uppercase font-semibold text-slate-400 block">
                   Dimensões (AxLxP)
@@ -251,7 +251,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
             </div>
 
             <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 text-slate-700">
-              <Layers className="w-4 h-4 text-emerald-600 shrink-0" />
+              <Layers className="w-4 h-4 text-slate-700 shrink-0" />
               <div className="min-w-0">
                 <span className="text-[10px] uppercase font-semibold text-slate-400 block">
                   Material Padrão
@@ -267,8 +267,8 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
           </div>
 
           {/* Quick note on parts generation */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50/70 border border-emerald-100 rounded-xl text-emerald-800 text-xs font-medium">
-            <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-100/70 border border-slate-200 rounded-xl text-slate-900 text-xs font-medium">
+            <FileCheck className="w-4 h-4 text-slate-700 shrink-0" />
             <span>Inclui plano de corte paramétrico e cálculo automático de fita de borda.</span>
           </div>
 
@@ -276,7 +276,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
             <button
               type="button"
               onClick={onOpenLibraryModal}
-              className="self-start inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
+              className="self-start inline-flex items-center gap-1 text-[11px] font-semibold text-slate-800 hover:text-slate-900 transition-colors"
             >
               <Maximize2 className="w-3.5 h-3.5" />
               Ver biblioteca completa

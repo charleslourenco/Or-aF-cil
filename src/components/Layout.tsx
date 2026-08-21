@@ -131,7 +131,7 @@ export default function Layout() {
   const { theme, setTheme } = useTheme()
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased selection:bg-emerald-100 selection:text-emerald-900 dark:selection:bg-emerald-900 dark:selection:text-emerald-100 transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased selection:bg-slate-200 selection:text-slate-900 dark:selection:bg-slate-800 dark:selection:text-slate-200 transition-colors duration-200">
       {/* Mobile Drawer Backdrop */}
       {mobileMenuOpen && (
         <div
@@ -157,13 +157,13 @@ export default function Layout() {
               className="flex items-center gap-3 group"
               onClick={() => setMobileMenuOpen(false)}
             >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white shadow-md shadow-slate-600/20 group-hover:scale-105 transition-transform">
                 <Hammer className="w-5 h-5" />
               </div>
               <div className="flex flex-col">
-                <span className="font-bold text-base tracking-tight text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
+                <span className="font-bold text-base tracking-tight text-slate-900 dark:text-slate-100 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors flex items-center gap-1.5">
                   OrçaFácil
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-600" />
                 </span>
                 <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Módulos Sob Medida
@@ -187,7 +187,7 @@ export default function Layout() {
             <Link
               to="/novo-orcamento"
               onClick={() => setMobileMenuOpen(false)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all hover:shadow-lg hover:shadow-emerald-600/30 active:scale-[0.98]"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-700/20 transition-all hover:shadow-lg hover:shadow-slate-700/30 active:scale-[0.98]"
             >
               <PlusCircle className="w-4 h-4" />
               <span>+ Novo Orçamento</span>
@@ -212,7 +212,7 @@ export default function Layout() {
                   className={cn(
                     'flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group',
                     active
-                      ? 'bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-400 font-semibold shadow-xs'
+                      ? 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 font-semibold shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/70 dark:hover:bg-slate-800/60',
                   )}
                 >
@@ -221,7 +221,7 @@ export default function Layout() {
                       className={cn(
                         'w-4 h-4 transition-colors',
                         active
-                          ? 'text-emerald-600 dark:text-emerald-400'
+                          ? 'text-slate-700 dark:text-slate-300'
                           : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300',
                       )}
                     />
@@ -238,7 +238,7 @@ export default function Layout() {
                   )}
 
                   {active && !item.badge && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
                   )}
                 </Link>
               )
@@ -250,7 +250,7 @@ export default function Layout() {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <Avatar className="w-9 h-9 border border-slate-200 dark:border-slate-700 shrink-0">
-                  <AvatarFallback className="bg-emerald-600 text-white font-bold text-xs">
+                  <AvatarFallback className="bg-slate-700 text-white font-bold text-xs">
                     {(profile?.nome || user?.email || 'U')[0].toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
@@ -263,7 +263,7 @@ export default function Layout() {
                   </p>
                   <div className="flex items-center gap-1 mt-0.5">
                     {profile?.role === 'admin' ? (
-                      <Badge className="bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 border-0 text-[10px] px-1.5 py-0 h-4 font-semibold">
+                      <Badge className="bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-200 hover:bg-slate-200 border-0 text-[10px] px-1.5 py-0 h-4 font-semibold">
                         Administrador
                       </Badge>
                     ) : profile?.role === 'editor' ? (
@@ -331,7 +331,7 @@ export default function Layout() {
                 aria-label="Alternar tema"
               >
                 {theme === 'dark' ? (
-                  <Sun className="w-4 h-4 text-emerald-400" />
+                  <Sun className="w-4 h-4 text-slate-300" />
                 ) : (
                   <Moon className="w-4 h-4 text-slate-600" />
                 )}
@@ -345,7 +345,7 @@ export default function Layout() {
                 aria-label="Notificações"
               >
                 <Bell className="w-4 h-4" />
-                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" />
+                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-slate-600 ring-2 ring-white" />
               </Button>
 
               {/* Back to quotes button (if applicable) */}
@@ -379,7 +379,7 @@ export default function Layout() {
             <div className="flex items-center gap-4 text-[11px] text-slate-400 dark:text-slate-500">
               <span>Versão 3.0.0</span>
               <span>•</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+              <span className="text-slate-700 dark:text-slate-300 font-medium">
                 Sistema 100% Operacional
               </span>
             </div>

@@ -11,13 +11,13 @@ export default function AuthGuard() {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white">
         <div className="flex flex-col items-center gap-4 animate-pulse">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white shadow-xl shadow-emerald-500/30">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white shadow-xl shadow-slate-600/30">
             <Hammer className="w-7 h-7 animate-bounce" />
           </div>
           <div className="flex flex-col items-center">
             <h1 className="text-xl font-bold tracking-tight text-slate-100 flex items-center gap-1.5">
               OrçaFácil
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="inline-block w-2 h-2 rounded-full bg-slate-600" />
             </h1>
             <p className="text-xs text-slate-400 font-medium tracking-wider uppercase mt-0.5">
               Carregando sistema...

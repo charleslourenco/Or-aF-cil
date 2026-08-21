@@ -244,12 +244,12 @@ export function AmbienteSelector({
               value && 'text-slate-900 font-medium',
               error
                 ? 'border-rose-500 ring-2 ring-rose-200 bg-rose-50/20'
-                : 'border-slate-300 hover:border-emerald-500 hover:bg-slate-50/50 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20',
+                : 'border-slate-300 hover:border-slate-600 hover:bg-slate-50/50 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20',
             )}
           >
             <div className="flex items-center gap-2 truncate">
               <Home
-                className={cn('w-4 h-4 shrink-0', value ? 'text-emerald-600' : 'text-slate-400')}
+                className={cn('w-4 h-4 shrink-0', value ? 'text-slate-700' : 'text-slate-400')}
               />
               <span className="truncate">{value || 'Selecione o ambiente...'}</span>
             </div>
@@ -284,7 +284,7 @@ export function AmbienteSelector({
                 <CommandGroup
                   key={group.categoria}
                   heading={
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800/80 px-1 py-1 block">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-900/80 px-1 py-1 block">
                       {group.categoria}
                     </span>
                   }
@@ -303,12 +303,12 @@ export function AmbienteSelector({
                         className={cn(
                           'flex items-center justify-between px-2.5 py-2 rounded-lg text-xs sm:text-sm cursor-pointer transition-colors',
                           isSelected
-                            ? 'bg-emerald-50 text-emerald-900 font-semibold data-[selected=true]:bg-emerald-100'
+                            ? 'bg-slate-100 text-slate-950 font-semibold data-[selected=true]:bg-slate-200'
                             : 'text-slate-700 data-[selected=true]:bg-slate-100 hover:bg-slate-50',
                         )}
                       >
                         <span className="truncate">{amb}</span>
-                        {isSelected && <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-2" />}
+                        {isSelected && <Check className="h-4 w-4 text-slate-700 shrink-0 ml-2" />}
                       </CommandItem>
                     )
                   })}
@@ -326,9 +326,9 @@ export function AmbienteSelector({
                       setIsCreating(true)
                       setNewAmbienteName(searchQuery || '')
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left"
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-800 hover:bg-slate-100 hover:text-slate-900 transition-colors text-left"
                   >
-                    <Plus className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <Plus className="w-4 h-4 text-slate-700 shrink-0" />
                     <span>+ Criar Novo Ambiente</span>
                   </button>
                 ) : (
@@ -344,7 +344,7 @@ export function AmbienteSelector({
                       placeholder="Ex.: Adega Subterrânea, Sala de Jogos..."
                       value={newAmbienteName}
                       onChange={(e) => setNewAmbienteName(e.target.value)}
-                      className="h-9 text-xs bg-white border-slate-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                      className="h-9 text-xs bg-white border-slate-300 focus:border-slate-600 focus:ring-1 focus:ring-slate-600"
                     />
                     <div className="flex items-center justify-end gap-1.5 pt-1">
                       <Button
@@ -363,7 +363,7 @@ export function AmbienteSelector({
                         type="submit"
                         size="sm"
                         disabled={!newAmbienteName.trim()}
-                        className="h-7 text-xs px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                        className="h-7 text-xs px-3 bg-slate-700 hover:bg-slate-800 text-white font-medium"
                       >
                         Adicionar
                       </Button>

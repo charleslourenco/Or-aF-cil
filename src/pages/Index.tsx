@@ -1067,8 +1067,8 @@ export default function Index() {
     <div ref={topRef} className="space-y-8 pb-20">
       {/* 1. Header Hero Title */}
       <div className="space-y-1">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold mb-1">
-          <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold mb-1">
+          <Sparkles className="w-3.5 h-3.5 text-slate-700" />
           <span>Comparador Visual Paramétrico</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -1085,7 +1085,7 @@ export default function Index() {
         <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
+              <div className="w-7 h-7 rounded-lg bg-slate-200 text-slate-800 flex items-center justify-center font-bold text-xs">
                 1
               </div>
               <h3
@@ -1103,9 +1103,9 @@ export default function Index() {
                 <span className="text-xs text-slate-400 font-medium">Ambiente:</span>
                 <Badge
                   variant="outline"
-                  className="bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold text-xs px-2.5 py-0.5 gap-1.5 shadow-2xs"
+                  className="bg-slate-100 text-slate-900 border-slate-300 font-semibold text-xs px-2.5 py-0.5 gap-1.5 shadow-2xs"
                 >
-                  <Home className="w-3.5 h-3.5 text-emerald-600" />
+                  <Home className="w-3.5 h-3.5 text-slate-700" />
                   {ambienteSelecionado || room}
                 </Badge>
               </div>
@@ -1118,7 +1118,7 @@ export default function Index() {
                 htmlFor="clientName"
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
               >
-                <User className="w-3.5 h-3.5 text-emerald-600" />
+                <User className="w-3.5 h-3.5 text-slate-700" />
                 Nome do Cliente <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
@@ -1131,7 +1131,7 @@ export default function Index() {
                     'h-11 rounded-xl text-sm transition-all',
                     errors.clientName
                       ? 'border-rose-500 ring-2 ring-rose-200 bg-rose-50/20'
-                      : 'border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20',
+                      : 'border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20',
                   )}
                 />
               </div>
@@ -1149,7 +1149,7 @@ export default function Index() {
                 htmlFor="ambiente-combobox-header"
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
               >
-                <Home className="w-3.5 h-3.5 text-emerald-600" />
+                <Home className="w-3.5 h-3.5 text-slate-700" />
                 Ambiente <span className="text-rose-500">*</span>
               </label>
               <AmbienteSelector
@@ -1172,7 +1172,7 @@ export default function Index() {
                 htmlFor="moduleSelect"
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
               >
-                <Box className="w-3.5 h-3.5 text-emerald-600" />
+                <Box className="w-3.5 h-3.5 text-slate-700" />
                 Módulo Identificado (Ajuste Manual) <span className="text-rose-500">*</span>
               </label>
               <Select value={selectedModuleId} onValueChange={handleModuleChange}>
@@ -1182,7 +1182,7 @@ export default function Index() {
                     'h-11 rounded-xl text-sm transition-all',
                     errors.selectedModule
                       ? 'border-rose-500 ring-2 ring-rose-200 bg-rose-50/20'
-                      : 'border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20',
+                      : 'border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20',
                   )}
                 >
                   <SelectValue
@@ -1216,7 +1216,7 @@ export default function Index() {
       <section aria-labelledby="match-heading" className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
+            <div className="w-7 h-7 rounded-lg bg-slate-200 text-slate-800 flex items-center justify-center font-bold text-xs">
               2
             </div>
             <h3 id="match-heading" className="text-base sm:text-lg font-bold text-slate-900">
@@ -1235,7 +1235,7 @@ export default function Index() {
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
-                  <User className="w-4 h-4 text-emerald-600" />
+                  <User className="w-4 h-4 text-slate-700" />
                   Upload do Cliente (Croqui / Foto)
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -1256,7 +1256,7 @@ export default function Index() {
 
           {/* Mobile Connection Indicator */}
           <div className="lg:hidden flex items-center justify-center my-[-10px] z-10">
-            <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg ring-4 ring-white">
+            <div className="w-10 h-10 rounded-full bg-slate-700 text-white flex items-center justify-center shadow-lg ring-4 ring-white">
               <ArrowDown className="w-5 h-5 animate-bounce" />
             </div>
           </div>
@@ -1293,7 +1293,7 @@ export default function Index() {
         <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-slate-200 text-slate-800 flex items-center justify-center">
                 <Ruler className="w-4 h-4" />
               </div>
               <h3 id="dimensoes-heading" className="text-sm sm:text-base font-bold text-slate-900">
@@ -1312,9 +1312,9 @@ export default function Index() {
                 htmlFor="dim-largura"
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
               >
-                <ArrowRight className="w-3.5 h-3.5 text-emerald-600" />
+                <ArrowRight className="w-3.5 h-3.5 text-slate-700" />
                 Largura (L)
-              </Label>
+              </label>
               <div className="relative">
                 <Input
                   id="dim-largura"
@@ -1328,9 +1328,8 @@ export default function Index() {
                       largura: Number(e.target.value) || 0,
                     }))
                   }
-                  className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 pr-12"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                  className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 pr-12"
+                />                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                   mm
                 </span>
               </div>
@@ -1342,9 +1341,9 @@ export default function Index() {
                 htmlFor="dim-altura"
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
               >
-                <ArrowUpDown className="w-3.5 h-3.5 text-emerald-600" />
+                <ArrowUpDown className="w-3.5 h-3.5 text-slate-700" />
                 Altura (A)
-              </Label>
+              </label>
               <div className="relative">
                 <Input
                   id="dim-altura"
@@ -1358,9 +1357,8 @@ export default function Index() {
                       altura: Number(e.target.value) || 0,
                     }))
                   }
-                  className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 pr-12"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                  className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 pr-12"
+                />                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                   mm
                 </span>
               </div>
@@ -1372,9 +1370,9 @@ export default function Index() {
                 htmlFor="dim-profundidade"
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
               >
-                <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
+                <ArrowDown className="w-3.5 h-3.5 text-slate-700" />
                 Profundidade (P)
-              </Label>
+              </label>
               <div className="relative">
                 <Input
                   id="dim-profundidade"
@@ -1388,9 +1386,8 @@ export default function Index() {
                       profundidade: Number(e.target.value) || 0,
                     }))
                   }
-                  className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 pr-12"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                  className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 pr-12"
+                />                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
                   mm
                 </span>
               </div>
@@ -1403,7 +1400,7 @@ export default function Index() {
         <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-slate-200 text-slate-800 flex items-center justify-center">
                 <Layers3 className="w-4 h-4" />
               </div>
               <h3 id="materiais-heading" className="text-sm sm:text-base font-bold text-slate-900">
@@ -1426,7 +1423,7 @@ export default function Index() {
                   className={cn(
                     'flex items-start gap-3 p-3 rounded-xl border text-left transition-all',
                     padraoProjeto === 'comercial'
-                      ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20'
+                      ? 'border-slate-600 bg-slate-100/70 ring-2 ring-slate-600/20'
                       : 'border-slate-200 hover:border-slate-300 bg-white',
                   )}
                 >
@@ -1434,7 +1431,7 @@ export default function Index() {
                     className={cn(
                       'w-5 h-5 mt-0.5 shrink-0',
                       padraoProjeto === 'comercial'
-                        ? 'text-emerald-600 fill-emerald-500'
+                        ? 'text-slate-700 fill-slate-600'
                         : 'text-slate-300',
                     )}
                   />
@@ -1451,7 +1448,7 @@ export default function Index() {
                   className={cn(
                     'flex items-start gap-3 p-3 rounded-xl border text-left transition-all',
                     padraoProjeto === 'premium'
-                      ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20'
+                      ? 'border-slate-600 bg-slate-100/70 ring-2 ring-slate-600/20'
                       : 'border-slate-200 hover:border-slate-300 bg-white',
                   )}
                 >
@@ -1460,7 +1457,7 @@ export default function Index() {
                       className={cn(
                         'w-5 h-5',
                         padraoProjeto === 'premium'
-                          ? 'text-emerald-600 fill-emerald-500'
+                          ? 'text-slate-700 fill-slate-600'
                           : 'text-slate-300',
                       )}
                     />
@@ -1468,7 +1465,7 @@ export default function Index() {
                       className={cn(
                         'w-5 h-5 -ml-1',
                         padraoProjeto === 'premium'
-                          ? 'text-emerald-600 fill-emerald-500'
+                          ? 'text-slate-700 fill-slate-600'
                           : 'text-slate-300',
                       )}
                     />
@@ -1486,7 +1483,7 @@ export default function Index() {
             {/* MDF Externo */}
             <div className="space-y-2 p-3 rounded-xl bg-slate-50/60 border border-slate-100">
               <div className="flex items-center gap-1.5">
-                <Box className="w-4 h-4 text-emerald-600" />
+                <Box className="w-4 h-4 text-slate-700" />
                 <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
                   MDF Externo
                 </Label>
@@ -1533,13 +1530,13 @@ export default function Index() {
                   >
                     <ToggleGroupItem
                       value="15"
-                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-emerald-600 data-[state=on]:text-white rounded-md"
+                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-slate-700 data-[state=on]:text-white rounded-md"
                     >
                       15 mm
                     </ToggleGroupItem>
                     <ToggleGroupItem
                       value="18"
-                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-emerald-600 data-[state=on]:text-white rounded-md"
+                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-slate-700 data-[state=on]:text-white rounded-md"
                     >
                       18 mm
                     </ToggleGroupItem>
@@ -1551,7 +1548,7 @@ export default function Index() {
             {/* MDF Interno */}
             <div className="space-y-2 p-3 rounded-xl bg-slate-50/60 border border-slate-100">
               <div className="flex items-center gap-1.5">
-                <Layers3 className="w-4 h-4 text-emerald-600" />
+                <Layers3 className="w-4 h-4 text-slate-700" />
                 <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
                   MDF Interno
                 </Label>
@@ -1598,13 +1595,13 @@ export default function Index() {
                   >
                     <ToggleGroupItem
                       value="15"
-                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-emerald-600 data-[state=on]:text-white rounded-md"
+                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-slate-700 data-[state=on]:text-white rounded-md"
                     >
                       15 mm
                     </ToggleGroupItem>
                     <ToggleGroupItem
                       value="18"
-                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-emerald-600 data-[state=on]:text-white rounded-md"
+                      className="flex-1 h-8 text-xs font-semibold data-[state=on]:bg-slate-700 data-[state=on]:text-white rounded-md"
                     >
                       18 mm
                     </ToggleGroupItem>
@@ -1616,7 +1613,7 @@ export default function Index() {
             {/* MDF Fundo */}
             <div className="space-y-2 p-3 rounded-xl bg-slate-50/60 border border-slate-100">
               <div className="flex items-center gap-1.5">
-                <Package className="w-4 h-4 text-emerald-600" />
+                <Package className="w-4 h-4 text-slate-700" />
                 <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
                   MDF Fundo
                 </Label>
@@ -1654,7 +1651,7 @@ export default function Index() {
           size="lg"
           onClick={handleGenerateBudget}
           disabled={isGenerating}
-          className="w-full max-w-md h-14 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold text-base rounded-2xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2.5 group"
+          className="w-full max-w-md h-14 bg-slate-700 hover:bg-slate-800 active:scale-[0.98] text-white font-bold text-base rounded-2xl shadow-lg shadow-slate-700/25 transition-all flex items-center justify-center gap-2.5 group"
         >
           {isGenerating ? (
             <>
@@ -1683,7 +1680,7 @@ export default function Index() {
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+              <div className="w-7 h-7 rounded-lg bg-slate-700 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                 3
               </div>
               <h3 id="resultados-heading" className="text-lg sm:text-xl font-bold text-slate-900">
@@ -1732,21 +1729,21 @@ export default function Index() {
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm flex items-center justify-between gap-3">
+              <div className="rounded-2xl border border-slate-300 bg-gradient-to-br from-slate-100 to-white p-5 shadow-sm flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+                  <div className="w-11 h-11 rounded-xl bg-slate-700 text-white flex items-center justify-center shadow-md shadow-slate-700/20">
                     <CheckCircle2 className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider">
+                    <p className="text-[11px] font-semibold text-slate-900 uppercase tracking-wider">
                       Valor Consolidado
                     </p>
-                    <p className="text-[11px] text-emerald-700/70">
+                    <p className="text-[11px] text-slate-800/70">
                       Soma de todos os valores de venda
                     </p>
                   </div>
                 </div>
-                <p className="text-xl font-extrabold text-emerald-700 font-mono">
+                <p className="text-xl font-extrabold text-slate-800 font-mono">
                   {formatCurrency(totalVenda)}
                 </p>
               </div>
@@ -1756,7 +1753,7 @@ export default function Index() {
           {/* Card: Termos Comerciais */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-5">
             <div className="flex items-center gap-2 pb-2">
-              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-slate-200 text-slate-800 flex items-center justify-center">
                 <CreditCard className="w-4 h-4" />
               </div>
               <div>
@@ -1773,7 +1770,7 @@ export default function Index() {
                 htmlFor="forma-pagamento"
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
               >
-                <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                <CreditCard className="w-3.5 h-3.5 text-slate-700" />
                 Forma de Pagamento
               </Label>
               <Input
@@ -1781,7 +1778,7 @@ export default function Index() {
                 placeholder="Ex.: 30% de entrada + 4x no cartão"
                 value={formaPagamento}
                 onChange={(e) => setFormaPagamento(e.target.value)}
-                className="h-11 rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
               />
             </div>
 
@@ -1793,7 +1790,7 @@ export default function Index() {
                 htmlFor="observacoes-termos"
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
               >
-                <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                <FileText className="w-3.5 h-3.5 text-slate-700" />
                 Observações / Termos
               </Label>
               <Textarea
@@ -1802,7 +1799,7 @@ export default function Index() {
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value)}
                 rows={3}
-                className="rounded-xl text-sm border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 resize-y min-h-[90px]"
+                className="rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 resize-y min-h-[90px]"
               />
             </div>
           </div>
@@ -1840,7 +1837,7 @@ export default function Index() {
             <Button
               type="button"
               onClick={handleFinalizeClick}
-              className="w-full sm:w-auto h-11 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/25 transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto h-11 px-6 bg-slate-700 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-md shadow-slate-700/25 transition-all flex items-center justify-center gap-2"
             >
               <CheckCircle2 className="w-4 h-4" />
               Finalizar Orçamento

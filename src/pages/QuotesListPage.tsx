@@ -150,7 +150,7 @@ export default function QuotesListPage() {
     switch (status) {
       case 'Aprovado':
         return (
-          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-none font-semibold text-[11px]">
+          <Badge className="bg-slate-200 text-slate-900 hover:bg-slate-200 border-none font-semibold text-[11px]">
             ✓ Aprovado
           </Badge>
         )
@@ -205,7 +205,7 @@ export default function QuotesListPage() {
             </Button>
             <Button
               asChild
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm rounded-xl text-xs h-10"
+              className="bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm rounded-xl text-xs h-10"
             >
               <Link to="/novo-orcamento">
                 <PlusCircle className="w-4 h-4 mr-2" />
@@ -236,7 +236,7 @@ export default function QuotesListPage() {
                 onClick={() => setStatusFilter(st)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
                   statusFilter === st
-                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    ? 'bg-slate-700 text-white shadow-2xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -262,7 +262,7 @@ export default function QuotesListPage() {
           {/* Estado Vazio (Sem orçamentos) */}
           {!loading && orcamentos.length === 0 && (
             <div className="p-12 flex flex-col items-center justify-center text-center space-y-3">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
                 <FileSpreadsheet className="w-7 h-7" />
               </div>
               <div className="space-y-1 max-w-sm">
@@ -273,7 +273,7 @@ export default function QuotesListPage() {
               </div>
               <Button
                 asChild
-                className="mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-sm"
+                className="mt-2 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-sm"
               >
                 <Link to="/novo-orcamento">
                   <PlusCircle className="w-4 h-4 mr-2" />
@@ -293,7 +293,7 @@ export default function QuotesListPage() {
                     <th className="py-3.5 px-4">Cliente</th>
                     <th className="py-3.5 px-4">Ambiente & Módulo</th>
                     <th className="py-3.5 px-4 text-right">Custo Fabril (MP)</th>
-                    <th className="py-3.5 px-4 text-right text-emerald-800">Valor de Venda</th>
+                    <th className="py-3.5 px-4 text-right text-slate-900">Valor de Venda</th>
                     <th className="py-3.5 px-4 text-center">Status</th>
                     <th className="py-3.5 px-4 text-center">Exportar PDF</th>
                     <th className="py-3.5 px-4 text-right">Ação</th>
@@ -347,7 +347,7 @@ export default function QuotesListPage() {
                             {formatCurrency(totalCost)}
                           </td>
 
-                          <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-700">
+                          <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-800">
                             {formatCurrency(q.valor_total)}
                           </td>
 
@@ -364,7 +364,7 @@ export default function QuotesListPage() {
                                     size="sm"
                                     disabled={downloadingId === `proposta-${q.id}`}
                                     onClick={() => handleDownloadProposta(q)}
-                                    className="h-8 w-8 p-0 rounded-lg text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-800"
+                                    className="h-8 w-8 p-0 rounded-lg text-slate-800 border-slate-300 bg-slate-100 hover:bg-slate-200 hover:text-slate-900"
                                   >
                                     {downloadingId === `proposta-${q.id}` ? (
                                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -407,7 +407,7 @@ export default function QuotesListPage() {
                               asChild
                               variant="outline"
                               size="sm"
-                              className="text-xs h-8 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 rounded-lg"
+                              className="text-xs h-8 border-slate-200 hover:bg-slate-100 hover:text-slate-800 hover:border-slate-400 rounded-lg"
                             >
                               <Link to={`/novo-orcamento?id=${q.id}`}>
                                 Abrir

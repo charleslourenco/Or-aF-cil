@@ -68,15 +68,15 @@ export const PricingTable: React.FC<PricingTableProps> = ({ items, totalPecas })
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50/40 to-white p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+        <div className="bg-white rounded-xl border border-slate-300 bg-gradient-to-br from-slate-100/40 to-white p-4 shadow-xs flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-slate-700 text-white flex items-center justify-center shadow-md shadow-slate-700/20">
             <TrendingUp className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider">
+            <p className="text-[11px] font-semibold text-slate-900 uppercase tracking-wider">
               Valor Consolidado
             </p>
-            <p className="text-lg font-bold text-emerald-700 font-mono">
+            <p className="text-lg font-bold text-slate-800 font-mono">
               {formatCurrency(totalSaleSum)}
             </p>
           </div>
@@ -94,7 +94,7 @@ export const PricingTable: React.FC<PricingTableProps> = ({ items, totalPecas })
                 <th className="py-3.5 px-4 text-right font-semibold">Custo Unitário (R$)</th>
                 <th className="py-3.5 px-4 text-right font-semibold">Custo Total (R$)</th>
                 <th className="py-3.5 px-4 text-right font-semibold">Markup</th>
-                <th className="py-3.5 px-4 text-right font-semibold text-emerald-800">
+                <th className="py-3.5 px-4 text-right font-semibold text-slate-900">
                   Valor de Venda (R$)
                 </th>
               </tr>
@@ -136,7 +136,7 @@ export const PricingTable: React.FC<PricingTableProps> = ({ items, totalPecas })
                       ×{Number(item.markup).toFixed(2)}
                     </span>
                   </td>
-                  <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-700">
+                  <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-800">
                     {formatCurrency(item.salePrice)}
                   </td>
                 </tr>
@@ -157,7 +157,7 @@ export const PricingTable: React.FC<PricingTableProps> = ({ items, totalPecas })
                 <td className="py-4 px-4 text-right font-mono text-xs text-slate-600">
                   Méd. ×{markupMedio.toFixed(2)}
                 </td>
-                <td className="py-4 px-4 text-right font-mono font-extrabold text-emerald-700 text-lg">
+                <td className="py-4 px-4 text-right font-mono font-extrabold text-slate-800 text-lg">
                   {formatCurrency(totalSaleSum)}
                 </td>
               </tr>
@@ -185,7 +185,7 @@ export const PricingTable: React.FC<PricingTableProps> = ({ items, totalPecas })
                   </span>
                 )}
               </div>
-              <span className="font-mono font-bold text-emerald-700 text-sm shrink-0">
+              <span className="font-mono font-bold text-slate-800 text-sm shrink-0">
                 {formatCurrency(item.salePrice)}
               </span>
             </div>
@@ -231,9 +231,7 @@ export const PricingTable: React.FC<PricingTableProps> = ({ items, totalPecas })
           </div>
           <div className="flex items-center justify-between text-base font-bold pt-2 border-t border-slate-800">
             <span>Valor Consolidado</span>
-            <span className="font-mono text-emerald-400 text-lg">
-              {formatCurrency(totalSaleSum)}
-            </span>
+            <span className="font-mono text-slate-300 text-lg">{formatCurrency(totalSaleSum)}</span>
           </div>
         </div>
       </div>
@@ -257,19 +255,19 @@ export const PricingTable: React.FC<PricingTableProps> = ({ items, totalPecas })
           </p>
         </div>
 
-        <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm flex items-center justify-between gap-3">
+        <div className="rounded-2xl border border-slate-300 bg-gradient-to-br from-slate-100 to-white p-5 shadow-sm flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+            <div className="w-11 h-11 rounded-xl bg-slate-700 text-white flex items-center justify-center shadow-md shadow-slate-700/20">
               <TrendingUp className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider">
+              <p className="text-[11px] font-semibold text-slate-900 uppercase tracking-wider">
                 Valor Consolidado
               </p>
-              <p className="text-[11px] text-emerald-700/70">Soma de todos os valores de venda</p>
+              <p className="text-[11px] text-slate-800/70">Soma de todos os valores de venda</p>
             </div>
           </div>
-          <p className="text-xl font-extrabold text-emerald-700 font-mono">
+          <p className="text-xl font-extrabold text-slate-800 font-mono">
             {formatCurrency(totalSaleSum)}
           </p>
         </div>
