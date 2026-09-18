@@ -11,9 +11,18 @@ import {
   Eye,
   Sparkles,
   Repeat2,
+  DoorClosed,
+  FolderMinus,
+  Grid3X3,
+  Shirt,
+  Footprints,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -22,6 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TemplateEngenharia } from '@/services/templates'
+import { type ModuloComposicao, type TipoAberturaPorta } from '@/lib/pricing'
 import { cn } from '@/lib/utils'
 
 interface LibraryMatchCardProps {
@@ -48,6 +58,12 @@ interface LibraryMatchCardProps {
   isCustomModule?: boolean
   /** Justificativa retornada pela IA (GPT-4o Vision) sobre o match do módulo. */
   justificativa?: string | null
+  /** Decomposição de módulos (portas, gavetas, interior) */
+  composicao?: ModuloComposicao
+  /** Callback ao editar a composição do móvel */
+  onComposicaoChange?: (updater: (prev: ModuloComposicao) => ModuloComposicao) => void
+  /** Texto descritivo de adaptações retornado pela IA */
+  adaptacoes?: string | null
 }
 
 export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
@@ -63,6 +79,9 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
   fatorEscala = null,
   isCustomModule = false,
   justificativa = null,
+  composicao,
+  onComposicaoChange,
+  adaptacoes = null,
 }) => {
   const isMatched = !!selectedModule
   const [showSwap, setShowSwap] = useState(false)
@@ -246,6 +265,17 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                 </span>
               </div>
             )}
+
+            {/* Balão com adaptações e interior identificado pela IA */}
+            {adaptacoes && (
+              <div className="mt-2 flex items-start gap-2 p-3 bg-blue-50/80 border border-blue-200 rounded-xl text-blue-950 text-xs leading-relaxed animate-fade-in">
+                <SlidersHorizontal className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-blue-900">Composição & Interior Detectado: </span>
+                  <span>{adaptacoes}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Technical Specs Pill Grid & Comparação Lado a Lado de Dimensões / Fator de Escala */}
@@ -346,6 +376,192 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                     {selectedModule?.material || '—'}
                   </span>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* DECOMPOSIÇÃO ESTRUTURADA DE MÓDULO (PORTAS, GAVETAS, INTERIOR) */}
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3.5">
+            <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200">
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <SlidersHorizontal className="w-4 h-4 text-slate-700" />
+                Decomposição do Móvel & Interior
+              </span>
+              <Badge
+                variant="outline"
+                className="bg-white text-[10px] text-slate-600 border-slate-300 font-medium"
+              >
+                Recalcula BOM na hora
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Portas */}
+              <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 uppercase">
+                  <DoorClosed className="w-3.5 h-3.5 text-slate-600" />
+                  Portas
+                </div>
+                <div className="flex gap-2">
+                  <div className="w-16">
+                    <Label className="text-[10px] text-slate-500 font-medium">Qtd</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={composicao?.portas?.qtd ?? 0}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseInt(e.target.value, 10) || 0)
+                        onComposicaoChange?.((prev) => ({
+                          ...prev,
+                          portas: {
+                            qtd: val,
+                            tipo:
+                              val === 0
+                                ? 'nenhum'
+                                : prev.portas?.tipo === 'nenhum'
+                                  ? 'abrir'
+                                  : prev.portas?.tipo || 'abrir',
+                          },
+                        }))
+                      }}
+                      className="h-8 text-xs font-bold font-mono px-2"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <Label className="text-[10px] text-slate-500 font-medium">Tipo</Label>
+                    <Select
+                      value={composicao?.portas?.tipo || 'abrir'}
+                      onValueChange={(val: TipoAberturaPorta) => {
+                        onComposicaoChange?.((prev) => ({
+                          ...prev,
+                          portas: {
+                            qtd: prev.portas?.qtd ?? 0,
+                            tipo: val,
+                          },
+                        }))
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs px-2">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="abrir">Abrir</SelectItem>
+                        <SelectItem value="correr">Correr</SelectItem>
+                        <SelectItem value="batente">Batente</SelectItem>
+                        <SelectItem value="nenhum">Nenhum</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Gavetas */}
+              <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 uppercase">
+                  <FolderMinus className="w-3.5 h-3.5 text-slate-600" />
+                  Gavetas
+                </div>
+                <div>
+                  <Label className="text-[10px] text-slate-500 font-medium">Qtd Gavetas</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={30}
+                    value={composicao?.gavetas?.qtd ?? 0}
+                    onChange={(e) => {
+                      const val = Math.max(0, parseInt(e.target.value, 10) || 0)
+                      onComposicaoChange?.((prev) => ({
+                        ...prev,
+                        gavetas: { qtd: val },
+                      }))
+                    }}
+                    className="h-8 text-xs font-bold font-mono px-2"
+                  />
+                </div>
+              </div>
+
+              {/* Prateleiras */}
+              <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 uppercase">
+                  <Grid3X3 className="w-3.5 h-3.5 text-slate-600" />
+                  Prateleiras
+                </div>
+                <div>
+                  <Label className="text-[10px] text-slate-500 font-medium">Qtd Internas</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={composicao?.prateleiras?.qtd ?? 2}
+                    onChange={(e) => {
+                      const val = Math.max(0, parseInt(e.target.value, 10) || 0)
+                      onComposicaoChange?.((prev) => ({
+                        ...prev,
+                        prateleiras: { qtd: val },
+                      }))
+                    }}
+                    className="h-8 text-xs font-bold font-mono px-2"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Acessórios Internos e Puxadores */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <label className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                <Checkbox
+                  checked={Boolean(composicao?.cabideiro)}
+                  onCheckedChange={(checked) => {
+                    onComposicaoChange?.((prev) => ({
+                      ...prev,
+                      cabideiro: Boolean(checked),
+                    }))
+                  }}
+                />
+                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
+                  <Shirt className="w-3.5 h-3.5 text-slate-600" />
+                  Varão Cabideiro
+                </div>
+              </label>
+
+              <label className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                <Checkbox
+                  checked={Boolean(composicao?.sapateira)}
+                  onCheckedChange={(checked) => {
+                    onComposicaoChange?.((prev) => ({
+                      ...prev,
+                      sapateira: Boolean(checked),
+                    }))
+                  }}
+                />
+                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
+                  <Footprints className="w-3.5 h-3.5 text-slate-600" />
+                  Sapateira
+                </div>
+              </label>
+
+              <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200">
+                <Label className="text-[11px] font-semibold text-slate-700 whitespace-nowrap">
+                  Puxadores:
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={
+                    composicao?.puxadores ??
+                    (composicao?.portas?.qtd ?? 0) + (composicao?.gavetas?.qtd ?? 0)
+                  }
+                  onChange={(e) => {
+                    const val = Math.max(0, parseInt(e.target.value, 10) || 0)
+                    onComposicaoChange?.((prev) => ({
+                      ...prev,
+                      puxadores: val,
+                    }))
+                  }}
+                  className="h-7 text-xs font-bold font-mono px-2"
+                />
               </div>
             </div>
           </div>

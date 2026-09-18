@@ -48,7 +48,13 @@ import { fetchTemplatesEngenharia, TemplateEngenharia } from '@/services/templat
 import { toast } from '@/hooks/use-toast'
 import { ToastAction } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
-import { calcularBOM, custoConsolidado, valorConsolidado, type PadraoProjeto } from '@/lib/pricing'
+import {
+  calcularBOM,
+  custoConsolidado,
+  valorConsolidado,
+  type PadraoProjeto,
+  type ModuloComposicao,
+} from '@/lib/pricing'
 import { fetchCatalogoMateriais, type CatalogoMaterial } from '@/services/catalogo'
 import { fetchPerfilEmpresa, type PerfilEmpresa } from '@/services/empresa'
 import { fetchConfigEngenharia } from '@/services/engenharia'
@@ -123,6 +129,17 @@ export default function Index() {
   } | null>(null)
   const [isCustomModuleIA, setIsCustomModuleIA] = useState<boolean>(false)
   const [customModuleNameIA, setCustomModuleNameIA] = useState<string>('')
+  const [adaptacoesIA, setAdaptacoesIA] = useState<string | null>(null)
+
+  // 🗄️ DECOMPOSIÇÃO ESTRUTURADA DE MÓDULO (portas, gavetas, prateleiras, interior)
+  const [composicaoModulo, setComposicaoModulo] = useState<ModuloComposicao>({
+    portas: { qtd: 0, tipo: 'nenhum' },
+    gavetas: { qtd: 0 },
+    prateleiras: { qtd: 2 },
+    cabideiro: false,
+    sapateira: false,
+    puxadores: 0,
+  })
 
   // Validation errors
   const [errors, setErrors] = useState<{
@@ -343,6 +360,8 @@ export default function Index() {
               mdf_interno: m.mdf_interno,
               mdf_fundo: m.mdf_fundo,
               padrao_projeto: m.padrao_projeto,
+              composicao: m.composicao,
+              adaptacoes: m.adaptacoes,
               imagem_url: m.imagem_url,
               subtotal: Number(m.subtotal) || 0,
               itens: (m.itens || []).map((it, itIdx) => ({
@@ -364,6 +383,15 @@ export default function Index() {
             setActiveAmbienteId(restoredAmbientes[0].id)
             setAmbienteSelecionado(restoredAmbientes[0].nome)
             setRoom(restoredAmbientes[0].nome)
+
+            // Restaura composição do primeiro módulo salvo se existir
+            const primMod = restoredAmbientes[0].modulos[0]
+            if (primMod?.composicao) {
+              setComposicaoModulo(primMod.composicao)
+            }
+            if (primMod?.adaptacoes) {
+              setAdaptacoesIA(primMod.adaptacoes)
+            }
           }
         }
 
@@ -593,6 +621,7 @@ export default function Index() {
         catalogoParaPricing,
         markupEngenharia,
         fatorEscalaIA ?? 1.0,
+        composicaoModulo,
       ),
     [
       selectedModuleObj,
@@ -604,6 +633,7 @@ export default function Index() {
       catalogoParaPricing,
       markupEngenharia,
       fatorEscalaIA,
+      composicaoModulo,
     ],
   )
 
@@ -739,6 +769,12 @@ export default function Index() {
       dimensoes_originais?: { largura: number; altura: number; profundidade: number }
       fator_escala?: number
       adaptacoes?: string
+      portas?: { qtd: number; tipo: 'abrir' | 'correr' | 'batente' | 'nenhum' }
+      gavetas?: { qtd: number }
+      prateleiras?: { qtd: number }
+      cabideiro?: boolean
+      sapateira?: boolean
+      puxadores?: number
     }>
     ferragens_obrigatorias?: Array<{
       catalogo_id: string | null
@@ -798,6 +834,7 @@ export default function Index() {
     setUploadedFiles(files ?? [])
     // Limpa a justificativa anterior sempre que novos arquivos chegam.
     setMatchJustificativa(null)
+    setAdaptacoesIA(null)
     setFatorEscalaIA(null)
     setDimensoesOriginaisIA(null)
     setDimensoesEstimadasIA(null)
@@ -905,10 +942,73 @@ export default function Index() {
               : 1.0
           setFatorEscalaIA(fator)
 
+          // 2.1 Decomposição detectada pela IA (portas, gavetas, prateleiras, interior)
+          if (primeiroModulo.adaptacoes) {
+            setAdaptacoesIA(primeiroModulo.adaptacoes)
+          }
+
+          const portasDetectadas = primeiroModulo.portas || { qtd: 0, tipo: 'nenhum' }
+          const gavetasDetectadas = primeiroModulo.gavetas || { qtd: 0 }
+          const prateleirasDetectadas = primeiroModulo.prateleiras || { qtd: 2 }
+          const cabideiroDetectado = Boolean(primeiroModulo.cabideiro)
+          const sapateiraDetectada = Boolean(primeiroModulo.sapateira)
+          const puxadoresDetectados =
+            typeof primeiroModulo.puxadores === 'number'
+              ? primeiroModulo.puxadores
+              : portasDetectadas.qtd + gavetasDetectadas.qtd
+
+          setComposicaoModulo({
+            portas: {
+              qtd: portasDetectadas.qtd,
+              tipo: portasDetectadas.tipo || 'abrir',
+            },
+            gavetas: {
+              qtd: gavetasDetectadas.qtd,
+            },
+            prateleiras: {
+              qtd: prateleirasDetectadas.qtd,
+            },
+            cabideiro: cabideiroDetectado,
+            sapateira: sapateiraDetectada,
+            puxadores: puxadoresDetectados,
+          })
+
           // 3. Adiciona cada ferragem obrigatória / material ausente como item manual
           if (ferragensObrigatorias.length > 0) {
             const effectiveMarkup = markupEngenharia > 0 ? markupEngenharia : 2.5
-            const novasFerragens: BudgetItem[] = ferragensObrigatorias.map((f, idx) => {
+            // Filtrar ferragens que já são calculadas dinamicamente pelo motor da composição
+            // (ex: corrediças e puxadores de gaveta, dobradiças e kits de correr de porta)
+            // para evitar duplicações quando a composição do móvel já os incluir.
+            const descLower = (f: { descricao?: string }) => (f.descricao || '').toLowerCase()
+            const ferragensFiltradas = ferragensObrigatorias.filter((f) => {
+              const d = descLower(f)
+              if (
+                gavetasDetectadas.qtd > 0 &&
+                (d.includes('corrediça') || d.includes('corredica'))
+              ) {
+                return false
+              }
+              if (
+                portasDetectadas.qtd > 0 &&
+                portasDetectadas.tipo === 'correr' &&
+                (d.includes('correr') || d.includes('trilho'))
+              ) {
+                return false
+              }
+              if (
+                portasDetectadas.qtd > 0 &&
+                portasDetectadas.tipo !== 'correr' &&
+                (d.includes('dobradiça') || d.includes('dobradica'))
+              ) {
+                return false
+              }
+              if (puxadoresDetectados > 0 && d.includes('puxador')) {
+                return false
+              }
+              return true
+            })
+
+            const novasFerragens: BudgetItem[] = ferragensFiltradas.map((f, idx) => {
               // Buscar preco_custo do catalogoMateriais pelo catalogo_id ou usar estimativa R$ 50,00
               const matNoCatalogo = catalogoMateriais.find(
                 (c) =>
@@ -1188,6 +1288,8 @@ export default function Index() {
         mdf_interno: `${mdfInterno.cor} (${mdfInterno.espessura}mm)`,
         mdf_fundo: mdfFundo,
         padrao_projeto: padraoProjeto,
+        composicao: composicaoModulo,
+        adaptacoes: adaptacoesIA || undefined,
         subtotal: currentModuleSubtotal,
         itens: pricingItems.map((it) => ({
           id: it.id,
@@ -1249,6 +1351,15 @@ export default function Index() {
     setIsAnalyzing(false)
     setManualItems([])
     setMatchJustificativa(null)
+    setAdaptacoesIA(null)
+    setComposicaoModulo({
+      portas: { qtd: 0, tipo: 'nenhum' },
+      gavetas: { qtd: 0 },
+      prateleiras: { qtd: 2 },
+      cabideiro: false,
+      sapateira: false,
+      puxadores: 0,
+    })
     setFatorEscalaIA(null)
     setDimensoesOriginaisIA(null)
     setDimensoesEstimadasIA(null)
@@ -1309,6 +1420,8 @@ export default function Index() {
               mdf_interno: `${mdfInterno.cor} (${mdfInterno.espessura}mm)`,
               mdf_fundo: mdfFundo,
               padrao_projeto: padraoProjeto,
+              composicao: composicaoModulo,
+              adaptacoes: adaptacoesIA || undefined,
               subtotal: currentSubtotal,
               itens: pricingItems.map((it) => ({
                 id: it.id,
@@ -2148,6 +2261,12 @@ export default function Index() {
               modulosDisponiveis={modulosDisponiveis}
               selectedModuleId={selectedModuleId}
               justificativa={matchJustificativa}
+              composicao={composicaoModulo}
+              onComposicaoChange={(updater) => {
+                setComposicaoModulo(updater)
+                setSavedLoadedItems(null)
+              }}
+              adaptacoes={adaptacoesIA}
               onModuleChange={(id) => {
                 // Troca manual de gabarito: atualiza o card e reseta o estado de análise.
                 handleModuleChange(id)

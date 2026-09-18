@@ -180,6 +180,7 @@ export type Database = {
       Orcamentos: {
         Row: {
           ambiente: string | null
+          ambientes_json: Json | null
           bom_json: Json | null
           cliente_nome: string
           created_at: string | null
@@ -201,6 +202,7 @@ export type Database = {
         }
         Insert: {
           ambiente?: string | null
+          ambientes_json?: Json | null
           bom_json?: Json | null
           cliente_nome: string
           created_at?: string | null
@@ -222,6 +224,7 @@ export type Database = {
         }
         Update: {
           ambiente?: string | null
+          ambientes_json?: Json | null
           bom_json?: Json | null
           cliente_nome?: string
           created_at?: string | null

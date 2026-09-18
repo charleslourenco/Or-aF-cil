@@ -25,6 +25,24 @@ interface Dimensoes3D {
   profundidade: number
 }
 
+export type TipoPorta = 'abrir' | 'correr' | 'batente' | 'nenhum'
+
+export interface DecomposicaoModulo {
+  portas: {
+    qtd: number
+    tipo: TipoPorta
+  }
+  gavetas: {
+    qtd: number
+  }
+  prateleiras: {
+    qtd: number
+  }
+  cabideiro: boolean
+  sapateira: boolean
+  puxadores: number
+}
+
 interface ModuloDetectado {
   codigo_modulo: string
   nome: string
@@ -33,6 +51,19 @@ interface ModuloDetectado {
   dimensoes_originais?: Dimensoes3D
   fator_escala?: number
   adaptacoes?: string
+  portas?: {
+    qtd: number
+    tipo: TipoPorta
+  }
+  gavetas?: {
+    qtd: number
+  }
+  prateleiras?: {
+    qtd: number
+  }
+  cabideiro?: boolean
+  sapateira?: boolean
+  puxadores?: number
 }
 
 interface FerragemObrigatoria {
@@ -147,7 +178,18 @@ ${listaCatalogoText}
      "e_customizado": true
    - NUNCA invente IDs aleatórios e NUNCA force o primeiro módulo da lista se não houver correspondência exata/adequada.
 
-2. FERRAGENS E INSUMOS OBRIGATÓRIOS:
+2. DECOMPOSIÇÃO ESTRUTURADA DE COMPONENTES E INTERIOR VISÍVEL:
+   - Analise minuciosamente a parte externa e o INTERIOR visível de cada móvel (portas, gavetas, prateleiras internas, divisões, cabideiro, sapateira, puxadores).
+   - Preencha SEMPRE e OBRIGATORIAMENTE os seguintes campos para cada módulo, mesmo que com valor 0 ou falso:
+     * "portas": { "qtd": <número total de portas>, "tipo": "abrir" | "correr" | "batente" | "nenhum" }
+     * "gavetas": { "qtd": <número total de gavetas externas ou internas> }
+     * "prateleiras": { "qtd": <número total de prateleiras internas ou divisões horizontais> }
+     * "cabideiro": <true se houver varão/cabideiro para pendurar roupas, false se não houver>
+     * "sapateira": <true se houver prateleiras aramadas/corrediças para sapatos, false se não houver>
+     * "puxadores": <número estimado total de puxadores necessários para portas e gavetas>
+   - Em "adaptacoes", descreva textualmente em português claro a composição e adaptações do móvel (ex: "Guarda-roupa com 6 portas de abrir, 4 gavetas internas, cabideiro e 3 prateleiras").
+
+3. FERRAGENS E INSUMOS OBRIGATÓRIOS:
    - Se o módulo tiver PORTAS DE CORRER: inclua OBRIGATORIAMENTE Kit Sistema de Correr + Trilho Superior + Trilho Inferior.
    - Se o módulo tiver GAVETAS: inclua OBRIGATORIAMENTE Corrediças (Telescópicas ou Invisíveis) + Puxadores (multiplicados pela quantidade de gavetas).
    - Se o módulo for AÉREO / SUSPENSO: inclua OBRIGATORIAMENTE Suportes de Fixação / Buchas.
@@ -155,7 +197,7 @@ ${listaCatalogoText}
      * Se o item/ferragem EXISTIR no Catálogo fornecido, retorne "catalogo_id" com o ID real do catálogo e a "descricao" correspondente.
      * Se o item/ferragem NÃO EXISTIR no Catálogo fornecido, retorne "catalogo_id": null, "item_nao_cadastrado": true, "preco_custo_estimado": 50.00, e a "descricao" clara do item ausente.
 
-3. DIMENSÕES ESTIMADAS:
+4. DIMENSÕES ESTIMADAS:
    - Estime as dimensões (largura, altura, profundidade em mm) de cada módulo com base na proporção visual e objetos de referência no ambiente.
 
 Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código:
@@ -166,7 +208,13 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
       "nome": "Nome do módulo",
       "e_customizado": false,
       "dimensao_estimada": { "largura": 1800, "altura": 2200, "profundidade": 600 },
-      "adaptacoes": "Descrição de adaptações necessárias"
+      "portas": { "qtd": 2, "tipo": "abrir" },
+      "gavetas": { "qtd": 4 },
+      "prateleiras": { "qtd": 3 },
+      "cabideiro": true,
+      "sapateira": false,
+      "puxadores": 6,
+      "adaptacoes": "Guarda-roupa 2 portas de abrir, cabideiro interno e 4 gavetas"
     }
   ],
   "ferragens_obrigatorias": [
@@ -293,6 +341,27 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         }
       }
 
+      // Processamento e normalização da decomposição estruturada
+      const portasRaw = m.portas || {}
+      let tipoPorta: TipoPorta = 'abrir'
+      const tipoLower = String(portasRaw.tipo || '').toLowerCase()
+      if (['correr', 'abrir', 'batente', 'nenhum'].includes(tipoLower)) {
+        tipoPorta = tipoLower as TipoPorta
+      } else if (tipoLower.includes('corr')) {
+        tipoPorta = 'correr'
+      } else if (tipoLower.includes('bat')) {
+        tipoPorta = 'batente'
+      } else if (tipoLower.includes('sem') || tipoLower === 'none') {
+        tipoPorta = 'nenhum'
+      }
+
+      const qtdPortas = Math.max(0, Number(portasRaw.qtd ?? m.qtd_portas) || 0)
+      const qtdGavetas = Math.max(0, Number(m.gavetas?.qtd ?? m.qtd_gavetas) || 0)
+      const qtdPrateleiras = Math.max(0, Number(m.prateleiras?.qtd ?? m.qtd_prateleiras) || 0)
+      const cabideiro = Boolean(m.cabideiro)
+      const sapateira = Boolean(m.sapateira)
+      const puxadores = Math.max(0, Number(m.puxadores ?? qtdPortas + qtdGavetas) || 0)
+
       return {
         codigo_modulo: codigo,
         nome,
@@ -301,6 +370,19 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         dimensoes_originais: dimensoesOriginais,
         fator_escala: fatorEscala,
         adaptacoes: m.adaptacoes ? String(m.adaptacoes) : undefined,
+        portas: {
+          qtd: qtdPortas,
+          tipo: qtdPortas === 0 ? 'nenhum' : tipoPorta,
+        },
+        gavetas: {
+          qtd: qtdGavetas,
+        },
+        prateleiras: {
+          qtd: qtdPrateleiras,
+        },
+        cabideiro,
+        sapateira,
+        puxadores,
       }
     }
 
@@ -323,6 +405,12 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
           e_customizado: true,
           dimensao_estimada: { largura: 1800, altura: 2200, profundidade: 600 },
           fator_escala: 1.0,
+          portas: { qtd: 0, tipo: 'nenhum' },
+          gavetas: { qtd: 0 },
+          prateleiras: { qtd: 2 },
+          cabideiro: false,
+          sapateira: false,
+          puxadores: 0,
         },
       ]
     }

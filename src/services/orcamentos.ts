@@ -44,6 +44,23 @@ export interface OrcamentoDimensoes {
   profundidade: number
 }
 
+export interface ComposicaoModuloPersistida {
+  portas?: {
+    qtd: number
+    tipo: 'abrir' | 'correr' | 'batente' | 'nenhum'
+  }
+  gavetas?: {
+    qtd: number
+  }
+  prateleiras?: {
+    qtd: number
+  }
+  cabideiro?: boolean
+  sapateira?: boolean
+  puxadores?: number
+  adaptacoes?: string
+}
+
 export interface ModuloOrcamento {
   id: string
   modulo_id?: string
@@ -56,6 +73,8 @@ export interface ModuloOrcamento {
   imagem_url?: string | null
   itens: OrcamentoBOMItem[]
   subtotal: number
+  composicao?: ComposicaoModuloPersistida
+  adaptacoes?: string
 }
 
 export interface AmbienteOrcamento {
