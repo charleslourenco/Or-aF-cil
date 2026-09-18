@@ -44,6 +44,27 @@ export interface OrcamentoDimensoes {
   profundidade: number
 }
 
+export interface ModuloOrcamento {
+  id: string
+  modulo_id?: string
+  nome: string
+  dimensoes?: OrcamentoDimensoes
+  mdf_externo?: string
+  mdf_interno?: string
+  mdf_fundo?: string
+  padrao_projeto?: string
+  imagem_url?: string | null
+  itens: OrcamentoBOMItem[]
+  subtotal: number
+}
+
+export interface AmbienteOrcamento {
+  id: string
+  nome: string
+  modulos: ModuloOrcamento[]
+  subtotal: number
+}
+
 export interface Orcamento {
   id: string
   numero_sequencial?: number | null
@@ -57,6 +78,7 @@ export interface Orcamento {
   observacoes: string | null
   bom_json: OrcamentoBOMItem[] | null
   dre_json: OrcamentoDRE | null
+  ambientes_json?: AmbienteOrcamento[] | null
   dimensoes_json?: OrcamentoDimensoes | null
   mdf_externo?: string | null
   mdf_interno?: string | null
@@ -77,6 +99,7 @@ export interface OrcamentoInput {
   observacoes?: string | null
   bom_json?: OrcamentoBOMItem[] | unknown[] | null
   dre_json?: OrcamentoDRE | Record<string, unknown> | null
+  ambientes_json?: AmbienteOrcamento[] | unknown[] | null
   dimensoes_json?: OrcamentoDimensoes | Record<string, unknown> | null
   mdf_externo?: string | null
   mdf_interno?: string | null
@@ -278,6 +301,7 @@ export async function updateOrcamento(
     if (input.observacoes !== undefined) updatePayload.observacoes = input.observacoes
     if (input.bom_json !== undefined) updatePayload.bom_json = input.bom_json
     if (input.dre_json !== undefined) updatePayload.dre_json = input.dre_json
+    if (input.ambientes_json !== undefined) updatePayload.ambientes_json = input.ambientes_json
     if (input.dimensoes_json !== undefined) updatePayload.dimensoes_json = input.dimensoes_json
     if (input.mdf_externo !== undefined) updatePayload.mdf_externo = input.mdf_externo
     if (input.mdf_interno !== undefined) updatePayload.mdf_interno = input.mdf_interno
@@ -321,6 +345,7 @@ export async function createOrcamento(input: OrcamentoInput): Promise<Orcamento 
         observacoes: input.observacoes ?? null,
         bom_json: input.bom_json ?? null,
         dre_json: input.dre_json ?? null,
+        ambientes_json: input.ambientes_json ?? null,
         dimensoes_json: input.dimensoes_json ?? null,
         mdf_externo: input.mdf_externo ?? null,
         mdf_interno: input.mdf_interno ?? null,

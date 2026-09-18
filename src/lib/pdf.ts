@@ -2,7 +2,12 @@ import jsPDF from 'jspdf'
 import 'jspdf-autotable'
 import autoTable from 'jspdf-autotable'
 import type { PerfilEmpresa } from '@/services/empresa'
-import type { Orcamento, OrcamentoBOMItem, OrcamentoDRE } from '@/services/orcamentos'
+import type {
+  Orcamento,
+  OrcamentoBOMItem,
+  OrcamentoDRE,
+  AmbienteOrcamento,
+} from '@/services/orcamentos'
 
 // Interface estendida para suportar autoTable no jsPDF
 interface JsPDFWithAutoTable extends jsPDF {
@@ -10,6 +15,20 @@ interface JsPDFWithAutoTable extends jsPDF {
     finalY?: number
   }
   autoTable?: typeof autoTable
+}
+
+export interface PropostaComercialItem {
+  nome: string
+  descricao?: string
+  quantidade?: number
+  valorUnitario?: number
+  valorTotal?: number
+}
+
+export interface PropostaComercialAmbienteGrupo {
+  nome: string
+  itens: PropostaComercialItem[]
+  subtotal: number
 }
 
 export interface PropostaComercialAmbiente {
@@ -33,6 +52,7 @@ export interface PropostaComercialData {
   }
   empresa?: PerfilEmpresa | null
   ambientes: PropostaComercialAmbiente[]
+  ambientesGrupos?: PropostaComercialAmbienteGrupo[]
   valorTotal: number
   formaPagamento?: string | null
   observacoes?: string | null
@@ -57,6 +77,7 @@ export interface AnaliseCustoData {
   empresa?: PerfilEmpresa | null
   dre?: OrcamentoDRE | null
   bom?: OrcamentoBOMItem[] | null
+  ambientes_json?: AmbienteOrcamento[] | null
   valorTotalVenda?: number
   valorTotalCusto?: number
   indicadoresSeguranca?: {
@@ -344,65 +365,156 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     doc.text('RELAÇÃO DE AMBIENTES E MÓVEIS PLANEJADOS', margin, y)
     y += 4
 
-    // 5. TABELA DE ITENS COM NOVAS LARGURAS FIXAS PROPORCIONAIS
-    const tableBody = dados.ambientes.map((amb, index) => {
-      const qtd = amb.quantidade ?? 1
-      const vUnit =
-        amb.valorUnitario ??
-        (amb.valorTotal ? amb.valorTotal / qtd : dados.valorTotal / (dados.ambientes.length || 1))
-      const vTot = amb.valorTotal ?? vUnit * qtd
-      return [
-        String(index + 1),
-        amb.nome || 'Ambiente / Módulo',
-        amb.descricao || 'Projeto sob medida conforme especificações técnicas aprovadas',
-        String(qtd),
-        formatMoeda(vUnit),
-        formatMoeda(vTot),
-      ]
-    })
+    // 5. TABELA DE ITENS (COM SUPORTE A MÚLTIPLOS AMBIENTES AGRUPADOS)
+    if (dados.ambientesGrupos && dados.ambientesGrupos.length > 0) {
+      // Renderiza bloco por ambiente
+      let itemGlobalIndex = 1
+      for (const grupo of dados.ambientesGrupos) {
+        if (y + 25 > pageHeight - 35) {
+          doc.addPage()
+          y = margin
+        }
 
-    invokeAutoTable(doc, {
-      startY: y,
-      margin: { left: margin, right: margin },
-      head: [
-        ['Item', 'Ambiente / Módulo', 'Descrição do Projeto', 'Qtd', 'Valor Unit.', 'Valor Total'],
-      ],
-      body: tableBody,
-      theme: 'grid',
-      headStyles: {
-        fillColor: [241, 245, 249], // #F1F5F9 — cinza suave
-        textColor: [51, 65, 85], // #334155 — slate escuro
-        fontStyle: 'bold',
-        fontSize: 8,
-        halign: 'left',
-        lineWidth: { bottom: 0.5 },
-        lineColor: [203, 213, 225], // #CBD5E1
-      },
-      bodyStyles: {
-        textColor: [51, 65, 85],
-        fontSize: 8,
-        cellPadding: { top: 10, right: 8, bottom: 10, left: 8 },
-        valign: 'top',
-      },
-      alternateRowStyles: {
-        fillColor: [248, 250, 252], // #F8FAFC para linhas pares
-      },
-      columnStyles: {
-        0: { cellWidth: contentWidth * 0.05, halign: 'center' },
-        1: { cellWidth: contentWidth * 0.25, halign: 'left', fontStyle: 'bold' },
-        2: { cellWidth: contentWidth * 0.42, halign: 'left', valign: 'top' },
-        3: { cellWidth: contentWidth * 0.08, halign: 'center' },
-        4: { cellWidth: contentWidth * 0.1, halign: 'right' },
-        5: { cellWidth: contentWidth * 0.1, halign: 'right' },
-      },
-      styles: {
-        lineColor: [226, 232, 240], // #E2E8F0
-        lineWidth: 0.3,
-        font: 'helvetica',
-      },
-    })
+        // Título do Ambiente
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(9)
+        doc.setTextColor(30, 41, 59)
+        doc.setFillColor(241, 245, 249) // #F1F5F9
+        doc.roundedRect(margin, y, contentWidth, 7, 1.5, 1.5, 'F')
+        doc.text(`AMBIENTE: ${grupo.nome.toUpperCase()}`, margin + 3, y + 5)
+        doc.setFont('helvetica', 'normal')
+        doc.text(`Subtotal: ${formatMoeda(grupo.subtotal)}`, pageWidth - margin - 3, y + 5, {
+          align: 'right',
+        })
+        y += 8.5
 
-    y = (doc.lastAutoTable?.finalY ?? y) + 7
+        const grupoBody = (grupo.itens || []).map((it) => {
+          const qtd = it.quantidade ?? 1
+          const vTot = it.valorTotal ?? (it.valorUnitario ? it.valorUnitario * qtd : 0)
+          const vUnit = it.valorUnitario ?? (qtd > 0 ? vTot / qtd : vTot)
+          const row = [
+            String(itemGlobalIndex++),
+            it.nome || 'Módulo Planejado',
+            it.descricao || 'Projeto sob medida conforme especificações técnicas aprovadas',
+            String(qtd),
+            formatMoeda(vUnit),
+            formatMoeda(vTot),
+          ]
+          return row
+        })
+
+        invokeAutoTable(doc, {
+          startY: y,
+          margin: { left: margin, right: margin },
+          head: [['Item', 'Módulo', 'Descrição do Projeto', 'Qtd', 'Valor Unit.', 'Valor Total']],
+          body:
+            grupoBody.length > 0
+              ? grupoBody
+              : [['—', 'Sem módulos', '—', '0', 'R$ 0,00', 'R$ 0,00']],
+          theme: 'grid',
+          headStyles: {
+            fillColor: [241, 245, 249],
+            textColor: [51, 65, 85],
+            fontStyle: 'bold',
+            fontSize: 7.5,
+            halign: 'left',
+            lineWidth: { bottom: 0.5 },
+            lineColor: [203, 213, 225],
+          },
+          bodyStyles: {
+            textColor: [51, 65, 85],
+            fontSize: 7.5,
+            cellPadding: { top: 6, right: 6, bottom: 6, left: 6 },
+            valign: 'top',
+          },
+          alternateRowStyles: {
+            fillColor: [248, 250, 252],
+          },
+          columnStyles: {
+            0: { cellWidth: contentWidth * 0.05, halign: 'center' },
+            1: { cellWidth: contentWidth * 0.25, halign: 'left', fontStyle: 'bold' },
+            2: { cellWidth: contentWidth * 0.42, halign: 'left', valign: 'top' },
+            3: { cellWidth: contentWidth * 0.08, halign: 'center' },
+            4: { cellWidth: contentWidth * 0.1, halign: 'right' },
+            5: { cellWidth: contentWidth * 0.1, halign: 'right' },
+          },
+          styles: {
+            lineColor: [226, 232, 240],
+            lineWidth: 0.3,
+            font: 'helvetica',
+          },
+        })
+
+        y = (doc.lastAutoTable?.finalY ?? y) + 6
+      }
+    } else {
+      // Fallback: modo plano tradicional
+      const tableBody = dados.ambientes.map((amb, index) => {
+        const qtd = amb.quantidade ?? 1
+        const vUnit =
+          amb.valorUnitario ??
+          (amb.valorTotal ? amb.valorTotal / qtd : dados.valorTotal / (dados.ambientes.length || 1))
+        const vTot = amb.valorTotal ?? vUnit * qtd
+        return [
+          String(index + 1),
+          amb.nome || 'Ambiente / Módulo',
+          amb.descricao || 'Projeto sob medida conforme especificações técnicas aprovadas',
+          String(qtd),
+          formatMoeda(vUnit),
+          formatMoeda(vTot),
+        ]
+      })
+
+      invokeAutoTable(doc, {
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [
+          [
+            'Item',
+            'Ambiente / Módulo',
+            'Descrição do Projeto',
+            'Qtd',
+            'Valor Unit.',
+            'Valor Total',
+          ],
+        ],
+        body: tableBody,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [241, 245, 249], // #F1F5F9 — cinza suave
+          textColor: [51, 65, 85], // #334155 — slate escuro
+          fontStyle: 'bold',
+          fontSize: 8,
+          halign: 'left',
+          lineWidth: { bottom: 0.5 },
+          lineColor: [203, 213, 225], // #CBD5E1
+        },
+        bodyStyles: {
+          textColor: [51, 65, 85],
+          fontSize: 8,
+          cellPadding: { top: 10, right: 8, bottom: 10, left: 8 },
+          valign: 'top',
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252], // #F8FAFC para linhas pares
+        },
+        columnStyles: {
+          0: { cellWidth: contentWidth * 0.05, halign: 'center' },
+          1: { cellWidth: contentWidth * 0.25, halign: 'left', fontStyle: 'bold' },
+          2: { cellWidth: contentWidth * 0.42, halign: 'left', valign: 'top' },
+          3: { cellWidth: contentWidth * 0.08, halign: 'center' },
+          4: { cellWidth: contentWidth * 0.1, halign: 'right' },
+          5: { cellWidth: contentWidth * 0.1, halign: 'right' },
+        },
+        styles: {
+          lineColor: [226, 232, 240], // #E2E8F0
+          lineWidth: 0.3,
+          font: 'helvetica',
+        },
+      })
+
+      y = (doc.lastAutoTable?.finalY ?? y) + 7
+    }
 
     // 6. BOX DE INVESTIMENTO TOTAL (100% da largura útil)
     const boxTotalHeight = 24
@@ -756,75 +868,226 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
     doc.text('2. BOM GERAL — MATÉRIA-PRIMA E FERRAGENS (FÁBRICA)', margin, y)
     y += 4
 
-    const bom = dados.bom || []
-    const bomRows = bom.map((item) => {
-      const metragemFormatada = item.metragem ? `${item.metragem} ${item.unidade || ''}` : '1 un'
-      return [
-        item.description || item.material || 'Peça MDF',
-        item.material || 'MDF',
-        item.espessura ? `${item.espessura} mm` : '—',
-        metragemFormatada,
-        formatMoeda(item.unitCost),
-        formatMoeda(item.totalCost),
-        formatMoeda(item.salePrice),
-      ]
-    })
+    const hasMultiAmbientesBOM =
+      dados.ambientes_json && Array.isArray(dados.ambientes_json) && dados.ambientes_json.length > 0
 
-    invokeAutoTable(doc, {
-      startY: y,
-      margin: { left: margin, right: margin },
-      head: [
-        [
-          'Descrição da Peça / Insumo',
-          'Material',
-          'Esp.',
-          'Consumo (+20% Perda)',
-          'Custo Unit.',
-          'Custo Total',
-          'Preço Venda',
-        ],
-      ],
-      body:
-        bomRows.length > 0
-          ? bomRows
-          : [
-              [
-                'Nenhum item na lista de materiais.',
-                '—',
-                '—',
-                '—',
-                'R$ 0,00',
-                'R$ 0,00',
-                'R$ 0,00',
-              ],
+    if (hasMultiAmbientesBOM) {
+      // BOM Consolidada com coluna de Ambiente / Módulo
+      const multiBomRows: Array<[string, string, string, string, string, string, string, string]> =
+        []
+
+      dados.ambientes_json!.forEach((amb) => {
+        ;(amb.modulos || []).forEach((mod) => {
+          ;(mod.itens || []).forEach((item) => {
+            const metragemFormatada = item.metragem
+              ? `${item.metragem} ${item.unidade || ''}`
+              : '1 un'
+            multiBomRows.push([
+              amb.nome,
+              mod.nome,
+              item.description || item.material || 'Peça MDF',
+              item.material || 'MDF',
+              item.espessura ? `${item.espessura} mm` : '—',
+              metragemFormatada,
+              formatMoeda(item.unitCost),
+              formatMoeda(item.totalCost),
+            ])
+          })
+        })
+      })
+
+      // Se nenhum item foi coletado dos ambientes_json, cai na BOM padrão
+      if (multiBomRows.length > 0) {
+        invokeAutoTable(doc, {
+          startY: y,
+          margin: { left: margin, right: margin },
+          head: [
+            [
+              'Ambiente',
+              'Módulo',
+              'Descrição / Insumo',
+              'Material',
+              'Esp.',
+              'Consumo',
+              'Custo Unit.',
+              'Custo Total',
             ],
-      theme: 'grid',
-      headStyles: {
-        fillColor: [241, 245, 249], // #F1F5F9 — tom suave
-        textColor: [51, 65, 85], // #334155
-        fontStyle: 'bold',
-        fontSize: 8,
-      },
-      bodyStyles: {
-        textColor: [51, 65, 85],
-        fontSize: 7.5,
-        cellPadding: 2.2,
-      },
-      columnStyles: {
-        0: { cellWidth: 'auto', fontStyle: 'bold' },
-        1: { cellWidth: 26 },
-        2: { cellWidth: 14, halign: 'center' },
-        3: { cellWidth: 28, halign: 'center' },
-        4: { cellWidth: 22, halign: 'right' },
-        5: { cellWidth: 24, halign: 'right', fontStyle: 'bold' },
-        6: { cellWidth: 24, halign: 'right' },
-      },
-      styles: {
-        lineColor: [226, 232, 240],
-        lineWidth: 0.2,
-        font: 'helvetica',
-      },
-    })
+          ],
+          body: multiBomRows,
+          theme: 'grid',
+          headStyles: {
+            fillColor: [241, 245, 249],
+            textColor: [51, 65, 85],
+            fontStyle: 'bold',
+            fontSize: 7.5,
+          },
+          bodyStyles: {
+            textColor: [51, 65, 85],
+            fontSize: 7,
+            cellPadding: 2,
+          },
+          columnStyles: {
+            0: { cellWidth: 26, fontStyle: 'bold' },
+            1: { cellWidth: 26 },
+            2: { cellWidth: 'auto', fontStyle: 'bold' },
+            3: { cellWidth: 20 },
+            4: { cellWidth: 12, halign: 'center' },
+            5: { cellWidth: 18, halign: 'center' },
+            6: { cellWidth: 20, halign: 'right' },
+            7: { cellWidth: 20, halign: 'right', fontStyle: 'bold' },
+          },
+          styles: {
+            lineColor: [226, 232, 240],
+            lineWidth: 0.2,
+            font: 'helvetica',
+          },
+        })
+      } else {
+        // Fallback BOM simples
+        const bom = dados.bom || []
+        const bomRows = bom.map((item) => {
+          const metragemFormatada = item.metragem
+            ? `${item.metragem} ${item.unidade || ''}`
+            : '1 un'
+          return [
+            item.description || item.material || 'Peça MDF',
+            item.material || 'MDF',
+            item.espessura ? `${item.espessura} mm` : '—',
+            metragemFormatada,
+            formatMoeda(item.unitCost),
+            formatMoeda(item.totalCost),
+            formatMoeda(item.salePrice),
+          ]
+        })
+
+        invokeAutoTable(doc, {
+          startY: y,
+          margin: { left: margin, right: margin },
+          head: [
+            [
+              'Descrição da Peça / Insumo',
+              'Material',
+              'Esp.',
+              'Consumo (+20% Perda)',
+              'Custo Unit.',
+              'Custo Total',
+              'Preço Venda',
+            ],
+          ],
+          body:
+            bomRows.length > 0
+              ? bomRows
+              : [
+                  [
+                    'Nenhum item na lista de materiais.',
+                    '—',
+                    '—',
+                    '—',
+                    'R$ 0,00',
+                    'R$ 0,00',
+                    'R$ 0,00',
+                  ],
+                ],
+          theme: 'grid',
+          headStyles: {
+            fillColor: [241, 245, 249],
+            textColor: [51, 65, 85],
+            fontStyle: 'bold',
+            fontSize: 8,
+          },
+          bodyStyles: {
+            textColor: [51, 65, 85],
+            fontSize: 7.5,
+            cellPadding: 2.2,
+          },
+          columnStyles: {
+            0: { cellWidth: 'auto', fontStyle: 'bold' },
+            1: { cellWidth: 26 },
+            2: { cellWidth: 14, halign: 'center' },
+            3: { cellWidth: 28, halign: 'center' },
+            4: { cellWidth: 22, halign: 'right' },
+            5: { cellWidth: 24, halign: 'right', fontStyle: 'bold' },
+            6: { cellWidth: 24, halign: 'right' },
+          },
+          styles: {
+            lineColor: [226, 232, 240],
+            lineWidth: 0.2,
+            font: 'helvetica',
+          },
+        })
+      }
+    } else {
+      // Formato padrão quando não há ambientes_json
+      const bom = dados.bom || []
+      const bomRows = bom.map((item) => {
+        const metragemFormatada = item.metragem ? `${item.metragem} ${item.unidade || ''}` : '1 un'
+        return [
+          item.description || item.material || 'Peça MDF',
+          item.material || 'MDF',
+          item.espessura ? `${item.espessura} mm` : '—',
+          metragemFormatada,
+          formatMoeda(item.unitCost),
+          formatMoeda(item.totalCost),
+          formatMoeda(item.salePrice),
+        ]
+      })
+
+      invokeAutoTable(doc, {
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [
+          [
+            'Descrição da Peça / Insumo',
+            'Material',
+            'Esp.',
+            'Consumo (+20% Perda)',
+            'Custo Unit.',
+            'Custo Total',
+            'Preço Venda',
+          ],
+        ],
+        body:
+          bomRows.length > 0
+            ? bomRows
+            : [
+                [
+                  'Nenhum item na lista de materiais.',
+                  '—',
+                  '—',
+                  '—',
+                  'R$ 0,00',
+                  'R$ 0,00',
+                  'R$ 0,00',
+                ],
+              ],
+        theme: 'grid',
+        headStyles: {
+          fillColor: [241, 245, 249], // #F1F5F9 — tom suave
+          textColor: [51, 65, 85], // #334155
+          fontStyle: 'bold',
+          fontSize: 8,
+        },
+        bodyStyles: {
+          textColor: [51, 65, 85],
+          fontSize: 7.5,
+          cellPadding: 2.2,
+        },
+        columnStyles: {
+          0: { cellWidth: 'auto', fontStyle: 'bold' },
+          1: { cellWidth: 26 },
+          2: { cellWidth: 14, halign: 'center' },
+          3: { cellWidth: 28, halign: 'center' },
+          4: { cellWidth: 22, halign: 'right' },
+          5: { cellWidth: 24, halign: 'right', fontStyle: 'bold' },
+          6: { cellWidth: 24, halign: 'right' },
+        },
+        styles: {
+          lineColor: [226, 232, 240],
+          lineWidth: 0.2,
+          font: 'helvetica',
+        },
+      })
+    }
 
     y = (doc.lastAutoTable?.finalY ?? y) + 8
 
@@ -915,30 +1178,67 @@ export async function downloadPropostaComercialFromOrcamento(
       ? String(orcamento.numero_sequencial).padStart(3, '0')
       : orcamento.id.slice(-6).toUpperCase()
 
-  await gerarPropostaComercial({
-    orcamentoId: orcamento.id,
-    numeroSequencial: orcamento.numero_sequencial,
-    codigo: codigoFormatado,
-    data: orcamento.data || orcamento.created_at || new Date().toISOString(),
-    cliente: {
-      nome: orcamento.cliente_nome,
-    },
-    empresa: empresa ?? null,
-    ambientes: [
-      {
-        nome: orcamento.ambiente || 'Ambiente Planejado',
-        descricao: orcamento.modulo
-          ? `Módulo: ${orcamento.modulo}`
-          : 'Projeto de Marcenaria sob medida',
+  const temAmbientesMulti =
+    orcamento.ambientes_json &&
+    Array.isArray(orcamento.ambientes_json) &&
+    orcamento.ambientes_json.length > 0
+
+  if (temAmbientesMulti) {
+    const grupos = orcamento.ambientes_json!.map((amb) => ({
+      nome: amb.nome,
+      subtotal: amb.subtotal ?? 0,
+      itens: (amb.modulos || []).map((mod) => ({
+        nome: mod.nome,
+        descricao: mod.dimensoes
+          ? `Dimensões: ${mod.dimensoes.largura}L × ${mod.dimensoes.altura}A × ${mod.dimensoes.profundidade}P mm`
+          : 'Projeto sob medida conforme especificações técnicas aprovadas',
         quantidade: 1,
-        valorUnitario: valorTotal,
-        valorTotal: valorTotal,
+        valorUnitario: mod.subtotal ?? 0,
+        valorTotal: mod.subtotal ?? 0,
+      })),
+    }))
+
+    await gerarPropostaComercial({
+      orcamentoId: orcamento.id,
+      numeroSequencial: orcamento.numero_sequencial,
+      codigo: codigoFormatado,
+      data: orcamento.data || orcamento.created_at || new Date().toISOString(),
+      cliente: {
+        nome: orcamento.cliente_nome,
       },
-    ],
-    valorTotal: valorTotal,
-    formaPagamento: orcamento.forma_pagamento,
-    observacoes: orcamento.observacoes,
-  })
+      empresa: empresa ?? null,
+      ambientes: [],
+      ambientesGrupos: grupos,
+      valorTotal: valorTotal,
+      formaPagamento: orcamento.forma_pagamento,
+      observacoes: orcamento.observacoes,
+    })
+  } else {
+    await gerarPropostaComercial({
+      orcamentoId: orcamento.id,
+      numeroSequencial: orcamento.numero_sequencial,
+      codigo: codigoFormatado,
+      data: orcamento.data || orcamento.created_at || new Date().toISOString(),
+      cliente: {
+        nome: orcamento.cliente_nome,
+      },
+      empresa: empresa ?? null,
+      ambientes: [
+        {
+          nome: orcamento.ambiente || 'Ambiente Planejado',
+          descricao: orcamento.modulo
+            ? `Módulo: ${orcamento.modulo}`
+            : 'Projeto de Marcenaria sob medida',
+          quantidade: 1,
+          valorUnitario: valorTotal,
+          valorTotal: valorTotal,
+        },
+      ],
+      valorTotal: valorTotal,
+      formaPagamento: orcamento.forma_pagamento,
+      observacoes: orcamento.observacoes,
+    })
+  }
 }
 
 /**
@@ -974,9 +1274,17 @@ export async function downloadAnaliseCustoFromOrcamento(
       },
       moduloNome: orcamento.modulo || 'Módulo Paramétrico',
       ambienteNome: orcamento.ambiente || 'Ambiente',
+      dimensoes: orcamento.dimensoes_json
+        ? {
+            largura: Number(orcamento.dimensoes_json.largura) || 1800,
+            altura: Number(orcamento.dimensoes_json.altura) || 2200,
+            profundidade: Number(orcamento.dimensoes_json.profundidade) || 600,
+          }
+        : undefined,
       empresa: empresa ?? null,
       dre: dre,
       bom: bom,
+      ambientes_json: orcamento.ambientes_json ?? null,
       valorTotalVenda: valorTotalVenda,
       valorTotalCusto: valorTotalCusto,
     })

@@ -366,13 +366,44 @@ export default function QuotesListPage() {
                           </td>
 
                           <td className="py-3.5 px-4">
-                            <div className="text-slate-800 font-medium">
-                              {q.modulo || 'Módulo Planejado'}
-                            </div>
-                            <div className="text-[11px] text-slate-500">
-                              {q.ambiente || 'Ambiente'}{' '}
-                              {q.bom_json?.length ? `• ${q.bom_json.length} peças` : ''}
-                            </div>
+                            {q.ambientes_json &&
+                            Array.isArray(q.ambientes_json) &&
+                            q.ambientes_json.length > 0 ? (
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-slate-100 text-slate-800 border-slate-300 font-medium text-[11px] px-2 py-0.5"
+                                  >
+                                    {q.ambientes_json.length}{' '}
+                                    {q.ambientes_json.length === 1 ? 'ambiente' : 'ambientes'} ·{' '}
+                                    {q.ambientes_json.reduce(
+                                      (acc, a) => acc + (a.modulos?.length || 0),
+                                      0,
+                                    )}{' '}
+                                    {q.ambientes_json.reduce(
+                                      (acc, a) => acc + (a.modulos?.length || 0),
+                                      0,
+                                    ) === 1
+                                      ? 'módulo'
+                                      : 'módulos'}
+                                  </Badge>
+                                </div>
+                                <div className="text-[11px] text-slate-500 mt-1 truncate max-w-[240px]">
+                                  {q.ambientes_json.map((a) => a.nome).join(', ')}
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="text-slate-800 font-medium">
+                                  {q.modulo || 'Módulo Planejado'}
+                                </div>
+                                <div className="text-[11px] text-slate-500">
+                                  {q.ambiente || 'Ambiente'}{' '}
+                                  {q.bom_json?.length ? `• ${q.bom_json.length} peças` : ''}
+                                </div>
+                              </div>
+                            )}
                           </td>
 
                           <td className="py-3.5 px-4 text-right font-mono text-slate-600 text-xs">

@@ -53,7 +53,14 @@ import { fetchCatalogoMateriais, type CatalogoMaterial } from '@/services/catalo
 import { fetchPerfilEmpresa, type PerfilEmpresa } from '@/services/empresa'
 import { fetchConfigEngenharia } from '@/services/engenharia'
 import { gerarPropostaComercial, gerarAnaliseCusto } from '@/lib/pdf'
-import type { Orcamento, OrcamentoBOMItem, OrcamentoDRE } from '@/services/orcamentos'
+import type {
+  Orcamento,
+  OrcamentoBOMItem,
+  OrcamentoDRE,
+  AmbienteOrcamento,
+  ModuloOrcamento,
+} from '@/services/orcamentos'
+import { ChevronDown, ChevronUp, Trash2, FolderPlus } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 
 // Ambientes permitidos no Select (array estático conforme especificação).
@@ -71,6 +78,19 @@ export default function Index() {
   const [ambienteSelecionado, setAmbienteSelecionado] = useState<string>('')
   const [selectedModuleId, setSelectedModuleId] = useState<string>('')
   const [loadingEditingQuote, setLoadingEditingQuote] = useState<boolean>(false)
+
+  // MULTI-AMBIENTE: Estrutura completa de ambientes e módulos adicionados
+  const [ambientes, setAmbientes] = useState<AmbienteOrcamento[]>([
+    {
+      id: `amb-${Date.now()}`,
+      nome: 'Cozinha',
+      modulos: [],
+      subtotal: 0,
+    },
+  ])
+  const [activeAmbienteId, setActiveAmbienteId] = useState<string>('')
+  const [novoAmbienteNome, setNovoAmbienteNome] = useState<string>('')
+  const [isAddingAmbiente, setIsAddingAmbiente] = useState<boolean>(false)
 
   // Módulos disponíveis — fetch 100% dinâmico do Supabase (tabela TemplatesEngenharia)
   const [modulosDisponiveis, setModulosDisponiveis] = useState<TemplateEngenharia[]>([])
@@ -301,6 +321,52 @@ export default function Index() {
           setPadraoProjeto(orcamento.padrao_projeto)
         }
 
+        // MULTI-AMBIENTE: Se orcamento.ambientes_json existir e tiver ambientes, restaura integralmente
+        const hasAmbientesJson =
+          orcamento.ambientes_json &&
+          Array.isArray(orcamento.ambientes_json) &&
+          orcamento.ambientes_json.length > 0
+
+        if (hasAmbientesJson) {
+          const restoredAmbientes: AmbienteOrcamento[] = (
+            orcamento.ambientes_json as AmbienteOrcamento[]
+          ).map((a, aIdx) => ({
+            id: a.id || `amb-${aIdx}-${Date.now()}`,
+            nome: a.nome || `Ambiente ${aIdx + 1}`,
+            subtotal: Number(a.subtotal) || 0,
+            modulos: (a.modulos || []).map((m, mIdx) => ({
+              id: m.id || `mod-${mIdx}-${Date.now()}`,
+              modulo_id: m.modulo_id,
+              nome: m.nome || 'Módulo Planejado',
+              dimensoes: m.dimensoes,
+              mdf_externo: m.mdf_externo,
+              mdf_interno: m.mdf_interno,
+              mdf_fundo: m.mdf_fundo,
+              padrao_projeto: m.padrao_projeto,
+              imagem_url: m.imagem_url,
+              subtotal: Number(m.subtotal) || 0,
+              itens: (m.itens || []).map((it, itIdx) => ({
+                id: it.id || `it-${itIdx}`,
+                description: it.description || 'Item',
+                material: it.material,
+                espessura: it.espessura,
+                metragem: it.metragem,
+                unidade: it.unidade,
+                unitCost: Number(it.unitCost) || 0,
+                totalCost: Number(it.totalCost) || 0,
+                markup: Number(it.markup) || 2.5,
+                salePrice: Number(it.salePrice) || 0,
+              })),
+            })),
+          }))
+          setAmbientes(restoredAmbientes)
+          if (restoredAmbientes.length > 0) {
+            setActiveAmbienteId(restoredAmbientes[0].id)
+            setAmbienteSelecionado(restoredAmbientes[0].nome)
+            setRoom(restoredAmbientes[0].nome)
+          }
+        }
+
         // Tenta associar o módulo se o nome coincidir com algum template da biblioteca
         if (orcamento.modulo) {
           const modEncontrado = modulosDisponiveis.find(
@@ -345,6 +411,32 @@ export default function Index() {
             }
           })
           setSavedLoadedItems(loadedTodosItens)
+
+          // Se for orçamento antigo (sem ambientes_json), popula o primeiro ambiente com esse módulo
+          if (!hasAmbientesJson) {
+            const totalAntigo = Number(orcamento.valor_total) || 0
+            setAmbientes([
+              {
+                id: `amb-legado-${Date.now()}`,
+                nome: orcamento.ambiente || 'Ambiente Principal',
+                subtotal: totalAntigo,
+                modulos: [
+                  {
+                    id: `mod-legado-${Date.now()}`,
+                    modulo_id: orcamento.modulo || undefined,
+                    nome: orcamento.modulo || 'Módulo Planejado',
+                    dimensoes: orcamento.dimensoes_json as any,
+                    mdf_externo: orcamento.mdf_externo || undefined,
+                    mdf_interno: orcamento.mdf_interno || undefined,
+                    mdf_fundo: orcamento.mdf_fundo || undefined,
+                    padrao_projeto: orcamento.padrao_projeto || undefined,
+                    subtotal: totalAntigo,
+                    itens: orcamento.bom_json,
+                  },
+                ],
+              },
+            ])
+          }
         }
 
         // Registra o registro salvo para downloads de PDF e abre a exibição dos resultados
@@ -1007,8 +1099,150 @@ export default function Index() {
     }, 100)
   }
 
-  // Action: "+ Adicionar Outro Módulo"
+  // Ações de gerenciamento de múltiplos ambientes e módulos
+  const targetAmbienteId = activeAmbienteId || ambientes[0]?.id
+
+  const handleAddNovoAmbiente = (nomeDoAmbiente: string) => {
+    const nomeLimpo = nomeDoAmbiente.trim()
+    if (!nomeLimpo) {
+      toast({
+        title: 'Nome do ambiente obrigatório',
+        description: 'Digite o nome do cômodo (ex: Suíte Casal, Varanda Gourmet).',
+        variant: 'destructive',
+      })
+      return
+    }
+    const novoAmbiente: AmbienteOrcamento = {
+      id: `amb-${Date.now()}`,
+      nome: nomeLimpo,
+      modulos: [],
+      subtotal: 0,
+    }
+    setAmbientes((prev) => [...prev, novoAmbiente])
+    setActiveAmbienteId(novoAmbiente.id)
+    setAmbienteSelecionado(novoAmbiente.nome)
+    setRoom(novoAmbiente.nome)
+    setNovoAmbienteNome('')
+    setIsAddingAmbiente(false)
+    toast({
+      title: 'Ambiente adicionado',
+      description: `O ambiente "${nomeLimpo}" foi criado. Adicione módulos a ele.`,
+    })
+  }
+
+  const handleRemoveAmbiente = (ambienteIdToRemove: string) => {
+    if (ambientes.length <= 1) {
+      toast({
+        title: 'Ambiente único',
+        description: 'O orçamento precisa ter pelo menos um ambiente.',
+        variant: 'destructive',
+      })
+      return
+    }
+    const ambienteAlvo = ambientes.find((a) => a.id === ambienteIdToRemove)
+    setAmbientes((prev) => prev.filter((a) => a.id !== ambienteIdToRemove))
+    if (activeAmbienteId === ambienteIdToRemove) {
+      const restantes = ambientes.filter((a) => a.id !== ambienteIdToRemove)
+      if (restantes.length > 0) {
+        setActiveAmbienteId(restantes[0].id)
+        setAmbienteSelecionado(restantes[0].nome)
+        setRoom(restantes[0].nome)
+      }
+    }
+    toast({
+      title: 'Ambiente removido',
+      description: `O ambiente "${ambienteAlvo?.nome || ''}" foi excluído.`,
+    })
+  }
+
+  const handleRemoveModulo = (ambienteId: string, moduloIdToRemove: string) => {
+    setAmbientes((prev) =>
+      prev.map((amb) => {
+        if (amb.id !== ambienteId) return amb
+        const novosModulos = amb.modulos.filter((m) => m.id !== moduloIdToRemove)
+        const novoSubtotal = novosModulos.reduce((acc, m) => acc + (m.subtotal || 0), 0)
+        return {
+          ...amb,
+          modulos: novosModulos,
+          subtotal: novoSubtotal,
+        }
+      }),
+    )
+    toast({
+      title: 'Módulo removido',
+      description: 'O módulo foi removido do ambiente.',
+    })
+  }
+
+  // Action: "+ Adicionar Outro Módulo" (ADICIONA O MÓDULO ATUAL AO AMBIENTE ATIVO E PREPARA O PRÓXIMO)
   const handleAddAnotherModule = () => {
+    // 1. Se houver módulo configurado ou itens na tabela, salva este módulo no ambiente ativo
+    if (selectedModuleObj || pricingItems.length > 0) {
+      const currentModuleSubtotal = totalVenda
+      const novoModuloNoAmbiente: ModuloOrcamento = {
+        id: `mod-${Date.now()}`,
+        modulo_id: selectedModuleId || undefined,
+        nome: currentModuleName,
+        dimensoes: { ...dimensoes },
+        mdf_externo: `${mdfExterno.cor} (${mdfExterno.espessura}mm)`,
+        mdf_interno: `${mdfInterno.cor} (${mdfInterno.espessura}mm)`,
+        mdf_fundo: mdfFundo,
+        padrao_projeto: padraoProjeto,
+        subtotal: currentModuleSubtotal,
+        itens: pricingItems.map((it) => ({
+          id: it.id,
+          description: it.description,
+          material: it.material,
+          espessura: it.espessura,
+          metragem: it.metragem,
+          unidade: it.unidade,
+          unitCost: it.unitCost,
+          totalCost: it.totalCost,
+          markup: it.markup,
+          salePrice: it.salePrice,
+        })),
+      }
+
+      setAmbientes((prev) => {
+        const ambIndex = prev.findIndex((a) => a.id === targetAmbienteId)
+        if (ambIndex >= 0) {
+          const ambAtual = prev[ambIndex]
+          const modulosAtualizados = [...ambAtual.modulos, novoModuloNoAmbiente]
+          const subtotalAtualizado = modulosAtualizados.reduce(
+            (acc, m) => acc + (m.subtotal || 0),
+            0,
+          )
+          const novos = [...prev]
+          novos[ambIndex] = {
+            ...ambAtual,
+            modulos: modulosAtualizados,
+            subtotal: subtotalAtualizado,
+          }
+          return novos
+        } else if (prev.length > 0) {
+          const modulosAtualizados = [...prev[0].modulos, novoModuloNoAmbiente]
+          const subtotalAtualizado = modulosAtualizados.reduce(
+            (acc, m) => acc + (m.subtotal || 0),
+            0,
+          )
+          const novos = [...prev]
+          novos[0] = {
+            ...novos[0],
+            modulos: modulosAtualizados,
+            subtotal: subtotalAtualizado,
+          }
+          return novos
+        }
+        return prev
+      })
+
+      toast({
+        title: 'Módulo adicionado ao ambiente!',
+        description: `"${currentModuleName}" foi incluído em ${ambienteSelecionado || room || 'Ambiente'}. Agora você pode configurar outro módulo.`,
+      })
+    }
+
+    // 2. Limpa APENAS os campos do próximo módulo
     setSelectedModuleId('')
     setUploadedFiles([])
     setSavedLoadedItems(null)
@@ -1020,16 +1254,13 @@ export default function Index() {
     setDimensoesEstimadasIA(null)
     setIsCustomModuleIA(false)
     setCustomModuleNameIA('')
+    setShowResults(false)
     if (analyzeTimeoutRef.current) {
       clearTimeout(analyzeTimeoutRef.current)
       analyzeTimeoutRef.current = null
     }
     setErrors({})
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    toast({
-      title: 'Pronto para novo módulo',
-      description: 'Faça o upload das fotos e a IA identificará o módulo automaticamente.',
-    })
   }
 
   // Action: "Finalizar Orçamento"
@@ -1050,11 +1281,138 @@ export default function Index() {
     setIsFinalizeModalOpen(true)
   }
 
+  const currentModuleName = selectedModuleObj?.nome_template || 'Módulo Padrão'
+
+  // Consolida todos os ambientes e módulos (incluindo o que está sendo editado na tela, se houver)
+  const ambientesConsolidados = useMemo<AmbienteOrcamento[]>(() => {
+    // Se o usuário tem itens na tabela ou módulo configurado na tela que ainda não foram adicionados
+    // explicitamente via "+ Adicionar Outro Módulo", inclui esse módulo atual no ambiente selecionado
+    const hasCurrentModule = selectedModuleObj || pricingItems.length > 0
+    const currentSubtotal = totalVenda
+
+    return ambientes.map((amb) => {
+      let modulosAmb = [...amb.modulos]
+      const isActive = amb.id === targetAmbienteId
+
+      // Se este for o ambiente ativo e houver peças na tela não commitadas como módulo salvo na lista
+      if (isActive && hasCurrentModule) {
+        // Verifica se já existe um módulo em rascunho com o mesmo id temporário ou se deve somar
+        // Se a lista de módulos do ambiente estiver vazia, cria o primeiro módulo a partir da tela
+        if (modulosAmb.length === 0) {
+          modulosAmb = [
+            {
+              id: `mod-tela-${Date.now()}`,
+              modulo_id: selectedModuleId || undefined,
+              nome: currentModuleName,
+              dimensoes: { ...dimensoes },
+              mdf_externo: `${mdfExterno.cor} (${mdfExterno.espessura}mm)`,
+              mdf_interno: `${mdfInterno.cor} (${mdfInterno.espessura}mm)`,
+              mdf_fundo: mdfFundo,
+              padrao_projeto: padraoProjeto,
+              subtotal: currentSubtotal,
+              itens: pricingItems.map((it) => ({
+                id: it.id,
+                description: it.description,
+                material: it.material,
+                espessura: it.espessura,
+                metragem: it.metragem,
+                unidade: it.unidade,
+                unitCost: it.unitCost,
+                totalCost: it.totalCost,
+                markup: it.markup,
+                salePrice: it.salePrice,
+              })),
+            },
+          ]
+        }
+      }
+
+      const subtotalAmb = modulosAmb.reduce((acc, m) => acc + (m.subtotal || 0), 0)
+      return {
+        ...amb,
+        modulos: modulosAmb,
+        subtotal: subtotalAmb,
+      }
+    })
+  }, [
+    ambientes,
+    targetAmbienteId,
+    selectedModuleObj,
+    selectedModuleId,
+    currentModuleName,
+    pricingItems,
+    totalVenda,
+    dimensoes,
+    mdfExterno,
+    mdfInterno,
+    mdfFundo,
+    padraoProjeto,
+  ])
+
+  // Valor total geral do orçamento = soma de todos os subtotais de ambientes consolidados
+  const valorTotalGeral = useMemo(() => {
+    const soma = ambientesConsolidados.reduce((acc, a) => acc + (a.subtotal || 0), 0)
+    // Se a soma der zero mas a tela atual tiver totalVenda, usa totalVenda
+    return soma > 0 ? soma : totalVenda
+  }, [ambientesConsolidados, totalVenda])
+
+  // Custo total geral consolidado
+  const custoTotalGeral = useMemo(() => {
+    let custoTotal = 0
+    let hasAnyModulos = false
+    ambientesConsolidados.forEach((amb) => {
+      amb.modulos.forEach((mod) => {
+        hasAnyModulos = true
+        mod.itens.forEach((it) => {
+          custoTotal += Number(it.totalCost) || 0
+        })
+      })
+    })
+    return hasAnyModulos ? custoTotal : totalCusto
+  }, [ambientesConsolidados, totalCusto])
+
+  // Lista consolidada de todos os itens BOM de todos os módulos de todos os ambientes
+  const bomConsolidada = useMemo<OrcamentoBOMItem[]>(() => {
+    const todosItens: OrcamentoBOMItem[] = []
+    ambientesConsolidados.forEach((amb) => {
+      amb.modulos.forEach((mod) => {
+        mod.itens.forEach((it) => {
+          todosItens.push({
+            id: it.id,
+            description: `${amb.nome} - ${mod.nome}: ${it.description}`,
+            material: it.material,
+            espessura: it.espessura,
+            metragem: it.metragem,
+            unidade: it.unidade,
+            unitCost: it.unitCost,
+            totalCost: it.totalCost,
+            markup: it.markup,
+            salePrice: it.salePrice,
+          })
+        })
+      })
+    })
+    return todosItens.length > 0
+      ? todosItens
+      : pricingItems.map((item) => ({
+          id: item.id,
+          description: item.description,
+          material: item.material,
+          espessura: item.espessura,
+          metragem: item.metragem,
+          unidade: item.unidade,
+          unitCost: item.unitCost,
+          totalCost: item.totalCost,
+          markup: item.markup,
+          salePrice: item.salePrice,
+        }))
+  }, [ambientesConsolidados, pricingItems])
+
   const handleConfirmFinalize = async () => {
     setIsSavingQuote(true)
     try {
-      const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
-      const totalCost = pricingItems.reduce((acc, it) => acc + (Number(it.totalCost) || 0), 0)
+      const totalSale = valorTotalGeral
+      const totalCost = custoTotalGeral
 
       // Busca parâmetros reais da DRE de configuracoes_engenharia, custos fixos, variáveis e comissões
       let impostosPercent = 10.0
@@ -1129,36 +1487,32 @@ export default function Index() {
         preco_final: totalSale,
       }
 
-      const bomJson: OrcamentoBOMItem[] = pricingItems.map((item) => ({
-        id: item.id,
-        description: item.description,
-        material: item.material,
-        espessura: item.espessura,
-        metragem: item.metragem,
-        unidade: item.unidade,
-        unitCost: item.unitCost,
-        totalCost: item.totalCost,
-        markup: item.markup,
-        salePrice: item.salePrice,
-      }))
+      const bomJson: OrcamentoBOMItem[] = bomConsolidada
 
       let savedRecord: Orcamento | null = null
 
       const mdfExternoStr = JSON.stringify(mdfExterno)
       const mdfInternoStr = JSON.stringify(mdfInterno)
 
+      // Nome do primeiro ambiente e primeiro módulo para compatibilidade legada
+      const primeiroAmbienteNome =
+        ambientesConsolidados[0]?.nome || ambienteSelecionado || room || 'Ambiente Principal'
+      const primeiroModuloNome =
+        ambientesConsolidados[0]?.modulos[0]?.nome || currentModuleName || 'Módulo Planejado'
+
       if (editingId) {
         // Atualização de orçamento existente
         savedRecord = await updateOrcamento(editingId, {
           cliente_nome: clientName,
-          ambiente: ambienteSelecionado || room || null,
-          modulo: currentModuleName || null,
+          ambiente: primeiroAmbienteNome,
+          modulo: primeiroModuloNome,
           valor_total: totalSale,
           status: 'Aprovado',
           forma_pagamento: formaPagamento || null,
           observacoes: observacoes || null,
           bom_json: bomJson,
           dre_json: dreJson,
+          ambientes_json: ambientesConsolidados,
           dimensoes_json: dimensoes,
           mdf_externo: mdfExternoStr,
           mdf_interno: mdfInternoStr,
@@ -1169,14 +1523,15 @@ export default function Index() {
         // Criação de novo orçamento
         savedRecord = await createOrcamento({
           cliente_nome: clientName,
-          ambiente: ambienteSelecionado || room || null,
-          modulo: currentModuleName || null,
+          ambiente: primeiroAmbienteNome,
+          modulo: primeiroModuloNome,
           valor_total: totalSale,
           status: 'Aprovado',
           forma_pagamento: formaPagamento || null,
           observacoes: observacoes || null,
           bom_json: bomJson,
           dre_json: dreJson,
+          ambientes_json: ambientesConsolidados,
           dimensoes_json: dimensoes,
           mdf_externo: mdfExternoStr,
           mdf_interno: mdfInternoStr,
@@ -1216,12 +1571,26 @@ export default function Index() {
   // Handlers para gerar os PDFs no Modal após a finalização
   const handleDownloadProposta = async () => {
     try {
-      const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
+      const totalSale = valorTotalGeral
       const numSeq = savedOrcamentoRecord?.numero_sequencial
       const codigoFormatado =
         numSeq !== undefined && numSeq !== null
           ? String(numSeq).padStart(3, '0')
           : (savedOrcamentoRecord?.id || editingId || '').slice(-6).toUpperCase() || undefined
+
+      const gruposFormatados = ambientesConsolidados.map((amb) => ({
+        nome: amb.nome,
+        subtotal: amb.subtotal ?? 0,
+        itens: (amb.modulos || []).map((m) => ({
+          nome: m.nome,
+          descricao: m.dimensoes
+            ? `Dimensões: ${m.dimensoes.largura}L × ${m.dimensoes.altura}A × ${m.dimensoes.profundidade}P mm`
+            : 'Projeto sob medida conforme especificações técnicas aprovadas',
+          quantidade: 1,
+          valorUnitario: m.subtotal ?? 0,
+          valorTotal: m.subtotal ?? 0,
+        })),
+      }))
 
       await gerarPropostaComercial({
         orcamentoId: savedOrcamentoRecord?.id || editingId || undefined,
@@ -1232,15 +1601,8 @@ export default function Index() {
           nome: clientName,
         },
         empresa: perfilEmpresa,
-        ambientes: [
-          {
-            nome: ambienteSelecionado || room || 'Ambiente Principal',
-            descricao: `Módulo: ${currentModuleName} (${dimensoes.largura}L × ${dimensoes.altura}A × ${dimensoes.profundidade}P mm)`,
-            quantidade: 1,
-            valorUnitario: totalSale,
-            valorTotal: totalSale,
-          },
-        ],
+        ambientes: [],
+        ambientesGrupos: gruposFormatados,
         valorTotal: totalSale,
         formaPagamento: formaPagamento,
         observacoes: observacoes,
@@ -1267,8 +1629,8 @@ export default function Index() {
 
   const handleDownloadAnaliseCusto = async () => {
     try {
-      const totalSale = pricingItems.reduce((acc, it) => acc + (Number(it.salePrice) || 0), 0)
-      const totalCost = pricingItems.reduce((acc, it) => acc + (Number(it.totalCost) || 0), 0)
+      const totalSale = valorTotalGeral
+      const totalCost = custoTotalGeral
 
       const impPercent = configEngenhariaCompleta?.impostos_percent ?? 10.0
       const comPercent = configEngenhariaCompleta?.comissoes_percent ?? 5.0
@@ -1315,7 +1677,8 @@ export default function Index() {
         dimensoes: dimensoes,
         empresa: perfilEmpresa,
         dre: dre,
-        bom: pricingItems as OrcamentoBOMItem[],
+        bom: bomConsolidada,
+        ambientes_json: ambientesConsolidados,
         valorTotalVenda: totalSale,
         valorTotalCusto: totalCost,
       })
@@ -1338,8 +1701,6 @@ export default function Index() {
       })
     }
   }
-
-  const currentModuleName = selectedModuleObj?.nome_template || 'Módulo Padrão'
 
   // Formatador monetário pt-BR com 2 casas decimais.
   const formatCurrency = (val: number) =>
@@ -1365,10 +1726,10 @@ export default function Index() {
             : 'Compare o projeto do cliente com o módulo da biblioteca e gere a precificação automática com lista de peças e markup comercial.'}
         </p>
       </div>
-      {/* 2. CABEÇALHO DE IDENTIFICAÇÃO */}
+      {/* 2. CABEÇALHO DE IDENTIFICAÇÃO E GESTÃO MULTI-AMBIENTE */}
       <section aria-labelledby="identificacao-heading">
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-5 border-b border-slate-100">
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-slate-200 text-slate-800 flex items-center justify-center font-bold text-xs">
                 1
@@ -1380,25 +1741,35 @@ export default function Index() {
                 Identificação do Orçamento
               </h3>
               <span className="text-xs text-slate-400 font-normal hidden sm:inline">
-                • Dados básicos do cliente e ambiente
+                • Cliente e Gestão de Ambientes
               </span>
             </div>
-            {(ambienteSelecionado || room) && (
-              <div className="flex items-center gap-1.5 animate-fade-in">
-                <span className="text-xs text-slate-400 font-medium">Ambiente:</span>
-                <Badge
-                  variant="outline"
-                  className="bg-slate-100 text-slate-900 border-slate-300 font-semibold text-xs px-2.5 py-0.5 gap-1.5 shadow-2xs"
-                >
-                  <Home className="w-3.5 h-3.5 text-slate-700" />
-                  {ambienteSelecionado || room}
-                </Badge>
-              </div>
-            )}
+
+            {/* Totalizadores rápidos do Orçamento */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge
+                variant="outline"
+                className="bg-slate-50 text-slate-700 border-slate-300 font-semibold text-xs px-2.5 py-1"
+              >
+                {ambientesConsolidados.length}{' '}
+                {ambientesConsolidados.length === 1 ? 'ambiente' : 'ambientes'} ·{' '}
+                {ambientesConsolidados.reduce((acc, a) => acc + (a.modulos?.length || 0), 0)}{' '}
+                {ambientesConsolidados.reduce((acc, a) => acc + (a.modulos?.length || 0), 0) === 1
+                  ? 'módulo'
+                  : 'módulos'}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="bg-emerald-50 text-emerald-800 border-emerald-300 font-bold text-xs px-3 py-1 font-mono"
+              >
+                Total: {formatCurrency(valorTotalGeral)}
+              </Badge>
+            </div>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Input: Nome do Cliente */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 md:col-span-2">
               <label
                 htmlFor="clientName"
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
@@ -1428,81 +1799,288 @@ export default function Index() {
               )}
             </div>
 
-            {/* Select / Combobox: Ambiente */}
+            {/* Ação rápida: Adicionar Novo Ambiente */}
             <div className="space-y-1.5">
-              <label
-                htmlFor="ambiente-combobox-header"
-                className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
-              >
-                <Home className="w-3.5 h-3.5 text-slate-700" />
-                Ambiente <span className="text-rose-500">*</span>
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                <FolderPlus className="w-3.5 h-3.5 text-slate-700" />
+                Novo Ambiente
               </label>
-              <AmbienteSelector
-                id="ambiente-combobox-header"
-                value={ambienteSelecionado || room}
-                onChange={handleAmbienteSelecionadoChange}
-                error={errors.room}
-              />
-              {errors.room && (
-                <p className="text-[11px] font-medium text-rose-600 flex items-center gap-1 pt-0.5 animate-fade-in">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  {errors.room}
-                </p>
+              {!isAddingAmbiente ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsAddingAmbiente(true)}
+                  className="w-full h-11 border-dashed border-slate-300 hover:border-slate-500 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-4 h-4 text-slate-600" />+ Adicionar Ambiente
+                </Button>
+              ) : (
+                <div className="flex items-center gap-1.5 animate-fade-in">
+                  <Input
+                    placeholder="Nome do cômodo..."
+                    value={novoAmbienteNome}
+                    onChange={(e) => setNovoAmbienteNome(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAddNovoAmbiente(novoAmbienteNome)
+                      }
+                    }}
+                    autoFocus
+                    className="h-11 text-xs border-slate-300 rounded-xl"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleAddNovoAmbiente(novoAmbienteNome)}
+                    className="h-11 px-3 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shrink-0"
+                  >
+                    Adicionar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setIsAddingAmbiente(false)
+                      setNovoAmbienteNome('')
+                    }}
+                    className="h-11 px-2 text-slate-500 hover:text-slate-800 rounded-xl text-xs shrink-0"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
               )}
             </div>
+          </div>
 
-            {/* Select: Módulo — 100% dinâmico do Supabase */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="moduleSelect"
-                className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
-              >
-                <Box className="w-3.5 h-3.5 text-slate-700" />
-                Módulo Identificado (Ajuste Manual) <span className="text-rose-500">*</span>
-              </label>
-              <Select value={selectedModuleId} onValueChange={handleModuleChange}>
-                <SelectTrigger
-                  id="moduleSelect"
-                  className={cn(
-                    'h-11 rounded-xl text-sm transition-all',
-                    errors.selectedModule
-                      ? 'border-rose-500 ring-2 ring-rose-200 bg-rose-50/20'
-                      : 'border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20',
-                  )}
-                >
-                  <SelectValue
-                    placeholder={loadingModulos ? 'Carregando módulos...' : 'Selecione o módulo'}
-                  />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  {selectedModuleId === 'MODULO-CUSTOM' && (
-                    <SelectItem value="MODULO-CUSTOM" className="font-semibold text-amber-700">
-                      ✨ {customModuleNameIA || 'Módulo Personalizado (Análise IA)'}
-                    </SelectItem>
-                  )}
-                  {modulosDisponiveis.length === 0 && !loadingModulos && (
-                    <div className="px-3 py-2 text-xs text-slate-500">
-                      Nenhum módulo disponível na biblioteca.
+          {/* Abas / Cards expansíveis por Ambiente */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                <Home className="w-3.5 h-3.5 text-slate-700" />
+                Ambientes do Projeto ({ambientesConsolidados.length})
+              </span>
+              <span className="text-xs text-slate-400">
+                Clique na aba para selecionar o ambiente de trabalho
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              {ambientesConsolidados.map((amb, index) => {
+                const isActive = amb.id === targetAmbienteId
+                const modulosCount = amb.modulos.length
+                return (
+                  <div
+                    key={amb.id}
+                    className={cn(
+                      'rounded-xl border transition-all overflow-hidden',
+                      isActive
+                        ? 'border-slate-400 bg-slate-50/50 shadow-sm ring-1 ring-slate-400/30'
+                        : 'border-slate-200 bg-white hover:border-slate-300',
+                    )}
+                  >
+                    {/* Header do Card de Ambiente */}
+                    <div
+                      onClick={() => {
+                        setActiveAmbienteId(amb.id)
+                        setAmbienteSelecionado(amb.nome)
+                        setRoom(amb.nome)
+                      }}
+                      className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer select-none"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          className={cn(
+                            'w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0',
+                            isActive ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600',
+                          )}
+                        >
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-slate-900 truncate">
+                              {amb.nome}
+                            </span>
+                            {isActive && (
+                              <Badge className="bg-slate-700 text-white text-[10px] px-1.5 py-0 font-medium">
+                                Ativo
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            {modulosCount} {modulosCount === 1 ? 'módulo' : 'módulos'}{' '}
+                            configurado(s)
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 self-end sm:self-auto">
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">
+                            Subtotal Ambiente
+                          </span>
+                          <span className="text-sm font-bold font-mono text-slate-800">
+                            {formatCurrency(amb.subtotal)}
+                          </span>
+                        </div>
+
+                        {ambientes.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleRemoveAmbiente(amb.id)
+                            }}
+                            className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                            title="Excluir este ambiente"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {modulosDisponiveis.map((modulo) => (
-                    <SelectItem key={modulo.id} value={modulo.id}>
-                      {modulo.nome_template}
-                    </SelectItem>
-                  ))}
-                  {selectedModuleId !== 'MODULO-CUSTOM' && (
-                    <SelectItem value="MODULO-CUSTOM" className="text-slate-600">
-                      + Módulo Personalizado (Sob Medida)
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              {errors.selectedModule && (
-                <p className="text-[11px] font-medium text-rose-600 flex items-center gap-1 pt-0.5 animate-fade-in">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  {errors.selectedModule}
-                </p>
-              )}
+
+                    {/* Lista dos módulos já cadastrados dentro deste ambiente */}
+                    {amb.modulos.length > 0 && (
+                      <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4 border-t border-slate-200/60 pt-3">
+                        <div className="space-y-2">
+                          {amb.modulos.map((mod, mIdx) => (
+                            <div
+                              key={mod.id || mIdx}
+                              className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-white border border-slate-200 text-xs shadow-2xs"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Box className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                                <div className="min-w-0">
+                                  <span className="font-bold text-slate-800 truncate block">
+                                    {mod.nome}
+                                  </span>
+                                  {mod.dimensoes && (
+                                    <span className="text-[11px] text-slate-500 font-mono">
+                                      {mod.dimensoes.largura}L × {mod.dimensoes.altura}A ×{' '}
+                                      {mod.dimensoes.profundidade}P mm
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-semibold font-mono text-slate-800">
+                                  {formatCurrency(mod.subtotal)}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleRemoveModulo(amb.id, mod.id)
+                                  }}
+                                  className="h-6 w-6 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"
+                                  title="Remover módulo"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Configuração do Módulo para o Ambiente Ativo */}
+          <div className="pt-2 border-t border-slate-100">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Ambiente Ativo Atual */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="ambiente-combobox-header"
+                  className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
+                >
+                  <Home className="w-3.5 h-3.5 text-slate-700" />
+                  Ambiente em Edição <span className="text-rose-500">*</span>
+                </label>
+                <AmbienteSelector
+                  id="ambiente-combobox-header"
+                  value={ambienteSelecionado || room}
+                  onChange={(val) => {
+                    handleAmbienteSelecionadoChange(val)
+                    // Atualiza o nome do ambiente ativo na lista
+                    setAmbientes((prev) =>
+                      prev.map((a) => (a.id === targetAmbienteId ? { ...a, nome: val } : a)),
+                    )
+                  }}
+                  error={errors.room}
+                />
+                {errors.room && (
+                  <p className="text-[11px] font-medium text-rose-600 flex items-center gap-1 pt-0.5 animate-fade-in">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {errors.room}
+                  </p>
+                )}
+              </div>
+
+              {/* Select: Módulo — 100% dinâmico do Supabase */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="moduleSelect"
+                  className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
+                >
+                  <Box className="w-3.5 h-3.5 text-slate-700" />
+                  Módulo a Configurar / Identificado <span className="text-rose-500">*</span>
+                </label>
+                <Select value={selectedModuleId} onValueChange={handleModuleChange}>
+                  <SelectTrigger
+                    id="moduleSelect"
+                    className={cn(
+                      'h-11 rounded-xl text-sm transition-all',
+                      errors.selectedModule
+                        ? 'border-rose-500 ring-2 ring-rose-200 bg-rose-50/20'
+                        : 'border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20',
+                    )}
+                  >
+                    <SelectValue
+                      placeholder={loadingModulos ? 'Carregando módulos...' : 'Selecione o módulo'}
+                    />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {selectedModuleId === 'MODULO-CUSTOM' && (
+                      <SelectItem value="MODULO-CUSTOM" className="font-semibold text-amber-700">
+                        ✨ {customModuleNameIA || 'Módulo Personalizado (Análise IA)'}
+                      </SelectItem>
+                    )}
+                    {modulosDisponiveis.length === 0 && !loadingModulos && (
+                      <div className="px-3 py-2 text-xs text-slate-500">
+                        Nenhum módulo disponível na biblioteca.
+                      </div>
+                    )}
+                    {modulosDisponiveis.map((modulo) => (
+                      <SelectItem key={modulo.id} value={modulo.id}>
+                        {modulo.nome_template}
+                      </SelectItem>
+                    ))}
+                    {selectedModuleId !== 'MODULO-CUSTOM' && (
+                      <SelectItem value="MODULO-CUSTOM" className="text-slate-600">
+                        + Módulo Personalizado (Sob Medida)
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                {errors.selectedModule && (
+                  <p className="text-[11px] font-medium text-rose-600 flex items-center gap-1 pt-0.5 animate-fade-in">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {errors.selectedModule}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -2188,21 +2766,31 @@ export default function Index() {
               type="button"
               variant="outline"
               onClick={handleAddAnotherModule}
-              className="w-full sm:w-auto text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl h-10 shadow-2xs"
+              className="w-full sm:w-auto text-xs font-semibold border-slate-400 bg-slate-100 text-slate-800 hover:bg-slate-200 rounded-xl h-10 shadow-2xs"
             >
-              <RefreshCw className="w-3.5 h-3.5 mr-1.5 text-slate-500" />+ Adicionar Outro Módulo
+              <Plus className="w-3.5 h-3.5 mr-1.5 text-slate-700" />+ Adicionar Outro Módulo ao
+              Ambiente
             </Button>
           </div>
 
-          {/* Primary Action Button (Right) */}
-          <div className="w-full sm:w-auto">
+          {/* Primary Action Button (Right) & Total */}
+          <div className="w-full sm:w-auto flex items-center justify-end gap-3">
+            <div className="hidden md:block text-right">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">
+                Total Geral ({ambientesConsolidados.length} amb)
+              </span>
+              <span className="text-base font-bold font-mono text-slate-900">
+                {formatCurrency(valorTotalGeral)}
+              </span>
+            </div>
+
             <Button
               type="button"
               onClick={handleFinalizeClick}
               className="w-full sm:w-auto h-11 px-6 bg-slate-700 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-md shadow-slate-700/25 transition-all flex items-center justify-center gap-2"
             >
               <CheckCircle2 className="w-4 h-4" />
-              Finalizar Orçamento
+              Finalizar Orçamento ({formatCurrency(valorTotalGeral)})
             </Button>
           </div>
         </div>
@@ -2248,11 +2836,21 @@ export default function Index() {
         onDownloadProposta={handleDownloadProposta}
         onDownloadAnaliseCusto={handleDownloadAnaliseCusto}
         clientName={clientName}
-        room={ambienteSelecionado || room}
-        moduleName={currentModuleName}
+        room={
+          ambientesConsolidados.length > 1
+            ? `${ambientesConsolidados.length} ambientes (${ambientesConsolidados.map((a) => a.nome).join(', ')})`
+            : ambienteSelecionado || room
+        }
+        moduleName={
+          ambientesConsolidados.reduce((acc, a) => acc + (a.modulos?.length || 0), 0) > 1
+            ? `${ambientesConsolidados.reduce((acc, a) => acc + (a.modulos?.length || 0), 0)} módulos`
+            : currentModuleName
+        }
         items={pricingItems}
         isSaved={isQuoteSaved}
         isSaving={isSavingQuote}
+        ambientesCount={ambientesConsolidados.length}
+        modulosCount={ambientesConsolidados.reduce((acc, a) => acc + (a.modulos?.length || 0), 0)}
       />
     </div>
   )

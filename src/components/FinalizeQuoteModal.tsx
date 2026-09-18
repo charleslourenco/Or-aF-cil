@@ -35,6 +35,8 @@ interface FinalizeQuoteModalProps {
   items: BudgetItem[]
   isSaved?: boolean
   isSaving?: boolean
+  ambientesCount?: number
+  modulosCount?: number
 }
 
 export const FinalizeQuoteModal: React.FC<FinalizeQuoteModalProps> = ({
@@ -103,15 +105,18 @@ export const FinalizeQuoteModal: React.FC<FinalizeQuoteModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-slate-500 flex items-center gap-1.5 font-medium">
                 <Home className="w-3.5 h-3.5 text-slate-400" />
-                Ambiente:
+                Ambientes:
               </span>
-              <span className="font-semibold text-slate-800">{room || 'Não informado'}</span>
+              <span className="font-semibold text-slate-800">
+                {room || 'Não informado'}
+                {/* eslint-disable-next-line @typescript-eslint/no-unused-expressions */}
+              </span>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="text-slate-500 flex items-center gap-1.5 font-medium">
                 <Box className="w-3.5 h-3.5 text-slate-400" />
-                Módulo Base:
+                Módulos:
               </span>
               <span className="font-semibold text-slate-800">{moduleName || 'Módulo'}</span>
             </div>

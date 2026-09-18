@@ -386,8 +386,40 @@ export default function DashboardPage() {
                         <td className="px-5 py-3.5 font-medium text-slate-900">
                           {quote.cliente_nome || '—'}
                         </td>
-                        <td className="px-5 py-3.5 text-slate-600">{quote.ambiente || '—'}</td>
-                        <td className="px-5 py-3.5 text-slate-600">{quote.modulo || '—'}</td>
+                        <td className="px-5 py-3.5 text-slate-600">
+                          {quote.ambientes_json &&
+                          Array.isArray(quote.ambientes_json) &&
+                          quote.ambientes_json.length > 0 ? (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="font-semibold text-slate-800">
+                                {quote.ambientes_json.length}{' '}
+                                {quote.ambientes_json.length === 1 ? 'ambiente' : 'ambientes'}
+                              </span>
+                            </span>
+                          ) : (
+                            quote.ambiente || '—'
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-slate-600">
+                          {quote.ambientes_json &&
+                          Array.isArray(quote.ambientes_json) &&
+                          quote.ambientes_json.length > 0 ? (
+                            <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs font-medium">
+                              {quote.ambientes_json.reduce(
+                                (acc, a) => acc + (a.modulos?.length || 0),
+                                0,
+                              )}{' '}
+                              {quote.ambientes_json.reduce(
+                                (acc, a) => acc + (a.modulos?.length || 0),
+                                0,
+                              ) === 1
+                                ? 'módulo'
+                                : 'módulos'}
+                            </span>
+                          ) : (
+                            quote.modulo || '—'
+                          )}
+                        </td>
                         <td className="px-5 py-3.5 text-slate-600">
                           <div className="flex items-center gap-1.5 text-xs text-slate-500">
                             <Clock className="w-3.5 h-3.5 text-slate-400" />
