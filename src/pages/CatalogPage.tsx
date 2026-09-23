@@ -116,14 +116,21 @@ export default function CatalogPage() {
     try {
       const data = await fetchCatalogoMateriais()
       if (data === null) {
-        setError('Não foi possível carregar o catálogo. Verifique sua conexão com o servidor.')
+        const errorMsg =
+          'Não foi possível carregar o catálogo de materiais. Verifique sua conexão com o servidor ou tente novamente.'
+        console.error('Erro ao carregar catálogo:', errorMsg)
+        setError(errorMsg)
         setMateriais([])
       } else {
         setMateriais(data)
       }
     } catch (err) {
       console.error('Erro ao carregar catálogo:', err)
-      setError('Ocorreu um erro inesperado ao carregar o catálogo.')
+      const errorMsg =
+        err instanceof Error ? err.message : 'Ocorreu um erro inesperado ao carregar o catálogo.'
+      setError(
+        `Não foi possível carregar o catálogo (${errorMsg}). Verifique a conexão e tente novamente.`,
+      )
       setMateriais([])
     } finally {
       setLoading(false)
@@ -319,13 +326,19 @@ export default function CatalogPage() {
           </div>
         </div>
       ) : error ? (
-        <div className="bg-white rounded-2xl border border-rose-200 shadow-sm p-8 flex flex-col items-center text-center gap-3">
+        <div className="bg-white rounded-2xl border border-rose-200 bg-rose-50/30 shadow-sm p-8 flex flex-col items-center text-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center">
             <AlertCircle className="w-6 h-6" />
           </div>
-          <p className="text-sm font-semibold text-slate-800">{error}</p>
-          <Button variant="outline" onClick={carregar} className="rounded-xl">
-            <RefreshCw className="w-4 h-4 mr-1.5" />
+          <div className="space-y-1 max-w-md">
+            <p className="text-base font-bold text-slate-900">Falha ao carregar o catálogo</p>
+            <p className="text-sm text-rose-700 font-medium">{error}</p>
+          </div>
+          <Button
+            onClick={carregar}
+            className="rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs h-10 px-4 mt-2"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
             Tentar novamente
           </Button>
         </div>

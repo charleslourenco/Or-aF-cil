@@ -86,14 +86,8 @@ export default function Index() {
   const [loadingEditingQuote, setLoadingEditingQuote] = useState<boolean>(false)
 
   // MULTI-AMBIENTE: Estrutura completa de ambientes e módulos adicionados
-  const [ambientes, setAmbientes] = useState<AmbienteOrcamento[]>([
-    {
-      id: `amb-${Date.now()}`,
-      nome: 'Cozinha',
-      modulos: [],
-      subtotal: 0,
-    },
-  ])
+  // Orçamentos novos iniciam sem ambientes hardcodados ([]).
+  const [ambientes, setAmbientes] = useState<AmbienteOrcamento[]>([])
   const [activeAmbienteId, setActiveAmbienteId] = useState<string>('')
   const [novoAmbienteNome, setNovoAmbienteNome] = useState<string>('')
   const [isAddingAmbiente, setIsAddingAmbiente] = useState<boolean>(false)
@@ -505,6 +499,10 @@ export default function Index() {
         if (!active) return
         if (materiais && materiais.length > 0) {
           setCatalogoMateriais(materiais)
+        } else if (materiais === null) {
+          console.warn(
+            'Catálogo de materiais retornou nulo (erro ou timeout). Usando tabela de custos padrão.',
+          )
         }
       })
       .catch((err) => {
@@ -1231,22 +1229,18 @@ export default function Index() {
   }
 
   const handleRemoveAmbiente = (ambienteIdToRemove: string) => {
-    if (ambientes.length <= 1) {
-      toast({
-        title: 'Ambiente único',
-        description: 'O orçamento precisa ter pelo menos um ambiente.',
-        variant: 'destructive',
-      })
-      return
-    }
     const ambienteAlvo = ambientes.find((a) => a.id === ambienteIdToRemove)
-    setAmbientes((prev) => prev.filter((a) => a.id !== ambienteIdToRemove))
+    const restantes = ambientes.filter((a) => a.id !== ambienteIdToRemove)
+    setAmbientes(restantes)
     if (activeAmbienteId === ambienteIdToRemove) {
-      const restantes = ambientes.filter((a) => a.id !== ambienteIdToRemove)
       if (restantes.length > 0) {
         setActiveAmbienteId(restantes[0].id)
         setAmbienteSelecionado(restantes[0].nome)
         setRoom(restantes[0].nome)
+      } else {
+        setActiveAmbienteId('')
+        setAmbienteSelecionado('')
+        setRoom('')
       }
     }
     toast({
@@ -1334,8 +1328,18 @@ export default function Index() {
             subtotal: subtotalAtualizado,
           }
           return novos
+        } else {
+          // Nenhum ambiente ainda: cria um ambiente padrão com o nome selecionado ou 'Ambiente 1'
+          const novoNome = (ambienteSelecionado || room || '').trim() || 'Ambiente 1'
+          const novoAmb: AmbienteOrcamento = {
+            id: `amb-${Date.now()}`,
+            nome: novoNome,
+            modulos: [novoModuloNoAmbiente],
+            subtotal: currentModuleSubtotal,
+          }
+          setActiveAmbienteId(novoAmb.id)
+          return [novoAmb]
         }
-        return prev
       })
 
       toast({
@@ -1980,66 +1984,90 @@ export default function Index() {
             </div>
 
             <div className="grid grid-cols-1 gap-3">
-              {ambientesConsolidados.map((amb, index) => {
-                const isActive = amb.id === targetAmbienteId
-                const modulosCount = amb.modulos.length
-                return (
-                  <div
-                    key={amb.id}
-                    className={cn(
-                      'rounded-xl border transition-all overflow-hidden',
-                      isActive
-                        ? 'border-slate-400 bg-slate-50/50 shadow-sm ring-1 ring-slate-400/30'
-                        : 'border-slate-200 bg-white hover:border-slate-300',
-                    )}
-                  >
-                    {/* Header do Card de Ambiente */}
-                    <div
-                      onClick={() => {
-                        setActiveAmbienteId(amb.id)
-                        setAmbienteSelecionado(amb.nome)
-                        setRoom(amb.nome)
-                      }}
-                      className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer select-none"
+              {ambientesConsolidados.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-8 flex flex-col items-center justify-center text-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 shadow-2xs text-slate-400 flex items-center justify-center">
+                    <Home className="w-6 h-6 text-slate-400" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold text-slate-800">
+                      Nenhum ambiente adicionado ainda
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-sm">
+                      Todo orçamento começa zerado. Adicione o primeiro ambiente (ex: Cozinha,
+                      Quarto, Varanda) para organizar seus módulos.
+                    </p>
+                  </div>
+                  {!isAddingAmbiente ? (
+                    <Button
+                      type="button"
+                      onClick={() => setIsAddingAmbiente(true)}
+                      className="bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl h-10 px-4 shadow-xs flex items-center gap-2 mt-1"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span
-                          className={cn(
-                            'w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0',
-                            isActive ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600',
-                          )}
-                        >
-                          {index + 1}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-slate-900 truncate">
-                              {amb.nome}
-                            </span>
-                            {isActive && (
-                              <Badge className="bg-slate-700 text-white text-[10px] px-1.5 py-0 font-medium">
-                                Ativo
-                              </Badge>
+                      <Plus className="w-4 h-4" />+ Adicionar Ambiente
+                    </Button>
+                  ) : null}
+                </div>
+              ) : (
+                ambientesConsolidados.map((amb, index) => {
+                  const isActive = amb.id === targetAmbienteId
+                  const modulosCount = amb.modulos.length
+                  return (
+                    <div
+                      key={amb.id}
+                      className={cn(
+                        'rounded-xl border transition-all overflow-hidden',
+                        isActive
+                          ? 'border-slate-400 bg-slate-50/50 shadow-sm ring-1 ring-slate-400/30'
+                          : 'border-slate-200 bg-white hover:border-slate-300',
+                      )}
+                    >
+                      {/* Header do Card de Ambiente */}
+                      <div
+                        onClick={() => {
+                          setActiveAmbienteId(amb.id)
+                          setAmbienteSelecionado(amb.nome)
+                          setRoom(amb.nome)
+                        }}
+                        className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className={cn(
+                              'w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0',
+                              isActive ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600',
                             )}
+                          >
+                            {index + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm text-slate-900 truncate">
+                                {amb.nome}
+                              </span>
+                              {isActive && (
+                                <Badge className="bg-slate-700 text-white text-[10px] px-1.5 py-0 font-medium">
+                                  Ativo
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              {modulosCount} {modulosCount === 1 ? 'módulo' : 'módulos'}{' '}
+                              configurado(s)
+                            </p>
                           </div>
-                          <p className="text-xs text-slate-500">
-                            {modulosCount} {modulosCount === 1 ? 'módulo' : 'módulos'}{' '}
-                            configurado(s)
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3 self-end sm:self-auto">
-                        <div className="text-right">
-                          <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">
-                            Subtotal Ambiente
-                          </span>
-                          <span className="text-sm font-bold font-mono text-slate-800">
-                            {formatCurrency(amb.subtotal)}
-                          </span>
                         </div>
 
-                        {ambientes.length > 1 && (
+                        <div className="flex items-center gap-3 self-end sm:self-auto">
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">
+                              Subtotal Ambiente
+                            </span>
+                            <span className="text-sm font-bold font-mono text-slate-800">
+                              {formatCurrency(amb.subtotal)}
+                            </span>
+                          </div>
+
                           <Button
                             type="button"
                             variant="ghost"
@@ -2053,59 +2081,59 @@ export default function Index() {
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Lista dos módulos já cadastrados dentro deste ambiente */}
-                    {amb.modulos.length > 0 && (
-                      <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4 border-t border-slate-200/60 pt-3">
-                        <div className="space-y-2">
-                          {amb.modulos.map((mod, mIdx) => (
-                            <div
-                              key={mod.id || mIdx}
-                              className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-white border border-slate-200 text-xs shadow-2xs"
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Box className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                                <div className="min-w-0">
-                                  <span className="font-bold text-slate-800 truncate block">
-                                    {mod.nome}
-                                  </span>
-                                  {mod.dimensoes && (
-                                    <span className="text-[11px] text-slate-500 font-mono">
-                                      {mod.dimensoes.largura}L × {mod.dimensoes.altura}A ×{' '}
-                                      {mod.dimensoes.profundidade}P mm
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="font-semibold font-mono text-slate-800">
-                                  {formatCurrency(mod.subtotal)}
-                                </span>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleRemoveModulo(amb.id, mod.id)
-                                  }}
-                                  className="h-6 w-6 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"
-                                  title="Remover módulo"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
                         </div>
                       </div>
-                    )}
-                  </div>
-                )
-              })}
+
+                      {/* Lista dos módulos já cadastrados dentro deste ambiente */}
+                      {amb.modulos.length > 0 && (
+                        <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4 border-t border-slate-200/60 pt-3">
+                          <div className="space-y-2">
+                            {amb.modulos.map((mod, mIdx) => (
+                              <div
+                                key={mod.id || mIdx}
+                                className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-white border border-slate-200 text-xs shadow-2xs"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Box className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                                  <div className="min-w-0">
+                                    <span className="font-bold text-slate-800 truncate block">
+                                      {mod.nome}
+                                    </span>
+                                    {mod.dimensoes && (
+                                      <span className="text-[11px] text-slate-500 font-mono">
+                                        {mod.dimensoes.largura}L × {mod.dimensoes.altura}A ×{' '}
+                                        {mod.dimensoes.profundidade}P mm
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="font-semibold font-mono text-slate-800">
+                                    {formatCurrency(mod.subtotal)}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleRemoveModulo(amb.id, mod.id)
+                                    }}
+                                    className="h-6 w-6 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"
+                                    title="Remover módulo"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
             </div>
           </div>
 
@@ -2126,10 +2154,20 @@ export default function Index() {
                   value={ambienteSelecionado || room}
                   onChange={(val) => {
                     handleAmbienteSelecionadoChange(val)
-                    // Atualiza o nome do ambiente ativo na lista
-                    setAmbientes((prev) =>
-                      prev.map((a) => (a.id === targetAmbienteId ? { ...a, nome: val } : a)),
-                    )
+                    // Se não houver nenhum ambiente na lista mas o usuário selecionou/digitou um ambiente, cria o primeiro ambiente
+                    setAmbientes((prev) => {
+                      if (prev.length === 0) {
+                        const newAmb: AmbienteOrcamento = {
+                          id: `amb-${Date.now()}`,
+                          nome: val,
+                          modulos: [],
+                          subtotal: 0,
+                        }
+                        setActiveAmbienteId(newAmb.id)
+                        return [newAmb]
+                      }
+                      return prev.map((a) => (a.id === targetAmbienteId ? { ...a, nome: val } : a))
+                    })
                   }}
                   error={errors.room}
                 />

@@ -48,9 +48,18 @@ export interface CatalogoMaterialInput {
  * Retorna `null` em caso de erro (para que o chamador possa distinguir
  * "tabela vazia" de "falha de conexão" e acionar o estado de erro).
  */
-export async function fetchCatalogoMateriais(): Promise<CatalogoMaterial[] | null> {
+export async function fetchCatalogoMateriais(
+  timeoutMs: number = 10000,
+): Promise<CatalogoMaterial[] | null> {
   try {
-    const { data, error } = await supabase
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Timeout ao carregar catálogo de materiais (${timeoutMs / 1000}s)`))
+      }, timeoutMs)
+    })
+
+    const queryPromise = supabase
       .from('CatalogoMateriais')
       .select(
         'id, nome_material, categoria, unidade, preco_custo, nivel_padrao, ativo, created_at, updated_at',
@@ -59,12 +68,25 @@ export async function fetchCatalogoMateriais(): Promise<CatalogoMaterial[] | nul
       .order('categoria')
       .order('nome_material')
 
-    if (error) {
-      console.error('Erro ao buscar catálogo de materiais:', error.message ?? error)
-      return null
-    }
+    try {
+      const response = (await Promise.race([queryPromise, timeoutPromise])) as Awaited<
+        typeof queryPromise
+      >
 
-    return (data ?? []) as CatalogoMaterial[]
+      if (timeoutId) clearTimeout(timeoutId)
+
+      const { data, error } = response
+
+      if (error) {
+        console.error('Erro ao buscar catálogo de materiais:', error.message ?? error)
+        return null
+      }
+
+      return (data ?? []) as CatalogoMaterial[]
+    } catch (raceErr) {
+      if (timeoutId) clearTimeout(timeoutId)
+      throw raceErr
+    }
   } catch (err) {
     console.error('Erro inesperado ao buscar catálogo de materiais:', err)
     return null
