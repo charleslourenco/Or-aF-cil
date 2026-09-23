@@ -28,6 +28,9 @@ interface Dimensoes3D {
 export type TipoPorta = 'abrir' | 'correr' | 'batente' | 'nenhum'
 
 export interface DecomposicaoModulo {
+  divisorias: {
+    qtd: number
+  }
   portas: {
     qtd: number
     tipo: TipoPorta
@@ -51,6 +54,9 @@ interface ModuloDetectado {
   dimensoes_originais?: Dimensoes3D
   fator_escala?: number
   adaptacoes?: string
+  divisorias?: {
+    qtd: number
+  }
   portas?: {
     qtd: number
     tipo: TipoPorta
@@ -179,15 +185,16 @@ ${listaCatalogoText}
    - NUNCA invente IDs aleatórios e NUNCA force o primeiro módulo da lista se não houver correspondência exata/adequada.
 
 2. DECOMPOSIÇÃO ESTRUTURADA DE COMPONENTES E INTERIOR VISÍVEL:
-   - Analise minuciosamente a parte externa e o INTERIOR visível de cada móvel (portas, gavetas, prateleiras internas, divisões, cabideiro, sapateira, puxadores).
+   - Analise minuciosamente a parte externa e o INTERIOR visível de cada móvel (divisórias verticais/corpos, portas, gavetas, prateleiras internas, divisões, cabideiro, sapateira, puxadores).
    - Preencha SEMPRE e OBRIGATORIAMENTE os seguintes campos para cada módulo, mesmo que com valor 0 ou falso:
+     * "divisorias": { "qtd": <número de divisórias verticais internas que separam o vão em corpos, ex: 1 divisória para 2 corpos, 2 divisórias para 3 corpos. Se vão único sem divisória, usar 0> }
      * "portas": { "qtd": <número total de portas>, "tipo": "abrir" | "correr" | "batente" | "nenhum" }
      * "gavetas": { "qtd": <número total de gavetas externas ou internas> }
      * "prateleiras": { "qtd": <número total de prateleiras internas ou divisões horizontais> }
      * "cabideiro": <true se houver varão/cabideiro para pendurar roupas, false se não houver>
      * "sapateira": <true se houver prateleiras aramadas/corrediças para sapatos, false se não houver>
      * "puxadores": <número estimado total de puxadores necessários para portas e gavetas>
-   - Em "adaptacoes", descreva textualmente em português claro a composição e adaptações do móvel (ex: "Guarda-roupa com 6 portas de abrir, 4 gavetas internas, cabideiro e 3 prateleiras").
+   - Em "adaptacoes", descreva textualmente em português claro a composição e adaptações do móvel (ex: "Guarda-roupa com 1 divisória vertical (2 corpos), 2 portas de correr, 4 gavetas internas, 2 cabideiros e 3 prateleiras").
 
 3. FERRAGENS E INSUMOS OBRIGATÓRIOS:
    - Se o módulo tiver PORTAS DE CORRER: inclua OBRIGATORIAMENTE Kit Sistema de Correr + Trilho Superior + Trilho Inferior.
@@ -208,13 +215,14 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
       "nome": "Nome do módulo",
       "e_customizado": false,
       "dimensao_estimada": { "largura": 1800, "altura": 2200, "profundidade": 600 },
+      "divisorias": { "qtd": 1 },
       "portas": { "qtd": 2, "tipo": "abrir" },
       "gavetas": { "qtd": 4 },
       "prateleiras": { "qtd": 3 },
       "cabideiro": true,
       "sapateira": false,
       "puxadores": 6,
-      "adaptacoes": "Guarda-roupa 2 portas de abrir, cabideiro interno e 4 gavetas"
+      "adaptacoes": "Guarda-roupa 2 portas de abrir, 1 divisória vertical (2 corpos), cabideiro interno e 4 gavetas"
     }
   ],
   "ferragens_obrigatorias": [
@@ -355,6 +363,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         tipoPorta = 'nenhum'
       }
 
+      const qtdDivisorias = Math.max(0, Number(m.divisorias?.qtd ?? m.qtd_divisorias) || 0)
       const qtdPortas = Math.max(0, Number(portasRaw.qtd ?? m.qtd_portas) || 0)
       const qtdGavetas = Math.max(0, Number(m.gavetas?.qtd ?? m.qtd_gavetas) || 0)
       const qtdPrateleiras = Math.max(0, Number(m.prateleiras?.qtd ?? m.qtd_prateleiras) || 0)
@@ -370,6 +379,9 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         dimensoes_originais: dimensoesOriginais,
         fator_escala: fatorEscala,
         adaptacoes: m.adaptacoes ? String(m.adaptacoes) : undefined,
+        divisorias: {
+          qtd: qtdDivisorias,
+        },
         portas: {
           qtd: qtdPortas,
           tipo: qtdPortas === 0 ? 'nenhum' : tipoPorta,
@@ -405,6 +417,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
           e_customizado: true,
           dimensao_estimada: { largura: 1800, altura: 2200, profundidade: 600 },
           fator_escala: 1.0,
+          divisorias: { qtd: 0 },
           portas: { qtd: 0, tipo: 'nenhum' },
           gavetas: { qtd: 0 },
           prateleiras: { qtd: 2 },

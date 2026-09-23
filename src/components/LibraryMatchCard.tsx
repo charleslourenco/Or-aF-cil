@@ -17,6 +17,7 @@ import {
   Shirt,
   Footprints,
   SlidersHorizontal,
+  Columns,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -31,7 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TemplateEngenharia } from '@/services/templates'
-import { type ModuloComposicao, type TipoAberturaPorta } from '@/lib/pricing'
+import { type ModuloComposicao, type ComposicaoCorpo, type TipoAberturaPorta } from '@/lib/pricing'
 import { cn } from '@/lib/utils'
 
 interface LibraryMatchCardProps {
@@ -380,7 +381,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
             </div>
           </div>
 
-          {/* DECOMPOSIÇÃO ESTRUTURADA DE MÓDULO (PORTAS, GAVETAS, INTERIOR) */}
+          {/* DECOMPOSIÇÃO ESTRUTURADA DE MÓDULO (PORTAS, GAVETAS, INTERIOR & CORPOS) */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3.5">
             <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200">
               <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -395,12 +396,80 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
               </Badge>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Linha 1: Divisórias (Corpos) e Portas */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Divisórias Verticais (Corpos) */}
+              <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 uppercase">
+                    <Columns className="w-3.5 h-3.5 text-slate-600" />
+                    Divisórias (Corpos)
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-slate-100 text-slate-700 font-mono"
+                  >
+                    {(composicao?.divisorias?.qtd ?? 0) + 1}{' '}
+                    {(composicao?.divisorias?.qtd ?? 0) + 1 === 1 ? 'corpo' : 'corpos'}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-20">
+                    <Label className="text-[10px] text-slate-500 font-medium">Divisórias</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={10}
+                      value={composicao?.divisorias?.qtd ?? 0}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseInt(e.target.value, 10) || 0)
+                        onComposicaoChange?.((prev) => {
+                          const novaQtdCorpos = val + 1
+                          const corposAtuais = prev.corpos || []
+                          let novosCorpos: ComposicaoCorpo[] = []
+
+                          if (corposAtuais.length === novaQtdCorpos) {
+                            novosCorpos = corposAtuais
+                          } else if (corposAtuais.length < novaQtdCorpos) {
+                            // Expande mantendo os existentes
+                            novosCorpos = [...corposAtuais]
+                            while (novosCorpos.length < novaQtdCorpos) {
+                              novosCorpos.push({
+                                id: `corpo-${novosCorpos.length + 1}`,
+                                gavetas: 0,
+                                prateleiras: 2,
+                                cabideiro: Boolean(prev.cabideiro),
+                                sapateira: false,
+                              })
+                            }
+                          } else {
+                            // Trunca para a nova quantidade
+                            novosCorpos = corposAtuais.slice(0, novaQtdCorpos)
+                          }
+
+                          return {
+                            ...prev,
+                            divisorias: { qtd: val },
+                            corpos: novosCorpos,
+                          }
+                        })
+                      }}
+                      className="h-8 text-xs font-bold font-mono px-2"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0 text-[11px] text-slate-500 leading-tight pt-3">
+                    {(composicao?.divisorias?.qtd ?? 0 === 0)
+                      ? 'Vão único interior'
+                      : `${(composicao?.divisorias?.qtd ?? 0) + 1} corpos com larguras independentes`}
+                  </div>
+                </div>
+              </div>
+
               {/* Portas */}
               <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200">
                 <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 uppercase">
                   <DoorClosed className="w-3.5 h-3.5 text-slate-600" />
-                  Portas
+                  Portas Externas
                 </div>
                 <div className="flex gap-2">
                   <div className="w-16">
@@ -455,91 +524,265 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                   </div>
                 </div>
               </div>
-
-              {/* Gavetas */}
-              <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200">
-                <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 uppercase">
-                  <FolderMinus className="w-3.5 h-3.5 text-slate-600" />
-                  Gavetas
-                </div>
-                <div>
-                  <Label className="text-[10px] text-slate-500 font-medium">Qtd Gavetas</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={30}
-                    value={composicao?.gavetas?.qtd ?? 0}
-                    onChange={(e) => {
-                      const val = Math.max(0, parseInt(e.target.value, 10) || 0)
-                      onComposicaoChange?.((prev) => ({
-                        ...prev,
-                        gavetas: { qtd: val },
-                      }))
-                    }}
-                    className="h-8 text-xs font-bold font-mono px-2"
-                  />
-                </div>
-              </div>
-
-              {/* Prateleiras */}
-              <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200">
-                <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 uppercase">
-                  <Grid3X3 className="w-3.5 h-3.5 text-slate-600" />
-                  Prateleiras
-                </div>
-                <div>
-                  <Label className="text-[10px] text-slate-500 font-medium">Qtd Internas</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={20}
-                    value={composicao?.prateleiras?.qtd ?? 2}
-                    onChange={(e) => {
-                      const val = Math.max(0, parseInt(e.target.value, 10) || 0)
-                      onComposicaoChange?.((prev) => ({
-                        ...prev,
-                        prateleiras: { qtd: val },
-                      }))
-                    }}
-                    className="h-8 text-xs font-bold font-mono px-2"
-                  />
-                </div>
-              </div>
             </div>
 
-            {/* Acessórios Internos e Puxadores */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-              <label className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
-                <Checkbox
-                  checked={Boolean(composicao?.cabideiro)}
-                  onCheckedChange={(checked) => {
-                    onComposicaoChange?.((prev) => ({
-                      ...prev,
-                      cabideiro: Boolean(checked),
-                    }))
-                  }}
-                />
-                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
-                  <Shirt className="w-3.5 h-3.5 text-slate-600" />
-                  Varão Cabideiro
+            {/* Se houver divisórias (corpos > 1): EDIÇÃO POR CORPO */}
+            {(composicao?.divisorias?.qtd ?? 0) > 0 ? (
+              <div className="space-y-2 pt-1 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                    <Columns className="w-3.5 h-3.5 text-slate-700" />
+                    Layout Interno por Corpo ({(composicao?.divisorias?.qtd ?? 0) + 1} corpos)
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    Configure cada vão de forma assimétrica
+                  </span>
                 </div>
-              </label>
 
-              <label className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
-                <Checkbox
-                  checked={Boolean(composicao?.sapateira)}
-                  onCheckedChange={(checked) => {
-                    onComposicaoChange?.((prev) => ({
-                      ...prev,
-                      sapateira: Boolean(checked),
-                    }))
-                  }}
-                />
-                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
-                  <Footprints className="w-3.5 h-3.5 text-slate-600" />
-                  Sapateira
+                <div className="space-y-2">
+                  {(() => {
+                    const qtdCorposTotal = (composicao?.divisorias?.qtd ?? 0) + 1
+                    // Garante que a lista de corpos tenha exatamente qtdCorposTotal elementos
+                    const corpos =
+                      Array.isArray(composicao?.corpos) &&
+                      composicao.corpos.length === qtdCorposTotal
+                        ? composicao.corpos
+                        : Array.from({ length: qtdCorposTotal }, (_, idx) => ({
+                            id: `corpo-${idx + 1}`,
+                            gavetas: idx === 0 ? (composicao?.gavetas?.qtd ?? 0) : 0,
+                            prateleiras:
+                              Math.round((composicao?.prateleiras?.qtd ?? 2) / qtdCorposTotal) || 1,
+                            cabideiro: Boolean(composicao?.cabideiro),
+                            sapateira: idx === 0 ? Boolean(composicao?.sapateira) : false,
+                          }))
+
+                    return corpos.map((corpo, idx) => (
+                      <div
+                        key={corpo.id || `corpo-${idx}`}
+                        className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                          <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <span className="w-4 h-4 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px]">
+                              {idx + 1}
+                            </span>
+                            Corpo {idx + 1}{' '}
+                            {idx === 0
+                              ? '(Esquerdo)'
+                              : idx === qtdCorposTotal - 1
+                                ? '(Direito)'
+                                : '(Central)'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            Vão #{idx + 1}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                          {/* Gavetas do corpo */}
+                          <div>
+                            <Label className="text-[10px] text-slate-500 font-medium block">
+                              Gavetas
+                            </Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={20}
+                              value={corpo.gavetas ?? 0}
+                              onChange={(e) => {
+                                const val = Math.max(0, parseInt(e.target.value, 10) || 0)
+                                onComposicaoChange?.((prev) => {
+                                  const novos = [...corpos]
+                                  novos[idx] = { ...novos[idx], gavetas: val }
+                                  const totalG = novos.reduce((s, c) => s + c.gavetas, 0)
+                                  return {
+                                    ...prev,
+                                    corpos: novos,
+                                    gavetas: { qtd: totalG },
+                                  }
+                                })
+                              }}
+                              className="h-7 text-xs font-bold font-mono px-2"
+                            />
+                          </div>
+
+                          {/* Prateleiras do corpo */}
+                          <div>
+                            <Label className="text-[10px] text-slate-500 font-medium block">
+                              Prateleiras
+                            </Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={20}
+                              value={corpo.prateleiras ?? 0}
+                              onChange={(e) => {
+                                const val = Math.max(0, parseInt(e.target.value, 10) || 0)
+                                onComposicaoChange?.((prev) => {
+                                  const novos = [...corpos]
+                                  novos[idx] = { ...novos[idx], prateleiras: val }
+                                  const totalP = novos.reduce((s, c) => s + c.prateleiras, 0)
+                                  return {
+                                    ...prev,
+                                    corpos: novos,
+                                    prateleiras: { qtd: totalP },
+                                  }
+                                })
+                              }}
+                              className="h-7 text-xs font-bold font-mono px-2"
+                            />
+                          </div>
+
+                          {/* Cabideiro no corpo */}
+                          <div className="flex items-end pb-0.5">
+                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] font-medium text-slate-700">
+                              <Checkbox
+                                checked={Boolean(corpo.cabideiro)}
+                                onCheckedChange={(checked) => {
+                                  onComposicaoChange?.((prev) => {
+                                    const novos = [...corpos]
+                                    novos[idx] = { ...novos[idx], cabideiro: Boolean(checked) }
+                                    const temAlgum = novos.some((c) => c.cabideiro)
+                                    return {
+                                      ...prev,
+                                      corpos: novos,
+                                      cabideiro: temAlgum,
+                                    }
+                                  })
+                                }}
+                              />
+                              <Shirt className="w-3.5 h-3.5 text-slate-600" />
+                              Cabideiro
+                            </label>
+                          </div>
+
+                          {/* Sapateira no corpo */}
+                          <div className="flex items-end pb-0.5">
+                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] font-medium text-slate-700">
+                              <Checkbox
+                                checked={Boolean(corpo.sapateira)}
+                                onCheckedChange={(checked) => {
+                                  onComposicaoChange?.((prev) => {
+                                    const novos = [...corpos]
+                                    novos[idx] = { ...novos[idx], sapateira: Boolean(checked) }
+                                    const temAlgum = novos.some((c) => c.sapateira)
+                                    return {
+                                      ...prev,
+                                      corpos: novos,
+                                      sapateira: temAlgum,
+                                    }
+                                  })
+                                }}
+                              />
+                              <Footprints className="w-3.5 h-3.5 text-slate-600" />
+                              Sapateira
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  })()}
                 </div>
-              </label>
+              </div>
+            ) : (
+              /* MÓDULO DE VÃO ÚNICO (0 divisórias): edição global compacta */
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Gavetas */}
+                <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 uppercase">
+                    <FolderMinus className="w-3.5 h-3.5 text-slate-600" />
+                    Gavetas
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-slate-500 font-medium">Qtd Gavetas</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={30}
+                      value={composicao?.gavetas?.qtd ?? 0}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseInt(e.target.value, 10) || 0)
+                        onComposicaoChange?.((prev) => ({
+                          ...prev,
+                          gavetas: { qtd: val },
+                        }))
+                      }}
+                      className="h-8 text-xs font-bold font-mono px-2"
+                    />
+                  </div>
+                </div>
+
+                {/* Prateleiras */}
+                <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 uppercase">
+                    <Grid3X3 className="w-3.5 h-3.5 text-slate-600" />
+                    Prateleiras
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-slate-500 font-medium">Qtd Internas</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={composicao?.prateleiras?.qtd ?? 2}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseInt(e.target.value, 10) || 0)
+                        onComposicaoChange?.((prev) => ({
+                          ...prev,
+                          prateleiras: { qtd: val },
+                        }))
+                      }}
+                      className="h-8 text-xs font-bold font-mono px-2"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Acessórios Globais (Cabideiro/Sapateira quando vão único) e Puxadores */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              {(composicao?.divisorias?.qtd ?? 0) === 0 ? (
+                <>
+                  <label className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                    <Checkbox
+                      checked={Boolean(composicao?.cabideiro)}
+                      onCheckedChange={(checked) => {
+                        onComposicaoChange?.((prev) => ({
+                          ...prev,
+                          cabideiro: Boolean(checked),
+                        }))
+                      }}
+                    />
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
+                      <Shirt className="w-3.5 h-3.5 text-slate-600" />
+                      Varão Cabideiro
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                    <Checkbox
+                      checked={Boolean(composicao?.sapateira)}
+                      onCheckedChange={(checked) => {
+                        onComposicaoChange?.((prev) => ({
+                          ...prev,
+                          sapateira: Boolean(checked),
+                        }))
+                      }}
+                    />
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
+                      <Footprints className="w-3.5 h-3.5 text-slate-600" />
+                      Sapateira
+                    </div>
+                  </label>
+                </>
+              ) : (
+                <div className="sm:col-span-2 flex items-center p-2.5 bg-white rounded-lg border border-slate-200 text-xs text-slate-600">
+                  <span>
+                    💡 <strong>Layout por corpos:</strong> Cabideiro e sapateira podem ser ativados
+                    individualmente em cada corpo acima.
+                  </span>
+                </div>
+              )}
 
               <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200">
                 <Label className="text-[11px] font-semibold text-slate-700 whitespace-nowrap">

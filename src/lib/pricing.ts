@@ -19,7 +19,21 @@ export type PadraoProjeto = 'comercial' | 'premium'
 
 export type TipoAberturaPorta = 'abrir' | 'correr' | 'batente' | 'nenhum'
 
+export interface ComposicaoCorpo {
+  id?: string
+  gavetas: number
+  prateleiras: number
+  cabideiro: boolean
+  sapateira?: boolean
+}
+
 export interface ModuloComposicao {
+  /** Quantidade de divisórias verticais que separam o módulo em corpos */
+  divisorias?: {
+    qtd: number
+  }
+  /** Configuração detalhada por corpo (se omitida, o sistema distribui os totais) */
+  corpos?: ComposicaoCorpo[]
   portas?: {
     qtd: number
     tipo: TipoAberturaPorta
@@ -550,14 +564,82 @@ export function calcularBOM(
   }
 
   // =========================================================================
-  // CÁLCULO DINÂMICO DERIVADO DA COMPOSIÇÃO DO MÓVEL
+  // CÁLCULO DINÂMICO DERIVADO DA COMPOSIÇÃO DO MÓVEL & CORPOS POR DIVISÓRIAS
   // =========================================================================
+  const qtdDivisorias = Math.max(0, composicao.divisorias?.qtd ?? 0)
+  const qtdCorpos = qtdDivisorias + 1
+
+  // Vão livre de cada corpo (subtraindo espessuras das divisórias intermediárias)
+  // Se divisorias = 0, larguraCorpo = larguraVaoUtil (compatibilidade total de vão único)
+  const larguraCorpo = Math.max(
+    100,
+    Math.round((larguraVaoUtil - qtdDivisorias * espInt) / qtdCorpos),
+  )
+
+  // Altura da divisória vertical: igual à altura das laterais internas estruturais
+  // Profundidade da divisória: igual a profInterna (P - recuo_caixa_interna)
+  const altDivisoria = isSemTamponamento ? Math.max(100, A - 2 * espExt) : altLateralInt
+  const profDivisoria = profInterna
+
+  // 3f. Divisórias Verticais Internas (em MDF Interno)
+  if (qtdDivisorias > 0) {
+    const areaUmaDivisoria = ((altDivisoria * profDivisoria) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-divisorias-verticais',
+        `Divisória Vertical Interna (${qtdDivisorias}x) — ${altDivisoria}×${profDivisoria}mm`,
+        'MDF Interno',
+        espInt,
+        areaUmaDivisoria * qtdDivisorias,
+        'm²',
+        resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+  }
+
+  // Composição por corpo: verifica se há corpos definidos individualmente
+  let corposConfig: ComposicaoCorpo[] = []
+  if (Array.isArray(composicao.corpos) && composicao.corpos.length === qtdCorpos) {
+    corposConfig = composicao.corpos
+  } else {
+    // Distribuição automática padrão dos componentes entre os corpos:
+    // Se a IA informou cabideiro e qtdCorpos > 1, cada corpo ganha cabideiro (ou distribui)
+    const totalGavetas = Math.max(0, composicao.gavetas?.qtd ?? 0)
+    const totalPrateleiras = Math.max(0, composicao.prateleiras?.qtd ?? 2)
+    const cabideiroGlobal = Boolean(composicao.cabideiro)
+    const sapateiraGlobal = Boolean(composicao.sapateira)
+
+    // Se temos 2 corpos e gavetas, concentra as gavetas num corpo gaveteiro se for layout assimétrico,
+    // ou distribui igualmente se não houver divisão prévia.
+    // Para simplificar a inicialização padrão: distribui igualmente
+    const gavetasPorCorpoBase = Math.floor(totalGavetas / qtdCorpos)
+    const restoGavetas = totalGavetas % qtdCorpos
+
+    const pratPorCorpoBase = Math.floor(totalPrateleiras / qtdCorpos)
+    const restoPrat = totalPrateleiras % qtdCorpos
+
+    for (let c = 0; c < qtdCorpos; c++) {
+      corposConfig.push({
+        id: `corpo-${c + 1}`,
+        gavetas: gavetasPorCorpoBase + (c === 0 ? restoGavetas : 0),
+        prateleiras: pratPorCorpoBase + (c === 0 ? restoPrat : 0),
+        // Se a IA detectou cabideiro, no guarda-roupa de múltiplos corpos cada corpo pode receber cabideiro
+        cabideiro: cabideiroGlobal,
+        sapateira: c === 0 ? sapateiraGlobal : false,
+      })
+    }
+  }
+
+  // Totais consolidados derivados dos corpos
+  const qtdGavetas = corposConfig.reduce((acc, c) => acc + (Number(c.gavetas) || 0), 0)
+  const qtdPrateleiras = corposConfig.reduce((acc, c) => acc + (Number(c.prateleiras) || 0), 0)
+  const qtdCabideiros = corposConfig.filter((c) => Boolean(c.cabideiro)).length
+  const temSapateira = corposConfig.some((c) => Boolean(c.sapateira))
+
   const qtdPortas = Math.max(0, composicao.portas?.qtd ?? 0)
   const tipoPorta: TipoAberturaPorta = qtdPortas > 0 ? composicao.portas?.tipo || 'abrir' : 'nenhum'
-  const qtdGavetas = Math.max(0, composicao.gavetas?.qtd ?? 0)
-  const qtdPrateleiras = Math.max(0, composicao.prateleiras?.qtd ?? 2)
-  const temCabideiro = Boolean(composicao.cabideiro)
-  const temSapateira = Boolean(composicao.sapateira)
+
   const qtdPuxadores =
     typeof composicao.puxadores === 'number' && composicao.puxadores >= 0
       ? composicao.puxadores
@@ -571,14 +653,21 @@ export function calcularBOM(
     perimetroFitaMm += (2 * altLateralInt + 2 * largCaixariaInt) * escala
   }
 
-  // 4. Prateleiras Internas (dinâmico)
+  // Fita de borda na frente vertical de cada divisória interna
+  if (qtdDivisorias > 0) {
+    perimetroFitaMm += qtdDivisorias * altDivisoria * escala
+  }
+
+  // 4. Prateleiras Internas (calculadas por corpo com a largura do corpo)
   if (qtdPrateleiras > 0) {
     const profPrat = Math.max(100, profInterna)
-    const areaUmaPrat = ((larguraVaoUtil * profPrat) / 1_000_000) * PERDA * escala
+    // Se divisórias > 0, cada prateleira mede larguraCorpo × profPrat
+    // Se divisórias = 0, larguraCorpo = larguraVaoUtil
+    const areaUmaPrat = ((larguraCorpo * profPrat) / 1_000_000) * PERDA * escala
     pecas.push(
       criarPeca(
         'bom-prateleiras',
-        `Prateleiras Internas (${qtdPrateleiras}x) — ${larguraVaoUtil}×${profPrat}mm`,
+        `Prateleiras Internas (${qtdPrateleiras}x) — ${larguraCorpo}×${profPrat}mm`,
         'MDF Interno',
         espInt,
         areaUmaPrat * qtdPrateleiras,
@@ -588,7 +677,7 @@ export function calcularBOM(
       ),
     )
     // Fita de borda na frente de cada prateleira
-    perimetroFitaMm += qtdPrateleiras * larguraVaoUtil * escala
+    perimetroFitaMm += qtdPrateleiras * larguraCorpo * escala
   }
 
   // 5. Portas (MDF Externo) e Ferragens de Porta
@@ -676,8 +765,10 @@ export function calcularBOM(
   }
 
   // 6. Gavetas: frentes + caixote (laterais, contra-frente, traseira e fundo) + corrediças
+  // Com divisórias / corpos, as gavetas ocupam a largura do corpo (ex: ~745mm em vez de 1520mm)
   if (qtdGavetas > 0) {
-    const largFrenteGav = Math.max(100, larguraEntreLateraisExt)
+    // Se houver divisórias, as gavetas correm dentro do corpo gaveteiro com folga adequada
+    const largFrenteGav = Math.max(100, qtdDivisorias > 0 ? larguraCorpo : larguraEntreLateraisExt)
     const altFrenteGav = Math.max(100, Math.round(500 / qtdGavetas) || 160)
     const areaFrentes = ((largFrenteGav * altFrenteGav) / 1_000_000) * PERDA * escala
 
@@ -699,9 +790,9 @@ export function calcularBOM(
     perimetroFitaMm += qtdGavetas * 2 * (largFrenteGav + altFrenteGav) * escala
 
     // Caixote interno da gaveta (laterais e contra-frente/traseira em MDF Interno 15mm)
-    // O caixote interno corre dentro do vão útil interno
+    // O caixote interno corre dentro do corpo (larguraCorpo - folga para corrediças de 30mm)
     const profGaveta = Math.max(150, profInterna - 50)
-    const largCaixoteGav = Math.max(100, larguraVaoUtil - 30)
+    const largCaixoteGav = Math.max(100, larguraCorpo - 30)
     const altCaixote = Math.max(80, altFrenteGav - 40)
     // 2 laterais + 2 travessas (contra-frente e traseira)
     const areaCaixotePorGav =
@@ -756,23 +847,23 @@ export function calcularBOM(
     })
   }
 
-  // 7. Cabideiro
-  if (temCabideiro) {
+  // 7. Cabideiro: calculado conforme qtdCabideiros (ex: 2 corpos = 2 cabideiros)
+  if (qtdCabideiros > 0) {
     const cabideiroMat = findItemCatalogo(catalogoPrecos, ['cabideiro', 'tubo'])
     const unitCostCabideiro = cabideiroMat ? Number(cabideiroMat.preco_custo) || 50.0 : 50.0
 
     pecas.push({
       id: 'bom-acessorio-cabideiro',
       description: cabideiroMat
-        ? `Tubo Cabideiro com suportes laterais`
-        : `Tubo Cabideiro com suportes — Estimado`,
+        ? `Tubo Cabideiro com suportes laterais (${qtdCabideiros}x)`
+        : `Tubo Cabideiro com suportes (${qtdCabideiros}x) — Estimado`,
       material: 'Ferragem',
-      metragem: 1,
+      metragem: qtdCabideiros,
       unidade: cabideiroMat?.unidade === 'm' ? 'm' : 'un',
       unitCost: unitCostCabideiro,
-      totalCost: round2(unitCostCabideiro),
+      totalCost: round2(unitCostCabideiro * qtdCabideiros),
       markup: effectiveMarkup,
-      salePrice: round2(unitCostCabideiro * effectiveMarkup),
+      salePrice: round2(unitCostCabideiro * qtdCabideiros * effectiveMarkup),
       item_nao_cadastrado: !cabideiroMat,
       catalogo_id: cabideiroMat?.id || null,
     })

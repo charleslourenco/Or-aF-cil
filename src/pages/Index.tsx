@@ -768,6 +768,7 @@ export default function Index() {
       dimensoes_originais?: { largura: number; altura: number; profundidade: number }
       fator_escala?: number
       adaptacoes?: string
+      divisorias?: { qtd: number }
       portas?: { qtd: number; tipo: 'abrir' | 'correr' | 'batente' | 'nenhum' }
       gavetas?: { qtd: number }
       prateleiras?: { qtd: number }
@@ -946,6 +947,7 @@ export default function Index() {
             setAdaptacoesIA(primeiroModulo.adaptacoes)
           }
 
+          const divisoriasDetectadas = primeiroModulo.divisorias || { qtd: 0 }
           const portasDetectadas = primeiroModulo.portas || { qtd: 0, tipo: 'nenhum' }
           const gavetasDetectadas = primeiroModulo.gavetas || { qtd: 0 }
           const prateleirasDetectadas = primeiroModulo.prateleiras || { qtd: 2 }
@@ -956,7 +958,30 @@ export default function Index() {
               ? primeiroModulo.puxadores
               : portasDetectadas.qtd + gavetasDetectadas.qtd
 
+          const qtdDiv = divisoriasDetectadas.qtd || 0
+          const qtdCorposTotal = qtdDiv + 1
+
+          // Inicializa corpos
+          const corposIniciais = Array.from({ length: qtdCorposTotal }, (_, idx) => {
+            const gavPorCorpo = Math.floor(gavetasDetectadas.qtd / qtdCorposTotal)
+            const restoGav = gavetasDetectadas.qtd % qtdCorposTotal
+            const pratPorCorpo = Math.floor(prateleirasDetectadas.qtd / qtdCorposTotal)
+            const restoPrat = prateleirasDetectadas.qtd % qtdCorposTotal
+
+            return {
+              id: `corpo-${idx + 1}`,
+              gavetas: gavPorCorpo + (idx === 0 ? restoGav : 0),
+              prateleiras: pratPorCorpo + (idx === 0 ? restoPrat : 0),
+              cabideiro: cabideiroDetectado,
+              sapateira: idx === 0 ? sapateiraDetectada : false,
+            }
+          })
+
           setComposicaoModulo({
+            divisorias: {
+              qtd: qtdDiv,
+            },
+            corpos: corposIniciais,
             portas: {
               qtd: portasDetectadas.qtd,
               tipo: portasDetectadas.tipo || 'abrir',
@@ -1361,6 +1386,8 @@ export default function Index() {
     setMatchJustificativa(null)
     setAdaptacoesIA(null)
     setComposicaoModulo({
+      divisorias: { qtd: 0 },
+      corpos: [],
       portas: { qtd: 0, tipo: 'nenhum' },
       gavetas: { qtd: 0 },
       prateleiras: { qtd: 2 },
@@ -1649,7 +1676,19 @@ export default function Index() {
         preco_final: totalSale,
       }
 
-      const bomJson: OrcamentoBOMItem[] = bomConsolidada
+      // Limpa qualquer sufixo transitório "(em edição)" dos nomes dos módulos ao persistir
+      const ambientesParaSalvar: AmbienteOrcamento[] = ambientesConsolidados.map((amb) => ({
+        ...amb,
+        modulos: (amb.modulos || []).map((m) => ({
+          ...m,
+          nome: m.nome.replace(/\s*\(em edição\)\s*/gi, '').trim() || m.nome,
+        })),
+      }))
+
+      const bomJson: OrcamentoBOMItem[] = bomConsolidada.map((item) => ({
+        ...item,
+        description: item.description.replace(/\s*\(em edição\)\s*/gi, ''),
+      }))
 
       let savedRecord: Orcamento | null = null
 
@@ -1658,9 +1697,14 @@ export default function Index() {
 
       // Nome do primeiro ambiente e primeiro módulo para compatibilidade legada
       const primeiroAmbienteNome =
-        ambientesConsolidados[0]?.nome || ambienteSelecionado || room || 'Ambiente Principal'
-      const primeiroModuloNome =
-        ambientesConsolidados[0]?.modulos[0]?.nome || currentModuleName || 'Módulo Planejado'
+        ambientesParaSalvar[0]?.nome || ambienteSelecionado || room || 'Ambiente Principal'
+      const primeiroModuloNome = (
+        ambientesParaSalvar[0]?.modulos[0]?.nome ||
+        currentModuleName ||
+        'Módulo Planejado'
+      )
+        .replace(/\s*\(em edição\)\s*/gi, '')
+        .trim()
 
       if (editingId) {
         // Atualização de orçamento existente
@@ -1674,7 +1718,7 @@ export default function Index() {
           observacoes: observacoes || null,
           bom_json: bomJson,
           dre_json: dreJson,
-          ambientes_json: ambientesConsolidados,
+          ambientes_json: ambientesParaSalvar,
           dimensoes_json: dimensoes,
           mdf_externo: mdfExternoStr,
           mdf_interno: mdfInternoStr,
@@ -1693,7 +1737,7 @@ export default function Index() {
           observacoes: observacoes || null,
           bom_json: bomJson,
           dre_json: dreJson,
-          ambientes_json: ambientesConsolidados,
+          ambientes_json: ambientesParaSalvar,
           dimensoes_json: dimensoes,
           mdf_externo: mdfExternoStr,
           mdf_interno: mdfInternoStr,
@@ -1743,15 +1787,18 @@ export default function Index() {
       const gruposFormatados = ambientesConsolidados.map((amb) => ({
         nome: amb.nome,
         subtotal: amb.subtotal ?? 0,
-        itens: (amb.modulos || []).map((m) => ({
-          nome: m.nome,
-          descricao: m.dimensoes
-            ? `Dimensões: ${m.dimensoes.largura}L × ${m.dimensoes.altura}A × ${m.dimensoes.profundidade}P mm`
-            : 'Projeto sob medida conforme especificações técnicas aprovadas',
-          quantidade: 1,
-          valorUnitario: m.subtotal ?? 0,
-          valorTotal: m.subtotal ?? 0,
-        })),
+        itens: (amb.modulos || []).map((m) => {
+          const nomeLimpo = m.nome.replace(/\s*\(em edição\)\s*/gi, '').trim() || m.nome
+          return {
+            nome: nomeLimpo,
+            descricao: m.dimensoes
+              ? `Dimensões: ${m.dimensoes.largura}L × ${m.dimensoes.altura}A × ${m.dimensoes.profundidade}P mm`
+              : 'Projeto sob medida conforme especificações técnicas aprovadas',
+            quantidade: 1,
+            valorUnitario: m.subtotal ?? 0,
+            valorTotal: m.subtotal ?? 0,
+          }
+        }),
       }))
 
       await gerarPropostaComercial({
@@ -1826,6 +1873,19 @@ export default function Index() {
           ? String(numSeq).padStart(3, '0')
           : (savedOrcamentoRecord?.id || editingId || '').slice(-6).toUpperCase() || undefined
 
+      const ambientesParaPdf: AmbienteOrcamento[] = ambientesConsolidados.map((amb) => ({
+        ...amb,
+        modulos: (amb.modulos || []).map((m) => ({
+          ...m,
+          nome: m.nome.replace(/\s*\(em edição\)\s*/gi, '').trim() || m.nome,
+        })),
+      }))
+
+      const bomParaPdf = bomConsolidada.map((item) => ({
+        ...item,
+        description: item.description.replace(/\s*\(em edição\)\s*/gi, ''),
+      }))
+
       await gerarAnaliseCusto({
         orcamentoId: savedOrcamentoRecord?.id || editingId || undefined,
         numeroSequencial: numSeq,
@@ -1834,13 +1894,14 @@ export default function Index() {
         cliente: {
           nome: clientName,
         },
-        moduloNome: currentModuleName,
+        moduloNome:
+          currentModuleName.replace(/\s*\(em edição\)\s*/gi, '').trim() || 'Módulo Planejado',
         ambienteNome: ambienteSelecionado || room || 'Ambiente',
         dimensoes: dimensoes,
         empresa: perfilEmpresa,
         dre: dre,
-        bom: bomConsolidada,
-        ambientes_json: ambientesConsolidados,
+        bom: bomParaPdf,
+        ambientes_json: ambientesParaPdf,
         valorTotalVenda: totalSale,
         valorTotalCusto: totalCost,
       })

@@ -44,7 +44,19 @@ export interface OrcamentoDimensoes {
   profundidade: number
 }
 
+export interface ComposicaoCorpo {
+  id?: string
+  gavetas: number
+  prateleiras: number
+  cabideiro: boolean
+  sapateira?: boolean
+}
+
 export interface ComposicaoModuloPersistida {
+  divisorias?: {
+    qtd: number
+  }
+  corpos?: ComposicaoCorpo[]
   portas?: {
     qtd: number
     tipo: 'abrir' | 'correr' | 'batente' | 'nenhum'

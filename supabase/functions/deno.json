@@ -1,8 +1,8 @@
 {
   "_versions": {
     "smart-action": 1,
-    "analisar-imagem": 47,
+    "analisar-imagem": 52,
     "importar-pdf-modulo": 2,
-    "admin-create-user": 25
+    "admin-create-user": 30
   }
 }
