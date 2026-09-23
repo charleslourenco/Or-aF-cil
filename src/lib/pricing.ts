@@ -33,6 +33,29 @@ export interface ModuloComposicao {
   cabideiro?: boolean
   sapateira?: boolean
   puxadores?: number
+  /** Se true, o móvel é calculado como caixa simples sem envelopamento (padrão: false) */
+  semTamponamento?: boolean
+  /** Se true ou se o móvel for balcão com tampo de pedra, substitui o tampo/topo por travessas (padrão: false) */
+  tampoPedra?: boolean
+}
+
+/**
+ * Constantes paramétricas padrão de ofício para marcenaria sob medida.
+ * Centralizadas em objeto único para futura customização nas Configurações de Engenharia.
+ */
+export const PARAMS_CONSTRUTIVOS = {
+  /** Espessura padrão de MDF estrutural externo (mm) */
+  esp_mdf_externo_padrao_mm: 18,
+  /** Espessura padrão de MDF estrutural interno (mm) */
+  esp_mdf_interno_padrao_mm: 15,
+  /** Recuo frontal da caixa interna estrutural em relação à profundidade externa total (mm) */
+  recuo_caixa_interna_mm: 20,
+  /** Altura padrão do rodapé inferior (mm) */
+  altura_rodape_mm: 100,
+  /** Altura padrão do rodateto superior (mm) */
+  altura_rodateto_mm: 40,
+  /** Altura (largura da ripa) padrão das travessas de apoio para tampo de pedra (mm) */
+  altura_travessa_mm: 100,
 }
 
 /**
@@ -244,38 +267,220 @@ export function calcularBOM(
   // Se composicao não for informada, mantém a receita padrão fixa de 6 itens (legado).
   const temComposicao = composicao !== null && composicao !== undefined
 
-  // 1. Laterais Externas: 2x (A × P) com fator de escala aplicado aos m² de MDF
-  const areaLateral = ((A * P) / 1_000_000) * PERDA * escala
+  // Detecção de balcão pelo nome do template ou opção explícita
+  const nomeTemplateLower = (modulo?.nome_template || '').toLowerCase()
+  const isBalcaoPorNome =
+    nomeTemplateLower.includes('balcão') || nomeTemplateLower.includes('balcao')
+  const isTampoPedra = Boolean(composicao?.tampoPedra || isBalcaoPorNome)
+
+  // Envelopamento é o PADRÃO para todos os móveis, a menos que o usuário ative "Móvel sem tamponamento"
+  const isSemTamponamento = Boolean(composicao?.semTamponamento)
+
+  // =========================================================================
+  // DIMENSÕES E SUBTRAÇÕES PARAMÉTRICAS (MEDIDAS EXTERNAS SÃO AS FINAIS)
+  // =========================================================================
+  const { recuo_caixa_interna_mm, altura_rodape_mm, altura_rodateto_mm, altura_travessa_mm } =
+    PARAMS_CONSTRUTIVOS
+
+  // 1. Laterais Externas: 2x (A × P) em MDF Externo
+  const areaLateralExt = ((A * P) / 1_000_000) * PERDA * escala
   pecas.push(
     criarPeca(
       'bom-laterais-externas',
       `Laterais Externas (2x) — ${A}×${P}mm`,
       'MDF Externo',
       espExt,
-      areaLateral * 2,
+      areaLateralExt * 2,
       'm²',
       resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
       effectiveMarkup,
     ),
   )
 
-  // 2. Base e Topo: 2x ((L - 2×espExt) × P) com fator de escala aplicado aos m² de MDF
-  const larguraInterna = Math.max(100, L - 2 * espExt)
-  const areaBaseTopo = ((larguraInterna * P) / 1_000_000) * PERDA * escala
-  pecas.push(
-    criarPeca(
-      'bom-base-topo',
-      `Base e Topo (2x) — ${larguraInterna}×${P}mm`,
-      'MDF Externo',
-      espExt,
-      areaBaseTopo * 2,
-      'm²',
-      resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
-      effectiveMarkup,
-    ),
-  )
+  // 2. Tampo/Topo Externo vs Travessas de apoio (para tampo de pedra)
+  // Largura entre as laterais externas
+  const larguraEntreLateraisExt = Math.max(100, L - 2 * espExt)
 
-  // 3. Fundo: 1x (L × A) com fator de escala aplicado aos m² de MDF
+  if (isTampoPedra) {
+    // Balcão com tampo de pedra: NÃO gerar tampo de MDF nem pedra.
+    // Gerar TRAVESSAS de apoio no topo da caixa:
+    // - Travessa frontal: L × altura_travessa_mm (ou entre laterais)
+    // - Travessa traseira: larguraEntreLateraisExt × altura_travessa_mm
+    const areaTravessaFrontal = ((L * altura_travessa_mm) / 1_000_000) * PERDA * escala
+    const areaTravessaTraseira =
+      ((larguraEntreLateraisExt * altura_travessa_mm) / 1_000_000) * PERDA * escala
+
+    pecas.push(
+      criarPeca(
+        'bom-travessa-frontal',
+        `Travessa Frontal de Apoio (1x) — ${L}×${altura_travessa_mm}mm`,
+        'MDF Externo',
+        espExt,
+        areaTravessaFrontal,
+        'm²',
+        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+
+    pecas.push(
+      criarPeca(
+        'bom-travessa-traseira',
+        `Travessa Traseira de Apoio (1x) — ${larguraEntreLateraisExt}×${altura_travessa_mm}mm`,
+        'MDF Externo',
+        espExt,
+        areaTravessaTraseira,
+        'm²',
+        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+
+    // Se sem tamponamento e com tampo de pedra, precisa da base inferior externa/simples
+    if (isSemTamponamento) {
+      const areaBaseSimples = ((larguraEntreLateraisExt * P) / 1_000_000) * PERDA * escala
+      pecas.push(
+        criarPeca(
+          'bom-base-simples',
+          `Base Inferior (1x) — ${larguraEntreLateraisExt}×${P}mm`,
+          'MDF Externo',
+          espExt,
+          areaBaseSimples,
+          'm²',
+          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+          effectiveMarkup,
+        ),
+      )
+    }
+  } else {
+    // Móvel tradicional (com topo de MDF):
+    if (isSemTamponamento) {
+      // Caixa simples: Base e Topo (2x)
+      const areaBaseTopo = ((larguraEntreLateraisExt * P) / 1_000_000) * PERDA * escala
+      pecas.push(
+        criarPeca(
+          'bom-base-topo',
+          `Base e Topo (2x) — ${larguraEntreLateraisExt}×${P}mm`,
+          'MDF Externo',
+          espExt,
+          areaBaseTopo * 2,
+          'm²',
+          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+          effectiveMarkup,
+        ),
+      )
+    } else {
+      // Envelopado: Tampo/Teto Externo (1x) em MDF Externo
+      const areaTampoExt = ((larguraEntreLateraisExt * P) / 1_000_000) * PERDA * escala
+      pecas.push(
+        criarPeca(
+          'bom-tampo-externo',
+          `Tampo/Teto Externo (1x) — ${larguraEntreLateraisExt}×${P}mm`,
+          'MDF Externo',
+          espExt,
+          areaTampoExt,
+          'm²',
+          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+          effectiveMarkup,
+        ),
+      )
+    }
+  }
+
+  // 3. Caixaria Interna Estrutural (Envelopamento)
+  // Calculada se NÃO for semTamponamento
+  // - Lateral interna (2x) em MDF Interno
+  // - Teto interno (1x) em MDF Interno (o teto interno continua contando como caixaria normal mesmo em tampo de pedra)
+  // - Base interna (1x) em MDF Interno
+  // - Rodapé (1 jogo) em MDF Externo
+  // - Rodateto (1 jogo) em MDF Externo (se não for balcão com tampo de pedra)
+  const profInterna = Math.max(100, P - recuo_caixa_interna_mm)
+  // Altura da lateral interna: assenta sobre rodapé e encosta sob o teto externo/travessa
+  // Subtrai rodapé e a espessura do topo externo (ou travessa)
+  const altLateralInt = Math.max(100, A - altura_rodape_mm - (isTampoPedra ? 0 : espExt))
+  // Largura interna da caixaria: entre as laterais externas e entre as laterais internas
+  const largCaixariaInt = Math.max(100, L - 2 * espExt - 2 * espInt)
+
+  if (!isSemTamponamento) {
+    // 3a. Laterais Internas Estruturais (2x) em MDF Interno
+    const areaLatInt = ((altLateralInt * profInterna) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-laterais-internas',
+        `Laterais Internas Estruturais (2x) — ${altLateralInt}×${profInterna}mm`,
+        'MDF Interno',
+        espInt,
+        areaLatInt * 2,
+        'm²',
+        resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+
+    // 3b. Teto Interno Estrutural (1x) em MDF Interno
+    const areaTetoInt = ((largCaixariaInt * profInterna) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-teto-interno',
+        `Teto Interno Estrutural (1x) — ${largCaixariaInt}×${profInterna}mm`,
+        'MDF Interno',
+        espInt,
+        areaTetoInt,
+        'm²',
+        resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+
+    // 3c. Base Interna Estrutural (1x) em MDF Interno
+    const areaBaseInt = ((largCaixariaInt * profInterna) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-base-interna',
+        `Base Interna Estrutural (1x) — ${largCaixariaInt}×${profInterna}mm`,
+        'MDF Interno',
+        espInt,
+        areaBaseInt,
+        'm²',
+        resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+
+    // 3d. Rodapé (1 jogo: frente + 2 laterais do vão inferior) em MDF Externo
+    const areaRodapeM2 = (((L + 2 * P) * altura_rodape_mm) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-rodape',
+        `Rodapé Inferior (1 jogo: frente + 2 lat.) — h=${altura_rodape_mm}mm`,
+        'MDF Externo',
+        espExt,
+        areaRodapeM2,
+        'm²',
+        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+
+    // 3e. Rodateto (1 jogo: frente + 2 laterais do vão superior) em MDF Externo (apenas se não for tampo de pedra)
+    if (!isTampoPedra && altura_rodateto_mm > 0) {
+      const areaRodatetoM2 = (((L + 2 * P) * altura_rodateto_mm) / 1_000_000) * PERDA * escala
+      pecas.push(
+        criarPeca(
+          'bom-rodateto',
+          `Rodateto Superior (1 jogo: frente + 2 lat.) — h=${altura_rodateto_mm}mm`,
+          'MDF Externo',
+          espExt,
+          areaRodatetoM2,
+          'm²',
+          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+          effectiveMarkup,
+        ),
+      )
+    }
+  }
+
+  // 4. Fundo: 1x (L × A) com fator de escala aplicado aos m² de MDF
   const areaFundo = ((L * A) / 1_000_000) * PERDA * escala
   pecas.push(
     criarPeca(
@@ -290,14 +495,20 @@ export function calcularBOM(
     ),
   )
 
+  // Vão livre útil para prateleiras internas e portas
+  const larguraVaoUtil = isSemTamponamento ? larguraEntreLateraisExt : largCaixariaInt
+  const alturaVaoUtil = isSemTamponamento
+    ? Math.max(100, A - 2 * espExt)
+    : Math.max(100, altLateralInt - 2 * espInt)
+
   if (!temComposicao) {
     // RECEITA FIXA LEGADA (para orçamentos antigos reabertos ou módulos sem decomposição)
-    const profPrateleira = Math.max(100, P - 20)
-    const areaPrateleira = ((larguraInterna * profPrateleira) / 1_000_000) * PERDA * escala
+    const profPrateleira = Math.max(100, profInterna)
+    const areaPrateleira = ((larguraVaoUtil * profPrateleira) / 1_000_000) * PERDA * escala
     pecas.push(
       criarPeca(
         'bom-prateleiras',
-        `Prateleiras Internas (2x) — ${larguraInterna}×${profPrateleira}mm`,
+        `Prateleiras Internas (2x) — ${larguraVaoUtil}×${profPrateleira}mm`,
         'MDF Interno',
         espInt,
         areaPrateleira * 2,
@@ -307,7 +518,7 @@ export function calcularBOM(
       ),
     )
 
-    const perimetroFitaMm = (2 * (A * 2) + 2 * (larguraInterna * 2) + 2 * larguraInterna) * escala
+    const perimetroFitaMm = (2 * (A * 2) + 2 * (larguraVaoUtil * 2) + 2 * larguraVaoUtil) * escala
     const perimetroFitaM = perimetroFitaMm / 1000
     pecas.push(
       criarPeca(
@@ -353,17 +564,21 @@ export function calcularBOM(
       : qtdPortas + qtdGavetas
 
   // Acumulador de fita de borda (em mm)
-  // Estrutura externa base: laterais (2x frentes + 2x fundos) + base e topo (frentes e fundos)
-  let perimetroFitaMm = (2 * (A * 2) + 2 * (larguraInterna * 2)) * escala
+  // Estrutura externa base: laterais (2x frentes + 2x fundos) + tampo/base + fita de borda de peças internas visíveis
+  let perimetroFitaMm = (2 * (A * 2) + 2 * (larguraEntreLateraisExt * 2)) * escala
+  if (!isSemTamponamento) {
+    // Bordas frontais das laterais internas, teto e base internos
+    perimetroFitaMm += (2 * altLateralInt + 2 * largCaixariaInt) * escala
+  }
 
   // 4. Prateleiras Internas (dinâmico)
   if (qtdPrateleiras > 0) {
-    const profPrat = Math.max(100, P - 20)
-    const areaUmaPrat = ((larguraInterna * profPrat) / 1_000_000) * PERDA * escala
+    const profPrat = Math.max(100, profInterna)
+    const areaUmaPrat = ((larguraVaoUtil * profPrat) / 1_000_000) * PERDA * escala
     pecas.push(
       criarPeca(
         'bom-prateleiras',
-        `Prateleiras Internas (${qtdPrateleiras}x) — ${larguraInterna}×${profPrat}mm`,
+        `Prateleiras Internas (${qtdPrateleiras}x) — ${larguraVaoUtil}×${profPrat}mm`,
         'MDF Interno',
         espInt,
         areaUmaPrat * qtdPrateleiras,
@@ -373,12 +588,12 @@ export function calcularBOM(
       ),
     )
     // Fita de borda na frente de cada prateleira
-    perimetroFitaMm += qtdPrateleiras * larguraInterna * escala
+    perimetroFitaMm += qtdPrateleiras * larguraVaoUtil * escala
   }
 
   // 5. Portas (MDF Externo) e Ferragens de Porta
   if (qtdPortas > 0 && tipoPorta !== 'nenhum') {
-    const largPorta = Math.round(larguraInterna / qtdPortas)
+    const largPorta = Math.round(larguraEntreLateraisExt / qtdPortas)
     const altPorta = Math.max(100, A - 2 * espExt)
     const areaUmaPorta = ((largPorta * altPorta) / 1_000_000) * PERDA * escala
 
@@ -462,7 +677,7 @@ export function calcularBOM(
 
   // 6. Gavetas: frentes + caixote (laterais, contra-frente, traseira e fundo) + corrediças
   if (qtdGavetas > 0) {
-    const largFrenteGav = Math.max(100, larguraInterna)
+    const largFrenteGav = Math.max(100, larguraEntreLateraisExt)
     const altFrenteGav = Math.max(100, Math.round(500 / qtdGavetas) || 160)
     const areaFrentes = ((largFrenteGav * altFrenteGav) / 1_000_000) * PERDA * escala
 
@@ -484,11 +699,13 @@ export function calcularBOM(
     perimetroFitaMm += qtdGavetas * 2 * (largFrenteGav + altFrenteGav) * escala
 
     // Caixote interno da gaveta (laterais e contra-frente/traseira em MDF Interno 15mm)
-    const profGaveta = Math.max(150, P - 70)
+    // O caixote interno corre dentro do vão útil interno
+    const profGaveta = Math.max(150, profInterna - 50)
+    const largCaixoteGav = Math.max(100, larguraVaoUtil - 30)
     const altCaixote = Math.max(80, altFrenteGav - 40)
     // 2 laterais + 2 travessas (contra-frente e traseira)
     const areaCaixotePorGav =
-      ((2 * profGaveta * altCaixote + 2 * largFrenteGav * altCaixote) / 1_000_000) * PERDA * escala
+      ((2 * profGaveta * altCaixote + 2 * largCaixoteGav * altCaixote) / 1_000_000) * PERDA * escala
 
     pecas.push(
       criarPeca(
@@ -504,11 +721,11 @@ export function calcularBOM(
     )
 
     // Fundo da gaveta (MDF 6mm)
-    const areaFundoGavPorGav = ((largFrenteGav * profGaveta) / 1_000_000) * PERDA * escala
+    const areaFundoGavPorGav = ((largCaixoteGav * profGaveta) / 1_000_000) * PERDA * escala
     pecas.push(
       criarPeca(
         'bom-gavetas-fundos',
-        `Fundos de Gaveta (${qtdGavetas}x) — ${largFrenteGav}×${profGaveta}mm MDF 6mm`,
+        `Fundos de Gaveta (${qtdGavetas}x) — ${largCaixoteGav}×${profGaveta}mm MDF 6mm`,
         'MDF Fundo',
         6,
         areaFundoGavPorGav * qtdGavetas,

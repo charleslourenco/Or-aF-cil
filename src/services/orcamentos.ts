@@ -59,6 +59,8 @@ export interface ComposicaoModuloPersistida {
   sapateira?: boolean
   puxadores?: number
   adaptacoes?: string
+  semTamponamento?: boolean
+  tampoPedra?: boolean
 }
 
 export interface ModuloOrcamento {

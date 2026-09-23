@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { AmbienteSelector } from '@/components/AmbienteSelector'
 import { CustomerDropzone, UploadedFileState } from '@/components/CustomerDropzone'
 import { LibraryMatchCard } from '@/components/LibraryMatchCard'
@@ -1270,83 +1271,86 @@ export default function Index() {
 
   // Action: "+ Adicionar Outro Módulo" (ADICIONA O MÓDULO ATUAL AO AMBIENTE ATIVO E PREPARA O PRÓXIMO)
   const handleAddAnotherModule = () => {
-    // 1. Se houver módulo configurado ou itens na tabela, salva este módulo no ambiente ativo
-    if (selectedModuleObj || pricingItems.length > 0) {
-      const currentModuleSubtotal = totalVenda
-      const novoModuloNoAmbiente: ModuloOrcamento = {
-        id: `mod-${Date.now()}`,
-        modulo_id: selectedModuleId || undefined,
-        nome: currentModuleName,
-        dimensoes: { ...dimensoes },
-        mdf_externo: `${mdfExterno.cor} (${mdfExterno.espessura}mm)`,
-        mdf_interno: `${mdfInterno.cor} (${mdfInterno.espessura}mm)`,
-        mdf_fundo: mdfFundo,
-        padrao_projeto: padraoProjeto,
-        composicao: composicaoModulo,
-        adaptacoes: adaptacoesIA || undefined,
-        subtotal: currentModuleSubtotal,
-        itens: pricingItems.map((it) => ({
-          id: it.id,
-          description: it.description,
-          material: it.material,
-          espessura: it.espessura,
-          metragem: it.metragem,
-          unidade: it.unidade,
-          unitCost: it.unitCost,
-          totalCost: it.totalCost,
-          markup: it.markup,
-          salePrice: it.salePrice,
-        })),
-      }
-
-      setAmbientes((prev) => {
-        const ambIndex = prev.findIndex((a) => a.id === targetAmbienteId)
-        if (ambIndex >= 0) {
-          const ambAtual = prev[ambIndex]
-          const modulosAtualizados = [...ambAtual.modulos, novoModuloNoAmbiente]
-          const subtotalAtualizado = modulosAtualizados.reduce(
-            (acc, m) => acc + (m.subtotal || 0),
-            0,
-          )
-          const novos = [...prev]
-          novos[ambIndex] = {
-            ...ambAtual,
-            modulos: modulosAtualizados,
-            subtotal: subtotalAtualizado,
-          }
-          return novos
-        } else if (prev.length > 0) {
-          const modulosAtualizados = [...prev[0].modulos, novoModuloNoAmbiente]
-          const subtotalAtualizado = modulosAtualizados.reduce(
-            (acc, m) => acc + (m.subtotal || 0),
-            0,
-          )
-          const novos = [...prev]
-          novos[0] = {
-            ...novos[0],
-            modulos: modulosAtualizados,
-            subtotal: subtotalAtualizado,
-          }
-          return novos
-        } else {
-          // Nenhum ambiente ainda: cria um ambiente padrão com o nome selecionado ou 'Ambiente 1'
-          const novoNome = (ambienteSelecionado || room || '').trim() || 'Ambiente 1'
-          const novoAmb: AmbienteOrcamento = {
-            id: `amb-${Date.now()}`,
-            nome: novoNome,
-            modulos: [novoModuloNoAmbiente],
-            subtotal: currentModuleSubtotal,
-          }
-          setActiveAmbienteId(novoAmb.id)
-          return [novoAmb]
-        }
-      })
-
+    // Se não houver módulo configurado nem itens na tabela, avisa via toast
+    const hasModuleToCommit = Boolean(selectedModuleObj) || pricingItems.length > 0
+    if (!hasModuleToCommit) {
       toast({
-        title: 'Módulo adicionado ao ambiente!',
-        description: `"${currentModuleName}" foi incluído em ${ambienteSelecionado || room || 'Ambiente'}. Agora você pode configurar outro módulo.`,
+        title: 'Nenhum módulo configurado',
+        description: 'Selecione e configure um módulo antes de adicionar outro ao ambiente.',
+        variant: 'destructive',
       })
+      return
     }
+
+    // 1. Salva este módulo no ambiente ativo
+    const currentModuleSubtotal = totalVenda
+    const novoModuloNoAmbiente: ModuloOrcamento = {
+      id: `mod-${Date.now()}`,
+      modulo_id: selectedModuleId || undefined,
+      nome: currentModuleName,
+      dimensoes: { ...dimensoes },
+      mdf_externo: `${mdfExterno.cor} (${mdfExterno.espessura}mm)`,
+      mdf_interno: `${mdfInterno.cor} (${mdfInterno.espessura}mm)`,
+      mdf_fundo: mdfFundo,
+      padrao_projeto: padraoProjeto,
+      composicao: composicaoModulo,
+      adaptacoes: adaptacoesIA || undefined,
+      subtotal: currentModuleSubtotal,
+      itens: pricingItems.map((it) => ({
+        id: it.id,
+        description: it.description,
+        material: it.material,
+        espessura: it.espessura,
+        metragem: it.metragem,
+        unidade: it.unidade,
+        unitCost: it.unitCost,
+        totalCost: it.totalCost,
+        markup: it.markup,
+        salePrice: it.salePrice,
+      })),
+    }
+
+    setAmbientes((prev) => {
+      const ambIndex = prev.findIndex((a) => a.id === targetAmbienteId)
+      if (ambIndex >= 0) {
+        const ambAtual = prev[ambIndex]
+        const modulosAtualizados = [...ambAtual.modulos, novoModuloNoAmbiente]
+        const subtotalAtualizado = modulosAtualizados.reduce((acc, m) => acc + (m.subtotal || 0), 0)
+        const novos = [...prev]
+        novos[ambIndex] = {
+          ...ambAtual,
+          modulos: modulosAtualizados,
+          subtotal: subtotalAtualizado,
+        }
+        return novos
+      } else if (prev.length > 0) {
+        const modulosAtualizados = [...prev[0].modulos, novoModuloNoAmbiente]
+        const subtotalAtualizado = modulosAtualizados.reduce((acc, m) => acc + (m.subtotal || 0), 0)
+        const novos = [...prev]
+        novos[0] = {
+          ...novos[0],
+          modulos: modulosAtualizados,
+          subtotal: subtotalAtualizado,
+        }
+        return novos
+      } else {
+        // Nenhum ambiente ainda: cria um ambiente padrão com o nome selecionado ou 'Ambiente 1'
+        const novoNome = (ambienteSelecionado || room || '').trim() || 'Ambiente 1'
+        const novoAmb: AmbienteOrcamento = {
+          id: `amb-${Date.now()}`,
+          nome: novoNome,
+          modulos: [novoModuloNoAmbiente],
+          subtotal: currentModuleSubtotal,
+        }
+        setActiveAmbienteId(novoAmb.id)
+        return [novoAmb]
+      }
+    })
+
+    toast({
+      title: 'Módulo adicionado ao ambiente!',
+      description: `"${currentModuleName}" foi incluído em ${ambienteSelecionado || room || 'Ambiente'}. Agora você pode configurar outro módulo.`,
+    })
 
     // 2. Limpa APENAS os campos do próximo módulo
     setSelectedModuleId('')
@@ -1363,6 +1367,8 @@ export default function Index() {
       cabideiro: false,
       sapateira: false,
       puxadores: 0,
+      semTamponamento: false,
+      tampoPedra: false,
     })
     setFatorEscalaIA(null)
     setDimensoesOriginaisIA(null)
@@ -1402,21 +1408,21 @@ export default function Index() {
   const ambientesConsolidados = useMemo<AmbienteOrcamento[]>(() => {
     // Se o usuário tem itens na tabela ou módulo configurado na tela que ainda não foram adicionados
     // explicitamente via "+ Adicionar Outro Módulo", inclui esse módulo atual no ambiente selecionado
-    const hasCurrentModule = selectedModuleObj || pricingItems.length > 0
+    const hasCurrentModule = Boolean(selectedModuleObj) || pricingItems.length > 0
     const currentSubtotal = totalVenda
 
-    return ambientes.map((amb) => {
-      let modulosAmb = [...amb.modulos]
-      const isActive = amb.id === targetAmbienteId
-
-      // Se este for o ambiente ativo e houver peças na tela não commitadas como módulo salvo na lista
-      if (isActive && hasCurrentModule) {
-        // Verifica se já existe um módulo em rascunho com o mesmo id temporário ou se deve somar
-        // Se a lista de módulos do ambiente estiver vazia, cria o primeiro módulo a partir da tela
-        if (modulosAmb.length === 0) {
-          modulosAmb = [
+    // Se a lista de ambientes estiver totalmente vazia e houver módulo configurado na tela,
+    // cria um ambiente temporário consolidado com o módulo da tela
+    if (ambientes.length === 0 && hasCurrentModule) {
+      const nomeAmbPadrao = (ambienteSelecionado || room || '').trim() || 'Ambiente Principal'
+      return [
+        {
+          id: 'amb-tela-temporario',
+          nome: nomeAmbPadrao,
+          subtotal: currentSubtotal,
+          modulos: [
             {
-              id: `mod-tela-${Date.now()}`,
+              id: 'mod-tela-ativo',
               modulo_id: selectedModuleId || undefined,
               nome: currentModuleName,
               dimensoes: { ...dimensoes },
@@ -1440,8 +1446,43 @@ export default function Index() {
                 salePrice: it.salePrice,
               })),
             },
-          ]
-        }
+          ],
+        },
+      ]
+    }
+
+    return ambientes.map((amb) => {
+      let modulosAmb = [...amb.modulos]
+      const isActive = amb.id === targetAmbienteId
+
+      // Se este for o ambiente ativo e houver módulo configurado na tela em tempo real,
+      // ele deve SEMPRE entrar na consolidação/subtotal em tempo real, inclusive a partir do 2º módulo!
+      if (isActive && hasCurrentModule) {
+        modulosAmb.push({
+          id: 'mod-tela-ativo',
+          modulo_id: selectedModuleId || undefined,
+          nome: `${currentModuleName} (em edição)`,
+          dimensoes: { ...dimensoes },
+          mdf_externo: `${mdfExterno.cor} (${mdfExterno.espessura}mm)`,
+          mdf_interno: `${mdfInterno.cor} (${mdfInterno.espessura}mm)`,
+          mdf_fundo: mdfFundo,
+          padrao_projeto: padraoProjeto,
+          composicao: composicaoModulo,
+          adaptacoes: adaptacoesIA || undefined,
+          subtotal: currentSubtotal,
+          itens: pricingItems.map((it) => ({
+            id: it.id,
+            description: it.description,
+            material: it.material,
+            espessura: it.espessura,
+            metragem: it.metragem,
+            unidade: it.unidade,
+            unitCost: it.unitCost,
+            totalCost: it.totalCost,
+            markup: it.markup,
+            salePrice: it.salePrice,
+          })),
+        })
       }
 
       const subtotalAmb = modulosAmb.reduce((acc, m) => acc + (m.subtotal || 0), 0)
@@ -1454,6 +1495,8 @@ export default function Index() {
   }, [
     ambientes,
     targetAmbienteId,
+    ambienteSelecionado,
+    room,
     selectedModuleObj,
     selectedModuleId,
     currentModuleName,
@@ -1464,6 +1507,8 @@ export default function Index() {
     mdfInterno,
     mdfFundo,
     padraoProjeto,
+    composicaoModulo,
+    adaptacoesIA,
   ])
 
   // Valor total geral do orçamento = soma de todos os subtotais de ambientes consolidados
@@ -2232,6 +2277,53 @@ export default function Index() {
                   </p>
                 )}
               </div>
+            </div>
+
+            {/* Controles Construtivos do Módulo (Envelopamento e Tampo de Pedra) */}
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 cursor-pointer select-none bg-slate-50/80 hover:bg-slate-100 px-3 py-2 rounded-xl border border-slate-200 transition-colors">
+                <Checkbox
+                  id="toggle-sem-tamponamento"
+                  checked={Boolean(composicaoModulo?.semTamponamento)}
+                  onCheckedChange={(checked) => {
+                    setSavedLoadedItems(null)
+                    setComposicaoModulo((prev) => ({
+                      ...prev,
+                      semTamponamento: Boolean(checked),
+                    }))
+                  }}
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-800 block">Móvel sem tamponamento</span>
+                  <span className="text-[10px] text-slate-500 block">
+                    {composicaoModulo?.semTamponamento
+                      ? 'Caixa simples ativa (sem lateral/teto/base internos)'
+                      : 'Envelopamento ativo por padrão (caixa dupla estrutural)'}
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none bg-slate-50/80 hover:bg-slate-100 px-3 py-2 rounded-xl border border-slate-200 transition-colors">
+                <Checkbox
+                  id="toggle-tampo-pedra"
+                  checked={Boolean(composicaoModulo?.tampoPedra)}
+                  onCheckedChange={(checked) => {
+                    setSavedLoadedItems(null)
+                    setComposicaoModulo((prev) => ({
+                      ...prev,
+                      tampoPedra: Boolean(checked),
+                    }))
+                  }}
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-800 block">Tampo de pedra</span>
+                  <span className="text-[10px] text-slate-500 block">
+                    {composicaoModulo?.tampoPedra
+                      ? 'Travessas no topo; nenhum tampo entra automaticamente'
+                      : 'Topo normal em MDF incluído na caixaria'}
+                  </span>
+                </div>
+              </label>
             </div>
           </div>
         </div>

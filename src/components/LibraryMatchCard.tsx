@@ -564,6 +564,56 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                 />
               </div>
             </div>
+
+            {/* Opções Construtivas do Marceneiro: Envelopamento e Tampo */}
+            <div className="pt-2 border-t border-slate-200/80 space-y-2">
+              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide block">
+                Modelo Construtivo
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* Toggle 1: Móvel sem tamponamento */}
+                <label className="flex items-start gap-2.5 p-2.5 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                  <Checkbox
+                    checked={Boolean(composicao?.semTamponamento)}
+                    onCheckedChange={(checked) => {
+                      onComposicaoChange?.((prev) => ({
+                        ...prev,
+                        semTamponamento: Boolean(checked),
+                      }))
+                    }}
+                    className="mt-0.5"
+                  />
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-slate-800 block">
+                      Móvel sem tamponamento
+                    </span>
+                    <span className="text-[10px] text-slate-500 leading-tight block">
+                      Desligado = Caixa dupla envelopada (padrão). Ligado = Caixa simples.
+                    </span>
+                  </div>
+                </label>
+
+                {/* Toggle 2: Tampo de pedra */}
+                <label className="flex items-start gap-2.5 p-2.5 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                  <Checkbox
+                    checked={Boolean(composicao?.tampoPedra)}
+                    onCheckedChange={(checked) => {
+                      onComposicaoChange?.((prev) => ({
+                        ...prev,
+                        tampoPedra: Boolean(checked),
+                      }))
+                    }}
+                    className="mt-0.5"
+                  />
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-slate-800 block">Tampo de pedra</span>
+                    <span className="text-[10px] text-slate-500 leading-tight block">
+                      Travessas no topo; nenhum tampo entra automaticamente.
+                    </span>
+                  </div>
+                </label>
+              </div>
+            </div>
           </div>
 
           {/* Quick note on parts generation */}
