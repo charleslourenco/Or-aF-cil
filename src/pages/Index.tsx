@@ -627,8 +627,15 @@ export default function Index() {
             setAmbienteSelecionado(restoredAmbientes[0].nome)
             setRoom(restoredAmbientes[0].nome)
 
-            // Restaura composição do primeiro módulo salvo se existir
+            // Restaura dimensões e composição do primeiro módulo salvo se existir
             const primMod = restoredAmbientes[0].modulos[0]
+            if (primMod?.dimensoes) {
+              setDimensoes({
+                largura: Number(primMod.dimensoes.largura) || 1800,
+                altura: Number(primMod.dimensoes.altura) || 2200,
+                profundidade: Number(primMod.dimensoes.profundidade) || 600,
+              })
+            }
             if (primMod?.composicao) {
               setComposicaoModulo(primMod.composicao)
             }
@@ -649,6 +656,16 @@ export default function Index() {
             setSelectedModuleId(modEncontrado.id)
           } else if (modulosDisponiveis.length > 0) {
             setSelectedModuleId(modulosDisponiveis[0].id)
+          }
+        } else if (hasAmbientesJson && (orcamento.ambientes_json as any[])[0]?.modulos?.[0]) {
+          const primeiroModulo = (orcamento.ambientes_json as any[])[0].modulos[0]
+          if (primeiroModulo.modulo_id) {
+            setSelectedModuleId(primeiroModulo.modulo_id)
+          } else if (primeiroModulo.nome) {
+            const modEncontrado = modulosDisponiveis.find(
+              (m) => m.nome_template.toLowerCase() === primeiroModulo.nome?.toLowerCase(),
+            )
+            if (modEncontrado) setSelectedModuleId(modEncontrado.id)
           }
         }
 
@@ -682,38 +699,53 @@ export default function Index() {
             }
           })
           setSavedLoadedItems(loadedTodosItens)
-
-          // Se for orçamento antigo (sem ambientes_json), popula o primeiro ambiente com esse módulo
-          if (!hasAmbientesJson) {
-            const totalAntigo = Number(orcamento.valor_total) || 0
-            setAmbientes([
-              {
-                id: `amb-legado-${Date.now()}`,
-                nome: orcamento.ambiente || 'Ambiente Principal',
-                subtotal: totalAntigo,
-                modulos: [
-                  {
-                    id: `mod-legado-${Date.now()}`,
-                    modulo_id: orcamento.modulo || undefined,
-                    nome: orcamento.modulo || 'Módulo Planejado',
-                    dimensoes: orcamento.dimensoes_json as any,
-                    mdf_externo: orcamento.mdf_externo || undefined,
-                    mdf_interno: orcamento.mdf_interno || undefined,
-                    mdf_fundo: orcamento.mdf_fundo || undefined,
-                    padrao_projeto: orcamento.padrao_projeto || undefined,
-                    subtotal: totalAntigo,
-                    perfil_construtivo: undefined,
-                    itens: orcamento.bom_json,
-                  },
-                ],
-              },
-            ])
+        } else if (hasAmbientesJson) {
+          // Se não veio bom_json na raiz mas veio em ambientes_json, extrai itens do primeiro módulo
+          const primMod = (orcamento.ambientes_json as any[])[0]?.modulos?.[0]
+          if (primMod && Array.isArray(primMod.itens) && primMod.itens.length > 0) {
+            setSavedLoadedItems(primMod.itens)
           }
+        }
+
+        // Se for orçamento antigo (sem ambientes_json), popula o primeiro ambiente com esse módulo
+        if (!hasAmbientesJson) {
+          const totalAntigo = Number(orcamento.valor_total) || 0
+          setAmbientes([
+            {
+              id: `amb-legado-${Date.now()}`,
+              nome: orcamento.ambiente || 'Ambiente Principal',
+              subtotal: totalAntigo,
+              modulos: [
+                {
+                  id: `mod-legado-${Date.now()}`,
+                  modulo_id: orcamento.modulo || undefined,
+                  nome: orcamento.modulo || 'Módulo Planejado',
+                  dimensoes: orcamento.dimensoes_json as any,
+                  mdf_externo: orcamento.mdf_externo || undefined,
+                  mdf_interno: orcamento.mdf_interno || undefined,
+                  mdf_fundo: orcamento.mdf_fundo || undefined,
+                  padrao_projeto: orcamento.padrao_projeto || undefined,
+                  subtotal: totalAntigo,
+                  perfil_construtivo: undefined,
+                  itens: orcamento.bom_json,
+                },
+              ],
+            },
+          ])
         }
 
         // Registra o registro salvo para downloads de PDF e abre a exibição dos resultados
         setSavedOrcamentoRecord(orcamento)
-        setShowResults(true)
+        const hasAnySavedItens =
+          (Array.isArray(orcamento.bom_json) && orcamento.bom_json.length > 0) ||
+          (Array.isArray(orcamento.ambientes_json) &&
+            orcamento.ambientes_json.some((a: any) =>
+              (a.modulos || []).some((m: any) => (m.itens || []).length > 0),
+            ))
+
+        if (hasAnySavedItens) {
+          setShowResults(true)
+        }
 
         // BUG 1: Ao carregar um orçamento salvo, NÃO injetar placeholder fake.
         setUploadedFiles([])
@@ -903,6 +935,67 @@ export default function Index() {
   const itensNaoCadastrados = useMemo(() => {
     return pricingItems.filter((item) => Boolean(item.item_nao_cadastrado))
   }, [pricingItems])
+
+  // Lista de itens consolidados de todos os ambientes e módulos já adicionados
+  const itensConsolidadosResumo = useMemo<BudgetItem[]>(() => {
+    const list: BudgetItem[] = []
+    ambientes.forEach((amb) => {
+      ;(amb.modulos || []).forEach((mod) => {
+        ;(mod.itens || []).forEach((it) => {
+          list.push({
+            id: it.id,
+            description: `${amb.nome} · ${mod.nome}: ${it.description}`,
+            material: it.material,
+            espessura: it.espessura,
+            metragem: it.metragem,
+            unidade: it.unidade,
+            unitCost: it.unitCost,
+            totalCost: it.totalCost,
+            markup: it.markup,
+            salePrice: it.salePrice,
+          })
+        })
+      })
+    })
+    return list
+  }, [ambientes])
+
+  const hasConsolidatedItems = itensConsolidadosResumo.length > 0
+
+  // Há módulo ativo sendo configurado na tela atualmente
+  const hasCurrentModuleEditing =
+    Boolean(selectedModuleId) ||
+    (savedLoadedItems !== null && savedLoadedItems.length > 0) ||
+    manualItems.length > 0
+
+  // Se há módulo ativo sendo configurado na tela, a tabela mostra os pricingItems do módulo atual.
+  // Se o módulo atual foi adicionado ao ambiente (tela limpa para o próximo módulo), mas há módulos consolidados,
+  // mostra o resumo dos itens consolidados para não deixar a tela vazia nem dar a sensação de perda de dados.
+  const effectiveDisplayItems = useMemo<BudgetItem[]>(() => {
+    if (hasCurrentModuleEditing) {
+      return pricingItems
+    }
+    if (hasConsolidatedItems) {
+      return itensConsolidadosResumo
+    }
+    return pricingItems
+  }, [hasCurrentModuleEditing, hasConsolidatedItems, pricingItems, itensConsolidadosResumo])
+
+  // Determina se a seção de resultados deve ficar visível:
+  // Regra de exibição:
+  // - Fica visível sempre que houver itens calculados/manuais com módulo em configuração (pricingItems com selectedModuleObj ou manualItems)
+  // - OU quando showResults estiver explicitamente ligado (após Gerar Orçamento ou carregar orçamento existente com itens)
+  // - OU quando houver itens nos ambientes consolidados (mesmo após "+ Adicionar Outro Módulo ao Ambiente")
+  // - OU quando houver itens salvos carregados (savedLoadedItems)
+  // - Mantém OCULTO quando for orçamento novo zerado sem ação do usuário (sem módulo selecionado e sem consolidados).
+  const hasActiveConfiguredItems =
+    (Boolean(selectedModuleObj) && pricingItems.length > 0) || manualItems.length > 0
+
+  const shouldShowResultsSection =
+    showResults ||
+    hasActiveConfiguredItems ||
+    hasConsolidatedItems ||
+    (savedLoadedItems !== null && savedLoadedItems.length > 0)
 
   // Totais consolidados (custo e valor de venda).
   const totalCusto = useMemo(() => custoConsolidado(pricingItems), [pricingItems])
@@ -1697,7 +1790,6 @@ export default function Index() {
     setDimensoesEstimadasIA(null)
     setIsCustomModuleIA(false)
     setCustomModuleNameIA('')
-    setShowResults(false)
     if (analyzeTimeoutRef.current) {
       clearTimeout(analyzeTimeoutRef.current)
       analyzeTimeoutRef.current = null
@@ -3275,7 +3367,7 @@ export default function Index() {
         </p>
       </div>
       {/* 5. RESULTADOS: TABELA DE PRECIFICAÇÃO DINÂMICA */}
-      {showResults && (
+      {shouldShowResultsSection && (
         <section
           ref={resultsRef}
           aria-labelledby="resultados-heading"
@@ -3291,11 +3383,25 @@ export default function Index() {
               </h3>
             </div>
             <span className="text-xs text-slate-500">
-              Módulo: <strong className="text-slate-800">{currentModuleName}</strong> ({room})
+              Módulo:{' '}
+              <strong className="text-slate-800">
+                {hasCurrentModuleEditing
+                  ? currentModuleName
+                  : itensConsolidadosResumo.length > 0
+                    ? `${ambientesConsolidados.reduce((acc, a) => acc + (a.modulos?.length || 0), 0)} módulo(s) consolidado(s)`
+                    : currentModuleName}
+              </strong>{' '}
+              ({room || ambienteSelecionado || 'Ambiente'})
             </span>
           </div>
 
-          {dimensoesValidas ? (
+          {effectiveDisplayItems.length > 0 ? (
+            <PricingTable
+              items={effectiveDisplayItems}
+              dimensoes={dimensoes}
+              moduleName={hasCurrentModuleEditing ? currentModuleName : 'Módulos Consolidados'}
+            />
+          ) : dimensoesValidas ? (
             <PricingTable
               items={pricingItems}
               dimensoes={dimensoes}
@@ -3376,8 +3482,8 @@ export default function Index() {
             </Button>
           </div>
 
-          {/* Rodapé de Totais Consolidados — exibido quando há BOM válida */}
-          {dimensoesValidas && (
+          {/* Rodapé de Totais Consolidados — exibido quando há itens na tabela */}
+          {(dimensoesValidas || effectiveDisplayItems.length > 0) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -3388,11 +3494,17 @@ export default function Index() {
                     <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">
                       Custo Consolidado
                     </p>
-                    <p className="text-[11px] text-amber-700/70">Soma de todos os custos totais</p>
+                    <p className="text-[11px] text-amber-700/70">
+                      {hasCurrentModuleEditing
+                        ? 'Soma de todos os custos do módulo'
+                        : 'Soma de todos os custos dos módulos consolidados'}
+                    </p>
                   </div>
                 </div>
                 <p className="text-xl font-extrabold text-amber-800 font-mono">
-                  {formatCurrency(totalCusto)}
+                  {formatCurrency(
+                    hasCurrentModuleEditing ? totalCusto : custoConsolidado(effectiveDisplayItems),
+                  )}
                 </p>
               </div>
 
@@ -3406,12 +3518,16 @@ export default function Index() {
                       Valor Consolidado
                     </p>
                     <p className="text-[11px] text-slate-800/70">
-                      Soma de todos os valores de venda
+                      {hasCurrentModuleEditing
+                        ? 'Soma de todos os valores de venda do módulo'
+                        : 'Soma de todos os valores dos módulos consolidados'}
                     </p>
                   </div>
                 </div>
                 <p className="text-xl font-extrabold text-slate-800 font-mono">
-                  {formatCurrency(totalVenda)}
+                  {formatCurrency(
+                    hasCurrentModuleEditing ? totalVenda : valorConsolidado(effectiveDisplayItems),
+                  )}
                 </p>
               </div>
             </div>
