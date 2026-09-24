@@ -184,6 +184,8 @@ export const AMBIENTES_PREDEFINIDOS: CategoriaAmbiente[] = [
 interface AmbienteSelectorProps {
   value: string
   onChange: (value: string) => void
+  ambientesDoProjeto?: string[]
+  onCriarNovoAmbiente?: (nome: string) => void
   error?: string
   className?: string
   id?: string
@@ -192,6 +194,8 @@ interface AmbienteSelectorProps {
 export function AmbienteSelector({
   value,
   onChange,
+  ambientesDoProjeto = [],
+  onCriarNovoAmbiente,
   error,
   className,
   id = 'ambiente-combobox',
@@ -202,16 +206,34 @@ export function AmbienteSelector({
   const [newAmbienteName, setNewAmbienteName] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Lista dinâmica:
+  // 1. Ambientes já cadastrados no projeto (se houver) no topo
+  // 2. Predefinidos da marcenaria
+  // 3. Customizados criados em memória
   const allCategories = useMemo(() => {
-    if (customAmbientes.length === 0) return AMBIENTES_PREDEFINIDOS
-    return [
-      ...AMBIENTES_PREDEFINIDOS,
-      {
-        categoria: 'Personalizados / Novos',
+    const list: CategoriaAmbiente[] = []
+
+    const nomesProjetoFiltrados = ambientesDoProjeto.filter(
+      (nome) => typeof nome === 'string' && nome.trim().length > 0,
+    )
+    if (nomesProjetoFiltrados.length > 0) {
+      list.push({
+        categoria: 'Ambientes do Projeto',
+        ambientes: Array.from(new Set(nomesProjetoFiltrados)),
+      })
+    }
+
+    list.push(...AMBIENTES_PREDEFINIDOS)
+
+    if (customAmbientes.length > 0) {
+      list.push({
+        categoria: 'Personalizados / Outros',
         ambientes: customAmbientes,
-      },
-    ]
-  }, [customAmbientes])
+      })
+    }
+
+    return list
+  }, [ambientesDoProjeto, customAmbientes])
 
   const handleCreateNew = (e?: React.FormEvent) => {
     if (e) e.preventDefault()
@@ -222,7 +244,11 @@ export function AmbienteSelector({
     if (!customAmbientes.includes(trimmed)) {
       setCustomAmbientes((prev) => [...prev, trimmed])
     }
-    onChange(trimmed)
+    if (onCriarNovoAmbiente) {
+      onCriarNovoAmbiente(trimmed)
+    } else {
+      onChange(trimmed)
+    }
     setNewAmbienteName('')
     setIsCreating(false)
     setOpen(false)
@@ -276,6 +302,61 @@ export function AmbienteSelector({
               className="h-11"
             />
             <CommandList className="max-h-[320px] overflow-y-auto p-1.5">
+              {/* Opção em destaque: + Novo ambiente… */}
+              <div className="p-1 pb-1.5 border-b border-slate-100 mb-1">
+                {!isCreating ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreating(true)
+                      setNewAmbienteName(searchQuery || '')
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold text-emerald-800 bg-emerald-50/70 hover:bg-emerald-100/80 transition-colors text-left"
+                  >
+                    <Plus className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>+ Novo ambiente…</span>
+                  </button>
+                ) : (
+                  <form
+                    onSubmit={handleCreateNew}
+                    className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2 animate-fade-in"
+                  >
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                      Nome do Novo Ambiente
+                    </div>
+                    <Input
+                      autoFocus
+                      placeholder="Ex.: Cozinha Gourmet, Suíte Master..."
+                      value={newAmbienteName}
+                      onChange={(e) => setNewAmbienteName(e.target.value)}
+                      className="h-9 text-xs bg-white border-slate-300 focus:border-slate-600 focus:ring-1 focus:ring-slate-600"
+                    />
+                    <div className="flex items-center justify-end gap-1.5 pt-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setIsCreating(false)
+                          setNewAmbienteName('')
+                        }}
+                        className="h-7 text-xs px-2.5 text-slate-500 hover:text-slate-700"
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={!newAmbienteName.trim()}
+                        className="h-7 text-xs px-3 bg-slate-700 hover:bg-slate-800 text-white font-medium"
+                      >
+                        Criar e Ativar
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </div>
+
               <CommandEmpty className="py-6 text-center text-xs text-slate-500">
                 Nenhum ambiente encontrado para &ldquo;{searchQuery}&rdquo;.
               </CommandEmpty>
@@ -314,63 +395,6 @@ export function AmbienteSelector({
                   })}
                 </CommandGroup>
               ))}
-
-              <CommandSeparator className="my-1 border-slate-100" />
-
-              {/* Opção "+ Criar Novo Ambiente" */}
-              <div className="p-1 pt-1.5">
-                {!isCreating ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCreating(true)
-                      setNewAmbienteName(searchQuery || '')
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-800 hover:bg-slate-100 hover:text-slate-900 transition-colors text-left"
-                  >
-                    <Plus className="w-4 h-4 text-slate-700 shrink-0" />
-                    <span>+ Criar Novo Ambiente</span>
-                  </button>
-                ) : (
-                  <form
-                    onSubmit={handleCreateNew}
-                    className="p-2 bg-slate-50 border border-slate-200 rounded-lg space-y-2 animate-fade-in"
-                  >
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                      Novo Ambiente Personalizado
-                    </div>
-                    <Input
-                      autoFocus
-                      placeholder="Ex.: Adega Subterrânea, Sala de Jogos..."
-                      value={newAmbienteName}
-                      onChange={(e) => setNewAmbienteName(e.target.value)}
-                      className="h-9 text-xs bg-white border-slate-300 focus:border-slate-600 focus:ring-1 focus:ring-slate-600"
-                    />
-                    <div className="flex items-center justify-end gap-1.5 pt-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setIsCreating(false)
-                          setNewAmbienteName('')
-                        }}
-                        className="h-7 text-xs px-2.5 text-slate-500 hover:text-slate-700"
-                      >
-                        Cancelar
-                      </Button>
-                      <Button
-                        type="submit"
-                        size="sm"
-                        disabled={!newAmbienteName.trim()}
-                        className="h-7 text-xs px-3 bg-slate-700 hover:bg-slate-800 text-white font-medium"
-                      >
-                        Adicionar
-                      </Button>
-                    </div>
-                  </form>
-                )}
-              </div>
             </CommandList>
           </Command>
         </PopoverContent>

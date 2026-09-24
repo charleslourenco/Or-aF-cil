@@ -78,7 +78,7 @@ import type {
   AmbienteOrcamento,
   ModuloOrcamento,
 } from '@/services/orcamentos'
-import { ChevronDown, ChevronUp, Trash2, FolderPlus, RotateCcw } from 'lucide-react'
+import { ChevronDown, ChevronUp, Trash2, RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -109,9 +109,6 @@ export default function Index() {
   // Orçamentos novos iniciam sem ambientes hardcodados ([]).
   const [ambientes, setAmbientes] = useState<AmbienteOrcamento[]>([])
   const [activeAmbienteId, setActiveAmbienteId] = useState<string>('')
-  const [novoAmbienteNome, setNovoAmbienteNome] = useState<string>('')
-  const [isAddingAmbiente, setIsAddingAmbiente] = useState<boolean>(false)
-
   // Módulos disponíveis — fetch 100% dinâmico do Supabase (tabela TemplatesEngenharia)
   const [modulosDisponiveis, setModulosDisponiveis] = useState<TemplateEngenharia[]>([])
   const [loadingModulos, setLoadingModulos] = useState<boolean>(true)
@@ -1608,6 +1605,20 @@ export default function Index() {
 
   // Ações de gerenciamento de múltiplos ambientes e módulos
   const targetAmbienteId = activeAmbienteId || ambientes[0]?.id
+  const ambienteAtivoObj = ambientes.find((a) => a.id === targetAmbienteId)
+  const ambienteAtivoNome = ambienteAtivoObj?.nome || ambienteSelecionado || room || 'Ambiente'
+
+  const handleSelectAmbienteAndFocusModule = (ambienteId: string, nomeAmbiente: string) => {
+    setActiveAmbienteId(ambienteId)
+    setAmbienteSelecionado(nomeAmbiente)
+    setRoom(nomeAmbiente)
+    // Rola suavemente até a seção de configuração do módulo e foca o select
+    const elem = document.getElementById('moduleSelect')
+    if (elem) {
+      elem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      elem.focus()
+    }
+  }
 
   const handleAddNovoAmbiente = (nomeDoAmbiente: string) => {
     const nomeLimpo = nomeDoAmbiente.trim()
@@ -1629,11 +1640,9 @@ export default function Index() {
     setActiveAmbienteId(novoAmbiente.id)
     setAmbienteSelecionado(novoAmbiente.nome)
     setRoom(novoAmbiente.nome)
-    setNovoAmbienteNome('')
-    setIsAddingAmbiente(false)
     toast({
-      title: 'Ambiente adicionado',
-      description: `O ambiente "${nomeLimpo}" foi criado. Adicione módulos a ele.`,
+      title: 'Ambiente criado e ativado',
+      description: `O ambiente "${nomeLimpo}" está ativo. Agora selecione e configure o módulo.`,
     })
   }
 
@@ -2460,9 +2469,9 @@ export default function Index() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 gap-5">
             {/* Input: Nome do Cliente */}
-            <div className="space-y-1.5 md:col-span-2">
+            <div className="space-y-1.5">
               <label
                 htmlFor="clientName"
                 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
@@ -2491,60 +2500,6 @@ export default function Index() {
                 </p>
               )}
             </div>
-
-            {/* Ação rápida: Adicionar Novo Ambiente */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
-                <FolderPlus className="w-3.5 h-3.5 text-slate-700" />
-                Novo Ambiente
-              </label>
-              {!isAddingAmbiente ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsAddingAmbiente(true)}
-                  className="w-full h-11 border-dashed border-slate-300 hover:border-slate-500 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl flex items-center justify-center gap-2"
-                >
-                  <Plus className="w-4 h-4 text-slate-600" />+ Adicionar Ambiente
-                </Button>
-              ) : (
-                <div className="flex items-center gap-1.5 animate-fade-in">
-                  <Input
-                    placeholder="Nome do cômodo..."
-                    value={novoAmbienteNome}
-                    onChange={(e) => setNovoAmbienteNome(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        handleAddNovoAmbiente(novoAmbienteNome)
-                      }
-                    }}
-                    autoFocus
-                    className="h-11 text-xs border-slate-300 rounded-xl"
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => handleAddNovoAmbiente(novoAmbienteNome)}
-                    className="h-11 px-3 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shrink-0"
-                  >
-                    Adicionar
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setIsAddingAmbiente(false)
-                      setNovoAmbienteNome('')
-                    }}
-                    className="h-11 px-2 text-slate-500 hover:text-slate-800 rounded-xl text-xs shrink-0"
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Abas / Cards expansíveis por Ambiente */}
@@ -2570,19 +2525,10 @@ export default function Index() {
                       Nenhum ambiente adicionado ainda
                     </p>
                     <p className="text-xs text-slate-500 max-w-sm">
-                      Todo orçamento começa zerado. Adicione o primeiro ambiente (ex: Cozinha,
-                      Quarto, Varanda) para organizar seus módulos.
+                      Selecione um cômodo ou crie um novo usando a opção &ldquo;+ Novo
+                      ambiente…&rdquo; no controle abaixo para começar.
                     </p>
                   </div>
-                  {!isAddingAmbiente ? (
-                    <Button
-                      type="button"
-                      onClick={() => setIsAddingAmbiente(true)}
-                      className="bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl h-10 px-4 shadow-xs flex items-center gap-2 mt-1"
-                    >
-                      <Plus className="w-4 h-4" />+ Adicionar Ambiente
-                    </Button>
-                  ) : null}
                 </div>
               ) : (
                 ambientesConsolidados.map((amb, index) => {
@@ -2634,8 +2580,8 @@ export default function Index() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3 self-end sm:self-auto">
-                          <div className="text-right">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 self-end sm:self-auto">
+                          <div className="text-right mr-1">
                             <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">
                               Subtotal Ambiente
                             </span>
@@ -2646,13 +2592,33 @@ export default function Index() {
 
                           <Button
                             type="button"
+                            size="sm"
+                            variant={isActive ? 'default' : 'outline'}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleSelectAmbienteAndFocusModule(amb.id, amb.nome)
+                            }}
+                            className={cn(
+                              'h-8 px-2.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs',
+                              isActive
+                                ? 'bg-slate-800 hover:bg-slate-900 text-white'
+                                : 'border-slate-300 text-slate-700 hover:bg-slate-100',
+                            )}
+                            title="Ativar este ambiente e ir para a seleção de módulo"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Adicionar módulo neste ambiente</span>
+                          </Button>
+
+                          <Button
+                            type="button"
                             variant="ghost"
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation()
                               handleRemoveAmbiente(amb.id)
                             }}
-                            className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                            className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg shrink-0"
                             title="Excluir este ambiente"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -2714,7 +2680,21 @@ export default function Index() {
           </div>
 
           {/* Configuração do Módulo para o Ambiente Ativo */}
-          <div className="pt-2 border-t border-slate-100">
+          <div className="pt-2 border-t border-slate-100 space-y-4">
+            {/* Cabeçalho visível indicando o ambiente ativo sendo configurado */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Home className="w-4 h-4 text-slate-700 shrink-0" />
+                <span className="text-xs sm:text-sm text-slate-700">
+                  Configurando módulo para:{' '}
+                  <strong className="text-slate-900 font-bold">{ambienteAtivoNome}</strong>
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-500">
+                Selecione outro cômodo no seletor abaixo se desejar trocar
+              </span>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Ambiente Ativo Atual */}
               <div className="space-y-1.5">
@@ -2728,9 +2708,24 @@ export default function Index() {
                 <AmbienteSelector
                   id="ambiente-combobox-header"
                   value={ambienteSelecionado || room}
+                  ambientesDoProjeto={ambientes.map((a) => a.nome)}
+                  onCriarNovoAmbiente={(novoNome) => {
+                    handleAddNovoAmbiente(novoNome)
+                  }}
                   onChange={(val) => {
                     handleAmbienteSelecionadoChange(val)
-                    // Se não houver nenhum ambiente na lista mas o usuário selecionou/digitou um ambiente, cria o primeiro ambiente
+                    // Se o ambiente escolhido coincidir com algum ambiente existente, ativa-o
+                    const jaExiste = ambientes.find(
+                      (a) => a.nome.toLowerCase() === val.toLowerCase(),
+                    )
+                    if (jaExiste) {
+                      setActiveAmbienteId(jaExiste.id)
+                      setAmbienteSelecionado(jaExiste.nome)
+                      setRoom(jaExiste.nome)
+                      return
+                    }
+
+                    // Se não houver nenhum ambiente na lista ou for um novo selecionado das categorias predefinidas
                     setAmbientes((prev) => {
                       if (prev.length === 0) {
                         const newAmb: AmbienteOrcamento = {
