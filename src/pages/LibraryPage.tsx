@@ -345,14 +345,22 @@ export default function LibraryPage() {
     }
   }, [])
 
-  // Converte a primeira página de um PDF em string Base64 PNG (data URL)
-  const renderPdfFirstPageToBase64 = async (file: File): Promise<string> => {
+  // Converte todas as páginas de um PDF em um array de strings Base64 PNG (data URL) com resolução aprimorada (scale 2.5)
+  const renderPdfPagesToBase64 = async (file: File): Promise<string[]> => {
     try {
       if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
       }
 
-      const arrayBuffer = await file.arrayBuffer()
+      let arrayBuffer: ArrayBuffer
+      try {
+        arrayBuffer = await file.arrayBuffer()
+      } catch (readErr) {
+        throw new Error(
+          `Falha ao ler o arquivo PDF do disco/navegador: ${readErr instanceof Error ? readErr.message : 'Erro de leitura.'}`,
+        )
+      }
+
       const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
       const pdfDoc = await loadingTask.promise
 
@@ -360,31 +368,40 @@ export default function LibraryPage() {
         throw new Error('O arquivo PDF não contém páginas legíveis.')
       }
 
-      const page = await pdfDoc.getPage(1)
-      const viewport = page.getViewport({ scale: 2.0 }) // 2.0 scale para nitidez no OCR da IA
+      const pagesBase64: string[] = []
+      // Lê até 5 páginas do PDF para capturar fichas técnicas extensas e listas de composição
+      const maxPages = Math.min(pdfDoc.numPages, 5)
 
-      const canvas = document.createElement('canvas')
-      canvas.width = viewport.width
-      canvas.height = viewport.height
-      const context = canvas.getContext('2d')
+      for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+        const page = await pdfDoc.getPage(pageNum)
+        // Scale 2.5 garante nitidez perfeita para leitura de fontes pequenas em tabelas densas (como códigos BAS0242A)
+        const viewport = page.getViewport({ scale: 2.5 })
 
-      if (!context) {
-        throw new Error('Não foi possível inicializar o canvas de renderização.')
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.floor(viewport.width)
+        canvas.height = Math.floor(viewport.height)
+        const context = canvas.getContext('2d')
+
+        if (!context) {
+          throw new Error('Não foi possível inicializar o canvas de renderização gráfica.')
+        }
+
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport,
+        }
+
+        await page.render(renderContext).promise
+        const dataUrl = canvas.toDataURL('image/png')
+        pagesBase64.push(dataUrl)
       }
 
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport,
-      }
-
-      await page.render(renderContext).promise
-      const dataUrl = canvas.toDataURL('image/png')
-      return dataUrl
-    } catch (err) {
+      return pagesBase64
+    } catch (err: unknown) {
       console.error('Erro na conversão do PDF para imagem:', err)
-      throw new Error(
-        'Falha ao carregar e renderizar o PDF. Verifique se o arquivo não está corrompido ou protegido por senha.',
-      )
+      const details =
+        err instanceof Error ? err.message : 'Arquivo corrompido ou formato não suportado.'
+      throw new Error(`Falha na renderização do PDF: ${details}`)
     }
   }
 
@@ -500,43 +517,67 @@ export default function LibraryPage() {
     setUploadedImageUrl(null)
 
     try {
-      // 1. Obtenção da imagem em Base64 (converte PDF para imagem via canvas ou lê imagem diretamente)
-      let imagemDataUrl = ''
-      if (isPdf) {
-        imagemDataUrl = await renderPdfFirstPageToBase64(file)
-      } else {
-        imagemDataUrl = await renderImageFileToBase64(file)
+      // 1. Obtenção das imagens em Base64 (renderiza todas as páginas do PDF com scale 2.5 ou lê imagem direta)
+      let pagesDataUrl: string[] = []
+      try {
+        if (isPdf) {
+          pagesDataUrl = await renderPdfPagesToBase64(file)
+        } else {
+          const singleUrl = await renderImageFileToBase64(file)
+          pagesDataUrl = [singleUrl]
+        }
+      } catch (renderErr) {
+        const renderMsg =
+          renderErr instanceof Error ? renderErr.message : 'Falha na renderização gráfica do PDF.'
+        throw new Error(`[Etapa 1: Renderização] ${renderMsg}`)
       }
 
-      // 2. Extrai base64 limpo (sem cabeçalho) para compatibilidade com o backend
-      const imagemBase64Clean = imagemDataUrl.includes(',')
-        ? imagemDataUrl.split(',')[1]
-        : imagemDataUrl
+      if (!pagesDataUrl || pagesDataUrl.length === 0) {
+        throw new Error(
+          '[Etapa 1: Renderização] Não foi possível extrair nenhuma página visível do documento enviado.',
+        )
+      }
 
-      // 3. Upload da imagem renderizada para o Supabase Storage no bucket 'modulos-imagens'
-      // Executa em paralelo ou prévio à chamada da Edge Function
-      const publicUrlPromise = uploadToStorage(file, imagemDataUrl)
+      // 2. Extrai base64 limpo (sem cabeçalho data:image/png;base64,) para cada página
+      const paginasBase64Clean = pagesDataUrl.map((url) =>
+        url.includes(',') ? url.split(',')[1] : url,
+      )
 
-      // 4. Invocação da Edge Function do Supabase (passa imagemBase64 e pdfBase64 como alias)
-      const functionPromise = supabase.functions.invoke('importar-pdf-modulo', {
-        body: {
-          imagemBase64: imagemBase64Clean,
-          pdfBase64: imagemBase64Clean,
-        },
-      })
+      // 3. Upload da capa (página 1) para o Supabase Storage no bucket 'modulos-imagens' em background
+      const publicUrlPromise = uploadToStorage(file, pagesDataUrl[0])
 
-      const [publicUrl, { data, error }] = await Promise.all([publicUrlPromise, functionPromise])
+      // 4. Invocação da Edge Function do Supabase enviando todas as páginas renderizadas
+      let invokeResponse: any
+      try {
+        invokeResponse = await supabase.functions.invoke('importar-pdf-modulo', {
+          body: {
+            paginasBase64: paginasBase64Clean,
+            // Fallback de retrocompatibilidade
+            imagemBase64: paginasBase64Clean[0],
+            pdfBase64: paginasBase64Clean[0],
+          },
+        })
+      } catch (netErr) {
+        const netMsg =
+          netErr instanceof Error ? netErr.message : 'Falha de comunicação com a Edge Function.'
+        throw new Error(`[Etapa 2: Conexão IA] ${netMsg}`)
+      }
+
+      const { data, error } = invokeResponse
+      const publicUrl = await publicUrlPromise.catch(() => null)
 
       if (publicUrl) {
         setUploadedImageUrl(publicUrl)
       }
 
       if (error) {
-        throw new Error(error.message || 'Erro ao conectar à função de importação.')
+        throw new Error(
+          `[Etapa 2: Análise IA] ${error.message || 'Erro reportado pelo servidor de IA.'}`,
+        )
       }
 
       if (data?.error) {
-        throw new Error(data.error)
+        throw new Error(`[Etapa 2: Análise IA] ${data.error}`)
       }
 
       // Parse flexível da resposta
@@ -549,12 +590,16 @@ export default function LibraryPage() {
             .trim()
           parsedData = JSON.parse(cleanStr)
         } catch {
-          throw new Error('A resposta da IA não é um JSON válido.')
+          throw new Error(
+            '[Etapa 2: Análise IA] A resposta da IA não é um JSON válido (resposta incompleta ou truncada).',
+          )
         }
       }
 
       if (!parsedData || typeof parsedData !== 'object') {
-        throw new Error('Não foi possível extrair dados estruturados do PDF.')
+        throw new Error(
+          '[Etapa 2: Análise IA] Não foi possível extrair dados estruturados da ficha técnica.',
+        )
       }
 
       setImportResult(parsedData)
@@ -575,46 +620,93 @@ export default function LibraryPage() {
       }
       if (!dimensoes) dimensoes = '1200x900x600'
 
-      const categoria = parsedData.categoria || 'Cozinha'
+      // Infere categoria padrão se não informada
+      let categoria = parsedData.categoria || ''
+      if (!categoria) {
+        const nomeUpper = (nome + ' ' + codigo).toUpperCase()
+        if (
+          nomeUpper.includes('ROUPEIRO') ||
+          nomeUpper.includes('DORM') ||
+          nomeUpper.includes('QUARTO') ||
+          nomeUpper.includes('CABIDEIRO')
+        ) {
+          categoria = 'Quarto'
+        } else if (
+          nomeUpper.includes('BALCAO') ||
+          nomeUpper.includes('BALCÃO') ||
+          nomeUpper.includes('PIA') ||
+          nomeUpper.includes('COZINHA')
+        ) {
+          categoria = 'Cozinha'
+        } else if (
+          nomeUpper.includes('PAINEL') ||
+          nomeUpper.includes('RACK') ||
+          nomeUpper.includes('SALA')
+        ) {
+          categoria = 'Sala'
+        } else if (nomeUpper.includes('BANHEIRO') || nomeUpper.includes('LAVABO')) {
+          categoria = 'Banheiro'
+        } else {
+          categoria = 'Quarto'
+        }
+      }
 
       setPreviewCodigo(codigo)
       setPreviewNome(nome)
       setPreviewDimensoes(dimensoes)
       setPreviewCategoria(categoria)
 
-      // Sugere perfil adequado por nome/categoria na importação de PDF
-      const nomeLower = nome.toLowerCase()
+      // Respeita o perfil construtivo inferido pela IA se for válido, caso contrário usa regras heurísticas
+      const perfilRetornado = (parsedData as any).perfil_construtivo as
+        | PerfilConstrutivo
+        | undefined
       if (
-        nomeLower.includes('painel') ||
-        nomeLower.includes('tv') ||
-        nomeLower.includes('rack') ||
-        nomeLower.includes('estante')
+        perfilRetornado &&
+        (perfilRetornado === 'Fechado Envelopado' ||
+          perfilRetornado === 'Balcão (tampo por conta do cliente)' ||
+          perfilRetornado === 'Aberto / Painel' ||
+          perfilRetornado === 'Caixa Simples')
       ) {
-        setPreviewPerfil('Aberto / Painel')
-      } else if (
-        nomeLower.includes('balcão') ||
-        nomeLower.includes('balcao') ||
-        nomeLower.includes('pia') ||
-        nomeLower.includes('bancada')
-      ) {
-        setPreviewPerfil('Balcão (tampo por conta do cliente)')
-      } else if (nomeLower.includes('aereo') || nomeLower.includes('aéreo')) {
-        setPreviewPerfil('Caixa Simples')
+        setPreviewPerfil(perfilRetornado)
       } else {
-        setPreviewPerfil('Fechado Envelopado')
+        const nomeLower = nome.toLowerCase()
+        if (
+          nomeLower.includes('painel') ||
+          nomeLower.includes('tv') ||
+          nomeLower.includes('rack') ||
+          nomeLower.includes('estante')
+        ) {
+          setPreviewPerfil('Aberto / Painel')
+        } else if (
+          nomeLower.includes('balcão') ||
+          nomeLower.includes('balcao') ||
+          nomeLower.includes('pia') ||
+          nomeLower.includes('bancada')
+        ) {
+          setPreviewPerfil('Balcão (tampo por conta do cliente)')
+        } else if (nomeLower.includes('aereo') || nomeLower.includes('aéreo')) {
+          setPreviewPerfil('Caixa Simples')
+        } else {
+          setPreviewPerfil('Fechado Envelopado')
+        }
       }
+
+      const totalPecas = (parsedData.pecas_mdf || parsedData.composicao_mdf || []).length
+      const totalFerragens = (parsedData.ferragens || []).length
 
       toast({
         title: 'PDF processado com sucesso!',
-        description: `Módulo ${codigo} extraído da ficha técnica.`,
+        description: `Módulo ${codigo}: ${totalPecas} peças MDF e ${totalFerragens} ferragens extraídas.`,
       })
     } catch (err: unknown) {
       console.error('Erro na importação de PDF:', err)
       const msg =
-        err instanceof Error ? err.message : 'Ocorreu um erro ao processar o PDF. Tente novamente.'
+        err instanceof Error
+          ? err.message
+          : 'Ocorreu um erro ao processar o PDF. Verifique se o arquivo é legível.'
       setImportError(msg)
       toast({
-        title: 'Erro na leitura do PDF',
+        title: 'Falha na importação do PDF',
         description: msg,
         variant: 'destructive',
       })
@@ -676,15 +768,25 @@ export default function LibraryPage() {
           peca.codigo ||
           (peca.item !== undefined && peca.item !== null ? `ITEM-${peca.item}` : `P-${idx + 1}`),
         descricao: peca.descricao || peca.nome || 'Peça MDF Padrão',
-        quantidade: peca.quantidade ?? peca.qtd ?? 1,
+        quantidade:
+          typeof peca.quantidade === 'number'
+            ? peca.quantidade
+            : typeof peca.qtd === 'number'
+              ? peca.qtd
+              : Number(peca.quantidade || peca.qtd) || 1,
       }))
 
       // Normalização das ferragens para [{ item, descricao, quantidade, unidade }]
       const normalizedFerragens: FerragemItem[] = rawFerragensList.map((ferragem, idx) => ({
         item: ferragem.item || ferragem.ref || `FERR-${idx + 1}`,
         descricao: ferragem.descricao || ferragem.item || ferragem.ref || `Ferragem #${idx + 1}`,
-        quantidade: ferragem.quantidade ?? ferragem.qtd ?? 1,
-        unidade: ferragem.unidade || 'un',
+        quantidade:
+          typeof ferragem.quantidade === 'number'
+            ? ferragem.quantidade
+            : typeof ferragem.qtd === 'number'
+              ? ferragem.qtd
+              : Number(ferragem.quantidade || ferragem.qtd) || 1,
+        unidade: ferragem.unidade || 'UN',
       }))
 
       const codigoFinal = previewCodigo.trim() || null
@@ -712,14 +814,22 @@ export default function LibraryPage() {
         perfil_construtivo: previewPerfil,
       }
 
-      const result = await createTemplateEngenharia(payload)
+      let result: { data: TemplateEngenharia | null; error: string | null }
+      try {
+        result = await createTemplateEngenharia(payload)
+      } catch (saveDbErr) {
+        const dbMsg =
+          saveDbErr instanceof Error ? saveDbErr.message : 'Erro ao persistir no Supabase.'
+        throw new Error(`[Etapa 3: Salvamento no Banco] ${dbMsg}`)
+      }
 
       if (result.error || !result.data) {
         const errorMsg = result.error ?? 'Não foi possível salvar o módulo no banco de dados.'
-        setImportError(errorMsg)
+        const fullMsg = `[Etapa 3: Salvamento no Banco] ${errorMsg}`
+        setImportError(fullMsg)
         toast({
           title: 'Erro ao salvar módulo',
-          description: errorMsg,
+          description: fullMsg,
           variant: 'destructive',
         })
         return
@@ -733,12 +843,14 @@ export default function LibraryPage() {
 
       toast({
         title: 'Módulo importado com sucesso!',
-        description: `${nomeFinal} adicionado à biblioteca de engenharia.`,
+        description: `${nomeFinal} (${pecasCount} peças, ${ferragensCount} ferragens) adicionado à biblioteca.`,
       })
     } catch (err: unknown) {
       console.error('Erro ao salvar módulo importado:', err)
       const errorMsg =
-        err instanceof Error ? err.message : 'Ocorreu um erro inesperado ao salvar o módulo.'
+        err instanceof Error
+          ? err.message
+          : '[Etapa 3: Salvamento no Banco] Ocorreu um erro inesperado ao salvar o módulo.'
       setImportError(errorMsg)
       toast({
         title: 'Erro ao salvar módulo',
