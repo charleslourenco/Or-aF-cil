@@ -83,7 +83,7 @@ interface ModuleFormState {
   perfil_construtivo: PerfilConstrutivo
 }
 
-const EMPTY_FORM: FormData = {
+const EMPTY_FORM: ModuleFormState = {
   codigo: '',
   nome_template: '',
   categoria: '',

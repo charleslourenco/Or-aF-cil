@@ -90,11 +90,44 @@ export interface AnaliseCustoData {
  * Auxiliar para formatar moeda em pt-BR
  */
 function formatMoeda(val: number | null | undefined): string {
-  if (val === null || val === undefined || isNaN(val)) return 'R$ 0,00'
-  return new Intl.NumberFormat('pt-BR', {
+  if (val === null || val === undefined || isNaN(val)) return 'R$\u00A00,00'
+  const formatted = new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   }).format(val)
+  // Substitui espaços normais por non-breaking space para blindar contra qualquer quebra
+  return formatted.replace(/\s+/g, '\u00A0')
+}
+
+/**
+ * Retorna um nome amigável e comercial para o módulo evitando termos internos
+ * brutos como "Módulo Personalizado (Análise IA)" para o cliente final.
+ */
+function getNomeModuloAmigavel(
+  nomeOriginal?: string | null,
+  dimensoes?: { largura?: number; altura?: number; profundidade?: number } | null,
+): string {
+  const nome = (nomeOriginal || 'Módulo Planejado').trim()
+
+  const isNomeCruOuIA =
+    !nome ||
+    nome.toLowerCase().includes('módulo personalizado') ||
+    nome.toLowerCase().includes('modulo personalizado') ||
+    nome.toLowerCase().includes('análise ia') ||
+    nome.toLowerCase().includes('analise ia') ||
+    nome === 'MODULO-CUSTOM' ||
+    nome.toLowerCase() === 'módulo planejado' ||
+    nome.toLowerCase() === 'modulo planejado'
+
+  if (isNomeCruOuIA) {
+    if (dimensoes && dimensoes.largura && dimensoes.altura) {
+      const p = dimensoes.profundidade ? `×${dimensoes.profundidade}` : ''
+      return `Móvel Sob Medida (${dimensoes.largura}×${dimensoes.altura}${p}mm)`
+    }
+    return 'Móvel Planejado Sob Medida'
+  }
+
+  return nome
 }
 
 /**
@@ -270,8 +303,9 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     if (empresa?.inscricao_estadual) docFiscalParts.push(`IE: ${empresa.inscricao_estadual}`)
     const linha1 =
       docFiscalParts.length > 0 ? docFiscalParts.join(' | ') : 'Móveis Sob Medida e Alta Marcenaria'
-    doc.text(linha1, margin, subTextY)
-    subTextY += 3.6
+    const splitLinha1 = doc.splitTextToSize(linha1, headerLeftMaxW)
+    doc.text(splitLinha1, margin, subTextY)
+    subTextY += (Array.isArray(splitLinha1) ? splitLinha1.length : 1) * 3.6
 
     // Linha 2: Endereço completo
     const enderecoParts = [
@@ -286,7 +320,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     if (linha2) {
       const splitLinha2 = doc.splitTextToSize(linha2, headerLeftMaxW)
       doc.text(splitLinha2, margin, subTextY)
-      subTextY += Array.isArray(splitLinha2) ? splitLinha2.length * 3.6 : 3.6
+      subTextY += (Array.isArray(splitLinha2) ? splitLinha2.length : 1) * 3.6
     }
 
     // Linha 3: Telefone, Email, Site, Instagram
@@ -300,7 +334,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     if (linha3) {
       const splitLinha3 = doc.splitTextToSize(linha3, headerLeftMaxW)
       doc.text(splitLinha3, margin, subTextY)
-      subTextY += Array.isArray(splitLinha3) ? splitLinha3.length * 3.6 : 3.6
+      subTextY += (Array.isArray(splitLinha3) ? splitLinha3.length : 1) * 3.6
     }
 
     y = Math.max(subTextY + 2, badgeY + badgeHeight + 5)
@@ -392,9 +426,10 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
           const qtd = it.quantidade ?? 1
           const vTot = it.valorTotal ?? (it.valorUnitario ? it.valorUnitario * qtd : 0)
           const vUnit = it.valorUnitario ?? (qtd > 0 ? vTot / qtd : vTot)
+          const nomeApresentavel = getNomeModuloAmigavel(it.nome)
           const row = [
             String(itemGlobalIndex++),
-            it.nome || 'Módulo Planejado',
+            nomeApresentavel,
             it.descricao || 'Projeto sob medida conforme especificações técnicas aprovadas',
             String(qtd),
             formatMoeda(vUnit),
@@ -410,7 +445,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
           body:
             grupoBody.length > 0
               ? grupoBody
-              : [['—', 'Sem módulos', '—', '0', 'R$ 0,00', 'R$ 0,00']],
+              : [['—', 'Sem módulos', '—', '0', 'R$\u00A00,00', 'R$\u00A00,00']],
           theme: 'grid',
           headStyles: {
             fillColor: [241, 245, 249],
@@ -420,28 +455,41 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
             halign: 'left',
             lineWidth: { bottom: 0.5 },
             lineColor: [203, 213, 225],
+            cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
           },
           bodyStyles: {
             textColor: [51, 65, 85],
             fontSize: 7.5,
-            cellPadding: { top: 6, right: 6, bottom: 6, left: 6 },
-            valign: 'top',
+            cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
+            valign: 'middle',
           },
           alternateRowStyles: {
             fillColor: [248, 250, 252],
           },
           columnStyles: {
             0: { cellWidth: contentWidth * 0.05, halign: 'center' },
-            1: { cellWidth: contentWidth * 0.25, halign: 'left', fontStyle: 'bold' },
-            2: { cellWidth: contentWidth * 0.42, halign: 'left', valign: 'top' },
-            3: { cellWidth: contentWidth * 0.08, halign: 'center' },
-            4: { cellWidth: contentWidth * 0.1, halign: 'right' },
-            5: { cellWidth: contentWidth * 0.1, halign: 'right' },
+            1: { cellWidth: contentWidth * 0.24, halign: 'left', fontStyle: 'bold' },
+            2: { cellWidth: contentWidth * 0.38, halign: 'left', valign: 'middle' },
+            3: { cellWidth: contentWidth * 0.07, halign: 'center' },
+            4: {
+              cellWidth: contentWidth * 0.13,
+              halign: 'right',
+              fontSize: 7.2,
+              cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
+            },
+            5: {
+              cellWidth: contentWidth * 0.13,
+              halign: 'right',
+              fontSize: 7.2,
+              fontStyle: 'bold',
+              cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
+            },
           },
           styles: {
             lineColor: [226, 232, 240],
             lineWidth: 0.3,
             font: 'helvetica',
+            overflow: 'visible',
           },
         })
 
@@ -455,9 +503,10 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
           amb.valorUnitario ??
           (amb.valorTotal ? amb.valorTotal / qtd : dados.valorTotal / (dados.ambientes.length || 1))
         const vTot = amb.valorTotal ?? vUnit * qtd
+        const nomeApresentavel = getNomeModuloAmigavel(amb.nome)
         return [
           String(index + 1),
-          amb.nome || 'Ambiente / Módulo',
+          nomeApresentavel,
           amb.descricao || 'Projeto sob medida conforme especificações técnicas aprovadas',
           String(qtd),
           formatMoeda(vUnit),
@@ -484,32 +533,45 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
           fillColor: [241, 245, 249], // #F1F5F9 — cinza suave
           textColor: [51, 65, 85], // #334155 — slate escuro
           fontStyle: 'bold',
-          fontSize: 8,
+          fontSize: 7.5,
           halign: 'left',
           lineWidth: { bottom: 0.5 },
           lineColor: [203, 213, 225], // #CBD5E1
+          cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
         },
         bodyStyles: {
           textColor: [51, 65, 85],
-          fontSize: 8,
-          cellPadding: { top: 10, right: 8, bottom: 10, left: 8 },
-          valign: 'top',
+          fontSize: 7.5,
+          cellPadding: { top: 2.2, right: 3, bottom: 2.2, left: 3 },
+          valign: 'middle',
         },
         alternateRowStyles: {
           fillColor: [248, 250, 252], // #F8FAFC para linhas pares
         },
         columnStyles: {
           0: { cellWidth: contentWidth * 0.05, halign: 'center' },
-          1: { cellWidth: contentWidth * 0.25, halign: 'left', fontStyle: 'bold' },
-          2: { cellWidth: contentWidth * 0.42, halign: 'left', valign: 'top' },
-          3: { cellWidth: contentWidth * 0.08, halign: 'center' },
-          4: { cellWidth: contentWidth * 0.1, halign: 'right' },
-          5: { cellWidth: contentWidth * 0.1, halign: 'right' },
+          1: { cellWidth: contentWidth * 0.24, halign: 'left', fontStyle: 'bold' },
+          2: { cellWidth: contentWidth * 0.38, halign: 'left', valign: 'middle' },
+          3: { cellWidth: contentWidth * 0.07, halign: 'center' },
+          4: {
+            cellWidth: contentWidth * 0.13,
+            halign: 'right',
+            fontSize: 7.2,
+            cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
+          },
+          5: {
+            cellWidth: contentWidth * 0.13,
+            halign: 'right',
+            fontSize: 7.2,
+            fontStyle: 'bold',
+            cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
+          },
         },
         styles: {
           lineColor: [226, 232, 240], // #E2E8F0
           lineWidth: 0.3,
           font: 'helvetica',
+          overflow: 'visible',
         },
       })
 
@@ -920,26 +982,29 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
             textColor: [51, 65, 85],
             fontStyle: 'bold',
             fontSize: 7.5,
+            cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
           },
           bodyStyles: {
             textColor: [51, 65, 85],
             fontSize: 7,
-            cellPadding: 2,
+            cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
+            valign: 'middle',
           },
           columnStyles: {
-            0: { cellWidth: 26, fontStyle: 'bold' },
-            1: { cellWidth: 26 },
+            0: { cellWidth: 24, fontStyle: 'bold' },
+            1: { cellWidth: 24 },
             2: { cellWidth: 'auto', fontStyle: 'bold' },
-            3: { cellWidth: 20 },
-            4: { cellWidth: 12, halign: 'center' },
-            5: { cellWidth: 18, halign: 'center' },
-            6: { cellWidth: 20, halign: 'right' },
-            7: { cellWidth: 20, halign: 'right', fontStyle: 'bold' },
+            3: { cellWidth: 18 },
+            4: { cellWidth: 11, halign: 'center' },
+            5: { cellWidth: 16, halign: 'center' },
+            6: { cellWidth: 23, halign: 'right', fontSize: 6.8 },
+            7: { cellWidth: 24, halign: 'right', fontStyle: 'bold', fontSize: 6.8 },
           },
           styles: {
             lineColor: [226, 232, 240],
             lineWidth: 0.2,
             font: 'helvetica',
+            overflow: 'visible',
           },
         })
       } else {
@@ -993,26 +1058,29 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
             fillColor: [241, 245, 249],
             textColor: [51, 65, 85],
             fontStyle: 'bold',
-            fontSize: 8,
+            fontSize: 7.5,
+            cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
           },
           bodyStyles: {
             textColor: [51, 65, 85],
-            fontSize: 7.5,
-            cellPadding: 2.2,
+            fontSize: 7.2,
+            cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
+            valign: 'middle',
           },
           columnStyles: {
             0: { cellWidth: 'auto', fontStyle: 'bold' },
-            1: { cellWidth: 26 },
-            2: { cellWidth: 14, halign: 'center' },
-            3: { cellWidth: 28, halign: 'center' },
-            4: { cellWidth: 22, halign: 'right' },
-            5: { cellWidth: 24, halign: 'right', fontStyle: 'bold' },
-            6: { cellWidth: 24, halign: 'right' },
+            1: { cellWidth: 24 },
+            2: { cellWidth: 12, halign: 'center' },
+            3: { cellWidth: 26, halign: 'center' },
+            4: { cellWidth: 23, halign: 'right', fontSize: 6.8 },
+            5: { cellWidth: 24, halign: 'right', fontStyle: 'bold', fontSize: 6.8 },
+            6: { cellWidth: 24, halign: 'right', fontSize: 6.8 },
           },
           styles: {
             lineColor: [226, 232, 240],
             lineWidth: 0.2,
             font: 'helvetica',
+            overflow: 'visible',
           },
         })
       }
@@ -1065,26 +1133,29 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
           fillColor: [241, 245, 249], // #F1F5F9 — tom suave
           textColor: [51, 65, 85], // #334155
           fontStyle: 'bold',
-          fontSize: 8,
+          fontSize: 7.5,
+          cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
         },
         bodyStyles: {
           textColor: [51, 65, 85],
-          fontSize: 7.5,
-          cellPadding: 2.2,
+          fontSize: 7.2,
+          cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
+          valign: 'middle',
         },
         columnStyles: {
           0: { cellWidth: 'auto', fontStyle: 'bold' },
-          1: { cellWidth: 26 },
-          2: { cellWidth: 14, halign: 'center' },
-          3: { cellWidth: 28, halign: 'center' },
-          4: { cellWidth: 22, halign: 'right' },
-          5: { cellWidth: 24, halign: 'right', fontStyle: 'bold' },
-          6: { cellWidth: 24, halign: 'right' },
+          1: { cellWidth: 24 },
+          2: { cellWidth: 12, halign: 'center' },
+          3: { cellWidth: 26, halign: 'center' },
+          4: { cellWidth: 23, halign: 'right', fontSize: 6.8 },
+          5: { cellWidth: 24, halign: 'right', fontStyle: 'bold', fontSize: 6.8 },
+          6: { cellWidth: 24, halign: 'right', fontSize: 6.8 },
         },
         styles: {
           lineColor: [226, 232, 240],
           lineWidth: 0.2,
           font: 'helvetica',
+          overflow: 'visible',
         },
       })
     }
@@ -1187,15 +1258,21 @@ export async function downloadPropostaComercialFromOrcamento(
     const grupos = orcamento.ambientes_json!.map((amb) => ({
       nome: amb.nome,
       subtotal: amb.subtotal ?? 0,
-      itens: (amb.modulos || []).map((mod) => ({
-        nome: mod.nome,
-        descricao: mod.dimensoes
-          ? `Dimensões: ${mod.dimensoes.largura}L × ${mod.dimensoes.altura}A × ${mod.dimensoes.profundidade}P mm`
-          : 'Projeto sob medida conforme especificações técnicas aprovadas',
-        quantidade: 1,
-        valorUnitario: mod.subtotal ?? 0,
-        valorTotal: mod.subtotal ?? 0,
-      })),
+      itens: (amb.modulos || []).map((mod) => {
+        const nomeApresentavel = getNomeModuloAmigavel(mod.nome, mod.dimensoes)
+        const dimensoesFormatadas = mod.dimensoes
+          ? `${mod.dimensoes.largura}L × ${mod.dimensoes.altura}A × ${mod.dimensoes.profundidade}P mm`
+          : ''
+        return {
+          nome: nomeApresentavel,
+          descricao: dimensoesFormatadas
+            ? `Dimensões: ${dimensoesFormatadas}`
+            : 'Projeto sob medida conforme especificações técnicas aprovadas',
+          quantidade: 1,
+          valorUnitario: mod.subtotal ?? 0,
+          valorTotal: mod.subtotal ?? 0,
+        }
+      }),
     }))
 
     await gerarPropostaComercial({
@@ -1227,7 +1304,7 @@ export async function downloadPropostaComercialFromOrcamento(
         {
           nome: orcamento.ambiente || 'Ambiente Planejado',
           descricao: orcamento.modulo
-            ? `Módulo: ${orcamento.modulo}`
+            ? `Módulo: ${getNomeModuloAmigavel(orcamento.modulo, orcamento.dimensoes_json)}`
             : 'Projeto de Marcenaria sob medida',
           quantidade: 1,
           valorUnitario: valorTotal,

@@ -45,7 +45,11 @@ import { AddFromCatalogModal } from '@/components/AddFromCatalogModal'
 import { AddCustomItemModal } from '@/components/AddCustomItemModal'
 import { BudgetItem } from '@/data/mockData'
 import { createOrcamento, updateOrcamento, fetchOrcamentoById } from '@/services/orcamentos'
-import { fetchTemplatesEngenharia, TemplateEngenharia } from '@/services/templates'
+import {
+  fetchTemplatesEngenharia,
+  TemplateEngenharia,
+  type PerfilConstrutivo,
+} from '@/services/templates'
 import { toast } from '@/hooks/use-toast'
 import { ToastAction } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
@@ -357,6 +361,7 @@ export default function Index() {
               mdf_fundo: m.mdf_fundo,
               padrao_projeto: m.padrao_projeto,
               composicao: m.composicao,
+              perfil_construtivo: m.perfil_construtivo || m.composicao?.perfilConstrutivo,
               adaptacoes: m.adaptacoes,
               imagem_url: m.imagem_url,
               subtotal: Number(m.subtotal) || 0,
@@ -455,6 +460,7 @@ export default function Index() {
                     mdf_fundo: orcamento.mdf_fundo || undefined,
                     padrao_projeto: orcamento.padrao_projeto || undefined,
                     subtotal: totalAntigo,
+                    perfil_construtivo: undefined,
                     itens: orcamento.bom_json,
                   },
                 ],
@@ -1334,6 +1340,11 @@ export default function Index() {
 
     // 1. Salva este módulo no ambiente ativo
     const currentModuleSubtotal = totalVenda
+    const perfilAtualModulo =
+      (composicaoModulo?.perfilConstrutivo as PerfilConstrutivo) ||
+      (selectedModuleObj?.perfil_construtivo as PerfilConstrutivo) ||
+      (composicaoModulo?.semTamponamento ? 'Caixa Simples' : 'Fechado Envelopado')
+
     const novoModuloNoAmbiente: ModuloOrcamento = {
       id: `mod-${Date.now()}`,
       modulo_id: selectedModuleId || undefined,
@@ -1343,7 +1354,11 @@ export default function Index() {
       mdf_interno: `${mdfInterno.cor} (${mdfInterno.espessura}mm)`,
       mdf_fundo: mdfFundo,
       padrao_projeto: padraoProjeto,
-      composicao: composicaoModulo,
+      composicao: {
+        ...composicaoModulo,
+        perfilConstrutivo: perfilAtualModulo,
+      },
+      perfil_construtivo: perfilAtualModulo,
       adaptacoes: adaptacoesIA || undefined,
       subtotal: currentModuleSubtotal,
       itens: pricingItems.map((it) => ({
@@ -1482,7 +1497,17 @@ export default function Index() {
               mdf_interno: `${mdfInterno.cor} (${mdfInterno.espessura}mm)`,
               mdf_fundo: mdfFundo,
               padrao_projeto: padraoProjeto,
-              composicao: composicaoModulo,
+              composicao: {
+                ...composicaoModulo,
+                perfilConstrutivo:
+                  composicaoModulo?.perfilConstrutivo ||
+                  selectedModuleObj?.perfil_construtivo ||
+                  (composicaoModulo?.semTamponamento ? 'Caixa Simples' : 'Fechado Envelopado'),
+              },
+              perfil_construtivo:
+                (composicaoModulo?.perfilConstrutivo as PerfilConstrutivo) ||
+                (selectedModuleObj?.perfil_construtivo as PerfilConstrutivo) ||
+                (composicaoModulo?.semTamponamento ? 'Caixa Simples' : 'Fechado Envelopado'),
               adaptacoes: adaptacoesIA || undefined,
               subtotal: currentSubtotal,
               itens: pricingItems.map((it) => ({
@@ -1519,7 +1544,17 @@ export default function Index() {
           mdf_interno: `${mdfInterno.cor} (${mdfInterno.espessura}mm)`,
           mdf_fundo: mdfFundo,
           padrao_projeto: padraoProjeto,
-          composicao: composicaoModulo,
+          composicao: {
+            ...composicaoModulo,
+            perfilConstrutivo:
+              composicaoModulo?.perfilConstrutivo ||
+              selectedModuleObj?.perfil_construtivo ||
+              (composicaoModulo?.semTamponamento ? 'Caixa Simples' : 'Fechado Envelopado'),
+          },
+          perfil_construtivo:
+            (composicaoModulo?.perfilConstrutivo as PerfilConstrutivo) ||
+            (selectedModuleObj?.perfil_construtivo as PerfilConstrutivo) ||
+            (composicaoModulo?.semTamponamento ? 'Caixa Simples' : 'Fechado Envelopado'),
           adaptacoes: adaptacoesIA || undefined,
           subtotal: currentSubtotal,
           itens: pricingItems.map((it) => ({
@@ -1706,6 +1741,13 @@ export default function Index() {
         ...amb,
         modulos: (amb.modulos || []).map((m) => ({
           ...m,
+          perfil_construtivo: m.perfil_construtivo || m.composicao?.perfilConstrutivo,
+          composicao: m.composicao
+            ? {
+                ...m.composicao,
+                perfilConstrutivo: m.perfil_construtivo || m.composicao.perfilConstrutivo,
+              }
+            : m.composicao,
           nome: m.nome.replace(/\s*\(em edição\)\s*/gi, '').trim() || m.nome,
         })),
       }))
@@ -1814,10 +1856,13 @@ export default function Index() {
         subtotal: amb.subtotal ?? 0,
         itens: (amb.modulos || []).map((m) => {
           const nomeLimpo = m.nome.replace(/\s*\(em edição\)\s*/gi, '').trim() || m.nome
+          const dimensoesFormatadas = m.dimensoes
+            ? `${m.dimensoes.largura}L × ${m.dimensoes.altura}A × ${m.dimensoes.profundidade}P mm`
+            : ''
           return {
             nome: nomeLimpo,
-            descricao: m.dimensoes
-              ? `Dimensões: ${m.dimensoes.largura}L × ${m.dimensoes.altura}A × ${m.dimensoes.profundidade}P mm`
+            descricao: dimensoesFormatadas
+              ? `Dimensões: ${dimensoesFormatadas}`
               : 'Projeto sob medida conforme especificações técnicas aprovadas',
             quantidade: 1,
             valorUnitario: m.subtotal ?? 0,

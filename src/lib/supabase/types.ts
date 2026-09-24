@@ -351,6 +351,7 @@ export type Database = {
           ativo: boolean | null
           id: string
           nome_template: string
+          perfil_construtivo: string | null
           regras_json: Json | null
         }
         Insert: {
@@ -358,6 +359,7 @@ export type Database = {
           ativo?: boolean | null
           id?: string
           nome_template: string
+          perfil_construtivo?: string | null
           regras_json?: Json | null
         }
         Update: {
@@ -365,6 +367,7 @@ export type Database = {
           ativo?: boolean | null
           id?: string
           nome_template?: string
+          perfil_construtivo?: string | null
           regras_json?: Json | null
         }
         Relationships: []
@@ -384,6 +387,7 @@ export type Database = {
           material: string | null
           nome_template: string
           pecas_mdf: Json | null
+          perfil_construtivo: string | null
           updated_at: string
         }
         Insert: {
@@ -400,6 +404,7 @@ export type Database = {
           material?: string | null
           nome_template: string
           pecas_mdf?: Json | null
+          perfil_construtivo?: string | null
           updated_at?: string
         }
         Update: {
@@ -416,6 +421,7 @@ export type Database = {
           material?: string | null
           nome_template?: string
           pecas_mdf?: Json | null
+          perfil_construtivo?: string | null
           updated_at?: string
         }
         Relationships: []

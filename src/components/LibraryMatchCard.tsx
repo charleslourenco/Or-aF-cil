@@ -100,65 +100,148 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
     (selectedModule?.perfil_construtivo as PerfilConstrutivo) ||
     (composicao?.semTamponamento ? 'Caixa Simples' : 'Fechado Envelopado')
 
+  // Distinção se o perfil vem do template original da biblioteca ou se foi alterado via override manual
+  const perfilOriginalTemplate = selectedModule?.perfil_construtivo as PerfilConstrutivo | undefined
+  const isOverrideManual = Boolean(
+    composicao?.perfilConstrutivo &&
+    perfilOriginalTemplate &&
+    composicao.perfilConstrutivo !== perfilOriginalTemplate,
+  )
+
+  // Configuração visual do perfil construtivo (cores, ícone)
+  const getBadgePerfilStyles = (perfil: PerfilConstrutivo) => {
+    switch (perfil) {
+      case 'Fechado Envelopado':
+        return 'bg-amber-50 text-amber-900 border-amber-300'
+      case 'Balcão (tampo por conta do cliente)':
+        return 'bg-emerald-50 text-emerald-900 border-emerald-300'
+      case 'Aberto / Painel':
+        return 'bg-sky-50 text-sky-900 border-sky-300'
+      case 'Caixa Simples':
+        return 'bg-slate-100 text-slate-800 border-slate-300'
+      default:
+        return 'bg-slate-100 text-slate-800 border-slate-300'
+    }
+  }
+
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl border border-slate-200 p-6 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
       {/* Top Header */}
-      <div className="flex items-start justify-between gap-2 pb-4 border-b border-slate-100">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
-              <Box className="w-4 h-4 text-slate-700" />
-              Módulo Identificado na Biblioteca
-            </h3>
+      <div className="flex flex-col gap-2 pb-4 border-b border-slate-100">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                <Box className="w-4 h-4 text-slate-700" />
+                Módulo Identificado na Biblioteca
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Correspondência padrão cadastrada para corte e orçamentação
+            </p>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Correspondência padrão cadastrada para corte e orçamentação
-          </p>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Botão de fallback: Trocar Módulo (manual) */}
+            {onModuleChange && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSwap((v) => !v)}
+                className={cn(
+                  'h-8 px-2.5 text-[11px] font-semibold rounded-full border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs',
+                  showSwap && 'bg-slate-100 border-slate-400 text-slate-800',
+                )}
+              >
+                <Repeat2 className="w-3.5 h-3.5 mr-1" />
+                Trocar Módulo
+              </Button>
+            )}
+
+            {/* Match Status Badge */}
+            {isAnalyzing ? (
+              <Badge
+                variant="outline"
+                className="bg-violet-50 text-violet-700 border-violet-300 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-fade-in"
+              >
+                <Loader2 className="w-3.5 h-3.5 text-violet-600 animate-spin" />
+                Analisando...
+              </Badge>
+            ) : isMatched ? (
+              <Badge
+                variant="outline"
+                className="bg-slate-100 text-slate-800 border-slate-400 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-fade-in"
+              >
+                <CheckCircle className="w-3.5 h-3.5 text-slate-700" />✓ Match Encontrado
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="bg-slate-100 text-slate-500 border-slate-200 font-medium text-xs px-2.5 py-1 rounded-full"
+              >
+                Aguardando seleção
+              </Badge>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Botão de fallback: Trocar Módulo (manual) */}
-          {onModuleChange && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSwap((v) => !v)}
-              className={cn(
-                'h-8 px-2.5 text-[11px] font-semibold rounded-full border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs',
-                showSwap && 'bg-slate-100 border-slate-400 text-slate-800',
-              )}
-            >
-              <Repeat2 className="w-3.5 h-3.5 mr-1" />
-              Trocar Módulo
-            </Button>
-          )}
+        {/* 1. Badge visual no cabeçalho do card com Perfil Construtivo ativo e seletor rápido */}
+        {isMatched && (
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100/80">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-2xs transition-colors',
+                  getBadgePerfilStyles(perfilEfetivo),
+                )}
+                title={PERFIS_CONSTRUTIVOS_INFO[perfilEfetivo]?.descCurta}
+              >
+                <span>⚙️</span>
+                <span>Perfil: {perfilEfetivo}</span>
+                {isOverrideManual && (
+                  <span className="text-[10px] uppercase font-extrabold tracking-wide text-amber-700 bg-amber-100/80 px-1.5 py-0.2 rounded">
+                    (manual)
+                  </span>
+                )}
+              </span>
+            </div>
 
-          {/* Match Status Badge */}
-          {isAnalyzing ? (
-            <Badge
-              variant="outline"
-              className="bg-violet-50 text-violet-700 border-violet-300 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-fade-in"
-            >
-              <Loader2 className="w-3.5 h-3.5 text-violet-600 animate-spin" />
-              Analisando...
-            </Badge>
-          ) : isMatched ? (
-            <Badge
-              variant="outline"
-              className="bg-slate-100 text-slate-800 border-slate-400 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-fade-in"
-            >
-              <CheckCircle className="w-3.5 h-3.5 text-slate-700" />✓ Match Encontrado
-            </Badge>
-          ) : (
-            <Badge
-              variant="outline"
-              className="bg-slate-100 text-slate-500 border-slate-200 font-medium text-xs px-2.5 py-1 rounded-full"
-            >
-              Aguardando seleção
-            </Badge>
-          )}
-        </div>
+            {/* 2. Seletor de override rápido de perfil no cabeçalho */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-slate-500 hidden sm:inline">
+                Alterar perfil:
+              </span>
+              <Select
+                value={perfilEfetivo}
+                onValueChange={(val: PerfilConstrutivo) => {
+                  onComposicaoChange?.((prev) => ({
+                    ...prev,
+                    perfilConstrutivo: val,
+                    semTamponamento: val === 'Caixa Simples',
+                  }))
+                }}
+              >
+                <SelectTrigger
+                  aria-label="Override rápido de perfil construtivo"
+                  className="h-7 text-[11px] font-semibold px-2.5 rounded-lg bg-slate-50 border-slate-300 w-auto min-w-[150px]"
+                >
+                  <SelectValue placeholder="Override de perfil..." />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  {(Object.keys(PERFIS_CONSTRUTIVOS_INFO) as PerfilConstrutivo[]).map((pk) => {
+                    const info = PERFIS_CONSTRUTIVOS_INFO[pk]
+                    return (
+                      <SelectItem key={pk} value={pk} className="text-xs">
+                        <span className="font-semibold">{info.label}</span>
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Select inline de "Trocar Módulo" — força a escolha manual de outro gabarito. */}
@@ -261,8 +344,18 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                   {selectedModule.categoria}
                 </span>
               )}
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-50 text-sky-800 border border-sky-200">
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border',
+                  getBadgePerfilStyles(perfilEfetivo),
+                )}
+              >
                 ⚙️ {perfilEfetivo}
+                {isOverrideManual && (
+                  <span className="text-[9px] uppercase font-bold text-amber-700 bg-amber-100 px-1 rounded">
+                    (manual)
+                  </span>
+                )}
               </span>
             </div>
 
