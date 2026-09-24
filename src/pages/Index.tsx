@@ -23,6 +23,12 @@ import {
   FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -1501,35 +1507,6 @@ export default function Index() {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 150)
     }, 600)
-  }
-
-  // Action: "+ Adicionar Item Manualmente"
-  const handleAddNewManualItem = () => {
-    if (!showResults) {
-      setShowResults(true)
-    }
-
-    const effectiveMarkup = markupEngenharia || 2.5
-    const unitCost = 80.0
-    const totalCost = 160.0
-    const salePrice = Math.round(totalCost * effectiveMarkup * 100) / 100
-
-    const newItem: BudgetItem = {
-      id: `manual-${Date.now()}`,
-      description: 'Nova Peça em MDF 18mm',
-      unitCost,
-      totalCost,
-      markup: effectiveMarkup,
-      salePrice,
-      isEditing: true,
-    }
-
-    setManualItems((prev) => [...prev, newItem])
-
-    // Scroll to results if needed
-    setTimeout(() => {
-      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    }, 100)
   }
 
   // Ações de gerenciamento de múltiplos ambientes e módulos
@@ -3503,14 +3480,38 @@ export default function Index() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Secondary Action Buttons (Left) */}
           <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleAddNewManualItem}
-              className="w-full sm:w-auto text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl h-10 shadow-2xs"
-            >
-              <Plus className="w-4 h-4 mr-1.5 text-slate-500" />+ Adicionar Item Manualmente
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl h-10 shadow-2xs inline-flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4 text-slate-500" />+ Adicionar Item Manualmente
+                  <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                side="top"
+                className="w-56 p-1.5 rounded-xl shadow-lg border-slate-200"
+              >
+                <DropdownMenuItem
+                  onClick={() => setIsCatalogModalOpen(true)}
+                  className="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer rounded-lg"
+                >
+                  <Package className="w-4 h-4 text-slate-600" />
+                  <span>📄 Do Catálogo</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setIsCustomItemModalOpen(true)}
+                  className="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer rounded-lg"
+                >
+                  <Plus className="w-4 h-4 text-slate-600" />
+                  <span>✏️ Item Avulso</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Button
               type="button"
