@@ -140,6 +140,8 @@ export default function Index() {
   } | null>(null)
   const [isCustomModuleIA, setIsCustomModuleIA] = useState<boolean>(false)
   const [customModuleNameIA, setCustomModuleNameIA] = useState<string>('')
+  const [nomeMovelManual, setNomeMovelManual] = useState<string>('')
+  const [hasNomeMovelOverride, setHasNomeMovelOverride] = useState<boolean>(false)
   const [adaptacoesIA, setAdaptacoesIA] = useState<string | null>(null)
   const [perfilSugeridoIA, setPerfilSugeridoIA] = useState<string | null>(null)
   const [confiancaIA, setConfiancaIA] = useState<'alta' | 'media' | 'baixa' | null>(null)
@@ -269,6 +271,8 @@ export default function Index() {
     setShowResults(false)
     setManualItems([])
     setUploadedFiles([])
+    setNomeMovelManual('')
+    setHasNomeMovelOverride(false)
     setErrors({})
     toast({
       title: 'Rascunho descartado',
@@ -1067,6 +1071,17 @@ export default function Index() {
       }))
     }
 
+    // Sincronização do Nome do Móvel: se NÃO há override manual, atualiza nomeMovelManual
+    if (!hasNomeMovelOverride) {
+      if (modEscolhido?.nome_template) {
+        setNomeMovelManual(modEscolhido.nome_template)
+      } else if (val === 'MODULO-CUSTOM') {
+        setNomeMovelManual(customModuleNameIA || 'Módulo Personalizado (Sob Medida)')
+      } else {
+        setNomeMovelManual('')
+      }
+    }
+
     // Auto-preenche o ambiente quando vazio, com base na categoria do módulo.
     const modulo = modulosDisponiveis.find((m) => m.id === val)
     if (!ambienteSelecionado && !room && modulo?.categoria) {
@@ -1277,7 +1292,11 @@ export default function Index() {
           setIsModuloConfirmado(conf === 'alta')
 
           setIsCustomModuleIA(eCustom)
-          setCustomModuleNameIA(primeiroModulo.nome || 'Módulo Personalizado (Análise IA)')
+          const nomeDetectadoIA = primeiroModulo.nome || 'Módulo Personalizado (Análise IA)'
+          setCustomModuleNameIA(nomeDetectadoIA)
+          if (!hasNomeMovelOverride) {
+            setNomeMovelManual(nomeDetectadoIA)
+          }
 
           let idFinal = ''
           if (eCustom) {
@@ -1497,7 +1516,11 @@ export default function Index() {
           setIsCustomModuleIA(true)
           setConfiancaIA('baixa')
           setIsModuloConfirmado(false)
-          setCustomModuleNameIA('Módulo Personalizado (Análise IA)')
+          const nomePadraoIA = 'Módulo Personalizado (Análise IA)'
+          setCustomModuleNameIA(nomePadraoIA)
+          if (!hasNomeMovelOverride) {
+            setNomeMovelManual(nomePadraoIA)
+          }
           setMatchJustificativa(justificativaGeral)
           setIsAnalyzing(false)
 
@@ -1803,6 +1826,8 @@ export default function Index() {
     setDimensoesEstimadasIA(null)
     setIsCustomModuleIA(false)
     setCustomModuleNameIA('')
+    setNomeMovelManual('')
+    setHasNomeMovelOverride(false)
     if (analyzeTimeoutRef.current) {
       clearTimeout(analyzeTimeoutRef.current)
       analyzeTimeoutRef.current = null
@@ -1829,7 +1854,30 @@ export default function Index() {
     setIsFinalizeModalOpen(true)
   }
 
-  const currentModuleName = selectedModuleObj?.nome_template || 'Módulo Padrão'
+  // Resolução do nome do móvel: sugerido vs override manual
+  const nomeMovelSugerido = useMemo<string>(() => {
+    if (selectedModuleObj?.nome_template) {
+      return selectedModuleObj.nome_template
+    }
+    if (customModuleNameIA?.trim()) {
+      return customModuleNameIA.trim()
+    }
+    if (selectedModuleId === 'MODULO-CUSTOM') {
+      const dimStr =
+        dimensoes && dimensoes.largura > 0 && dimensoes.altura > 0
+          ? `${dimensoes.largura}×${dimensoes.altura}${dimensoes.profundidade ? `×${dimensoes.profundidade}` : ''}mm`
+          : ''
+      return dimStr ? `Móvel Sob Medida (${dimStr})` : 'Móvel Sob Medida'
+    }
+    return 'Módulo Padrão'
+  }, [selectedModuleObj, customModuleNameIA, selectedModuleId, dimensoes])
+
+  const currentModuleName = useMemo<string>(() => {
+    if (hasNomeMovelOverride && nomeMovelManual.trim()) {
+      return nomeMovelManual.trim()
+    }
+    return nomeMovelSugerido
+  }, [hasNomeMovelOverride, nomeMovelManual, nomeMovelSugerido])
 
   // Consolida todos os ambientes e módulos (incluindo o que está sendo editado na tela, se houver)
   const ambientesConsolidados = useMemo<AmbienteOrcamento[]>(() => {
@@ -2683,19 +2731,25 @@ export default function Index() {
           <div className="pt-2 border-t border-slate-100 space-y-4">
             {/* Cabeçalho visível indicando o ambiente ativo sendo configurado */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Home className="w-4 h-4 text-slate-700 shrink-0" />
                 <span className="text-xs sm:text-sm text-slate-700">
                   Configurando módulo para:{' '}
                   <strong className="text-slate-900 font-bold">{ambienteAtivoNome}</strong>
                 </span>
+                {currentModuleName && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-800 text-xs font-semibold">
+                    <Box className="w-3 h-3 text-slate-600" />
+                    {currentModuleName}
+                  </span>
+                )}
               </div>
               <span className="text-[11px] text-slate-500">
                 Selecione outro cômodo no seletor abaixo se desejar trocar
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Ambiente Ativo Atual */}
               <div className="space-y-1.5">
                 <label
@@ -2757,7 +2811,7 @@ export default function Index() {
                   className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
                 >
                   <Box className="w-3.5 h-3.5 text-slate-700" />
-                  Módulo a Configurar / Identificado <span className="text-rose-500">*</span>
+                  Módulo da Biblioteca / IA <span className="text-rose-500">*</span>
                 </label>
                 <Select value={selectedModuleId} onValueChange={handleModuleChange}>
                   <SelectTrigger
@@ -2802,6 +2856,34 @@ export default function Index() {
                     {errors.selectedModule}
                   </p>
                 )}
+              </div>
+
+              {/* Input: Nome do Móvel (editável com pré-preenchimento e badge de override manual) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="nomeMovelInput"
+                    className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-slate-700" />
+                    Nome do Móvel <span className="text-rose-500">*</span>
+                  </label>
+                  {hasNomeMovelOverride && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-100/90 border border-amber-300 px-1.5 py-0.5 rounded">
+                      (personalizado)
+                    </span>
+                  )}
+                </div>
+                <Input
+                  id="nomeMovelInput"
+                  value={hasNomeMovelOverride ? nomeMovelManual : nomeMovelSugerido}
+                  onChange={(e) => {
+                    setHasNomeMovelOverride(true)
+                    setNomeMovelManual(e.target.value)
+                  }}
+                  placeholder="Ex.: Roupeiro Suíte Casal"
+                  className="h-11 rounded-xl text-sm border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
+                />
               </div>
             </div>
 
@@ -2954,7 +3036,11 @@ export default function Index() {
               onTratarPersonalizado={() => {
                 setSelectedModuleId('MODULO-CUSTOM')
                 setIsCustomModuleIA(true)
-                setCustomModuleNameIA('Módulo Personalizado (Análise IA)')
+                const nomeCustom = 'Módulo Personalizado (Análise IA)'
+                setCustomModuleNameIA(nomeCustom)
+                if (!hasNomeMovelOverride) {
+                  setNomeMovelManual(nomeCustom)
+                }
                 setIsModuloConfirmado(true)
                 toast({
                   title: 'Definido como Módulo Personalizado',
