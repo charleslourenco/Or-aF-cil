@@ -1,5 +1,5 @@
 import React from 'react'
-import { Boxes, Coins, TrendingUp, Ruler } from 'lucide-react'
+import { Boxes, Ruler } from 'lucide-react'
 import { BudgetItem } from '@/data/mockData'
 import { custoConsolidado, valorConsolidado } from '@/lib/pricing'
 import { cn } from '@/lib/utils'
@@ -84,9 +84,9 @@ export const PricingTable: React.FC<PricingTableProps> = ({
         </div>
       )}
 
-      {/* Summary KPI Cards */}
+      {/* Summary KPI Card (apenas Total de Peças no topo da tabela) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex items-center gap-3.5">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex items-center gap-3.5 sm:col-span-1">
           <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700">
             <Boxes className="w-5 h-5" />
           </div>
@@ -96,34 +96,6 @@ export const PricingTable: React.FC<PricingTableProps> = ({
             </p>
             <p className="text-lg font-bold text-slate-900 font-mono">
               {qtdPecas} {qtdPecas === 1 ? 'peça' : 'peças'}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
-            <Coins className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Custo Consolidado
-            </p>
-            <p className="text-lg font-bold text-slate-900 font-mono">
-              {formatCurrency(totalCostSum)}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-300 bg-gradient-to-br from-slate-100/40 to-white p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-slate-700 text-white flex items-center justify-center shadow-md shadow-slate-700/20">
-            <TrendingUp className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold text-slate-900 uppercase tracking-wider">
-              Valor Consolidado
-            </p>
-            <p className="text-lg font-bold text-slate-800 font-mono">
-              {formatCurrency(totalSaleSum)}
             </p>
           </div>
         </div>
@@ -279,43 +251,6 @@ export const PricingTable: React.FC<PricingTableProps> = ({
             <span>Valor Consolidado</span>
             <span className="font-mono text-slate-300 text-lg">{formatCurrency(totalSaleSum)}</span>
           </div>
-        </div>
-      </div>
-
-      {/* Rodapé de Totais Consolidados — blocos destacados */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
-              <Coins className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">
-                Custo Consolidado
-              </p>
-              <p className="text-[11px] text-amber-700/70">Soma de todos os custos totais</p>
-            </div>
-          </div>
-          <p className="text-xl font-extrabold text-amber-800 font-mono">
-            {formatCurrency(totalCostSum)}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-300 bg-gradient-to-br from-slate-100 to-white p-5 shadow-sm flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-slate-700 text-white flex items-center justify-center shadow-md shadow-slate-700/20">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold text-slate-900 uppercase tracking-wider">
-                Valor Consolidado
-              </p>
-              <p className="text-[11px] text-slate-800/70">Soma de todos os valores de venda</p>
-            </div>
-          </div>
-          <p className="text-xl font-extrabold text-slate-800 font-mono">
-            {formatCurrency(totalSaleSum)}
-          </p>
         </div>
       </div>
 
