@@ -1,3 +1,4 @@
+// OrçaFácil v0.0.61
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import {
