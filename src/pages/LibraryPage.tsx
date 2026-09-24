@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { renderPdfPagesToBase64 } from '@/lib/pdfRenderer'
 import {
   PlusCircle,
   Search,
@@ -334,69 +333,11 @@ export default function LibraryPage() {
     setModalOpen(false)
   }
 
-  // Configuração do Worker do PDF.js
-  useEffect(() => {
-    try {
-      if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
-      }
-    } catch (e) {
-      console.error('Falha ao configurar worker pdfjs:', e)
-    }
-  }, [])
-
   // Converte todas as páginas de um PDF em um array de strings Base64 PNG (data URL) com resolução aprimorada (scale 2.5)
-  const renderPdfPagesToBase64 = async (file: File): Promise<string[]> => {
+  // Utiliza o motor resiliente com fallback em src/lib/pdfRenderer.ts (worker inline / cdn / legacy main-thread)
+  const handleRenderPdfPages = async (file: File): Promise<string[]> => {
     try {
-      if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
-      }
-
-      let arrayBuffer: ArrayBuffer
-      try {
-        arrayBuffer = await file.arrayBuffer()
-      } catch (readErr) {
-        throw new Error(
-          `Falha ao ler o arquivo PDF do disco/navegador: ${readErr instanceof Error ? readErr.message : 'Erro de leitura.'}`,
-        )
-      }
-
-      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
-      const pdfDoc = await loadingTask.promise
-
-      if (pdfDoc.numPages < 1) {
-        throw new Error('O arquivo PDF não contém páginas legíveis.')
-      }
-
-      const pagesBase64: string[] = []
-      // Lê até 5 páginas do PDF para capturar fichas técnicas extensas e listas de composição
-      const maxPages = Math.min(pdfDoc.numPages, 5)
-
-      for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-        const page = await pdfDoc.getPage(pageNum)
-        // Scale 2.5 garante nitidez perfeita para leitura de fontes pequenas em tabelas densas (como códigos BAS0242A)
-        const viewport = page.getViewport({ scale: 2.5 })
-
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.floor(viewport.width)
-        canvas.height = Math.floor(viewport.height)
-        const context = canvas.getContext('2d')
-
-        if (!context) {
-          throw new Error('Não foi possível inicializar o canvas de renderização gráfica.')
-        }
-
-        const renderContext = {
-          canvasContext: context,
-          viewport: viewport,
-        }
-
-        await page.render(renderContext).promise
-        const dataUrl = canvas.toDataURL('image/png')
-        pagesBase64.push(dataUrl)
-      }
-
-      return pagesBase64
+      return await renderPdfPagesToBase64(file, 5, 2.5)
     } catch (err: unknown) {
       console.error('Erro na conversão do PDF para imagem:', err)
       const details =
@@ -521,7 +462,7 @@ export default function LibraryPage() {
       let pagesDataUrl: string[] = []
       try {
         if (isPdf) {
-          pagesDataUrl = await renderPdfPagesToBase64(file)
+          pagesDataUrl = await handleRenderPdfPages(file)
         } else {
           const singleUrl = await renderImageFileToBase64(file)
           pagesDataUrl = [singleUrl]
