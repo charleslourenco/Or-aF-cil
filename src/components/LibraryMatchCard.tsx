@@ -31,7 +31,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { TemplateEngenharia } from '@/services/templates'
+import {
+  TemplateEngenharia,
+  PerfilConstrutivo,
+  PERFIS_CONSTRUTIVOS_INFO,
+} from '@/services/templates'
 import { type ModuloComposicao, type ComposicaoCorpo, type TipoAberturaPorta } from '@/lib/pricing'
 import { cn } from '@/lib/utils'
 
@@ -65,6 +69,8 @@ interface LibraryMatchCardProps {
   onComposicaoChange?: (updater: (prev: ModuloComposicao) => ModuloComposicao) => void
   /** Texto descritivo de adaptações retornado pela IA */
   adaptacoes?: string | null
+  /** Sugestão de perfil de construção da IA */
+  perfilSugeridoIA?: string | null
 }
 
 export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
@@ -83,9 +89,16 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
   composicao,
   onComposicaoChange,
   adaptacoes = null,
+  perfilSugeridoIA = null,
 }) => {
   const isMatched = !!selectedModule
   const [showSwap, setShowSwap] = useState(false)
+
+  // Perfil efetivo em uso no cálculo
+  const perfilEfetivo: PerfilConstrutivo =
+    (composicao?.perfilConstrutivo as PerfilConstrutivo) ||
+    (selectedModule?.perfil_construtivo as PerfilConstrutivo) ||
+    (composicao?.semTamponamento ? 'Caixa Simples' : 'Fechado Envelopado')
 
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl border border-slate-200 p-6 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
@@ -248,6 +261,9 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                   {selectedModule.categoria}
                 </span>
               )}
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-50 text-sky-800 border border-sky-200">
+                ⚙️ {perfilEfetivo}
+              </span>
             </div>
 
             {selectedModule?.descricao && (
@@ -808,20 +824,83 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
               </div>
             </div>
 
-            {/* Opções Construtivas do Marceneiro: Envelopamento e Tampo */}
-            <div className="pt-2 border-t border-slate-200/80 space-y-2">
-              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide block">
-                Modelo Construtivo
-              </span>
+            {/* Opções Construtivas do Marceneiro: Perfil Construtivo + Overrides */}
+            <div className="pt-2 border-t border-slate-200/80 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide block">
+                  Perfil Construtivo & Modelo
+                </span>
+                {perfilSugeridoIA && (
+                  <span className="text-[10px] text-slate-500">
+                    Sugestão IA: <em>{perfilSugeridoIA}</em>
+                  </span>
+                )}
+              </div>
+
+              {/* Seletor de Perfil Construtivo do Módulo */}
+              <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="perfil-card-select" className="text-xs font-bold text-slate-800">
+                    Perfil Aplicado no Cálculo:
+                  </Label>
+                  {composicao?.perfilConstrutivo &&
+                    selectedModule?.perfil_construtivo &&
+                    composicao.perfilConstrutivo !== selectedModule.perfil_construtivo && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-amber-50 text-amber-800 border-amber-300"
+                      >
+                        Override Manual Ativo
+                      </Badge>
+                    )}
+                </div>
+                <Select
+                  value={perfilEfetivo}
+                  onValueChange={(val: PerfilConstrutivo) => {
+                    onComposicaoChange?.((prev) => ({
+                      ...prev,
+                      perfilConstrutivo: val,
+                      semTamponamento: val === 'Caixa Simples',
+                    }))
+                  }}
+                >
+                  <SelectTrigger
+                    id="perfil-card-select"
+                    className="h-8 text-xs font-semibold bg-slate-50"
+                  >
+                    <SelectValue placeholder="Selecione o perfil construtivo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(PERFIS_CONSTRUTIVOS_INFO) as PerfilConstrutivo[]).map((pk) => {
+                      const info = PERFIS_CONSTRUTIVOS_INFO[pk]
+                      return (
+                        <SelectItem key={pk} value={pk} className="text-xs">
+                          <span className="font-semibold">{info.label}</span>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-slate-500 leading-snug">
+                  {PERFIS_CONSTRUTIVOS_INFO[perfilEfetivo]?.descCurta}
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {/* Toggle 1: Móvel sem tamponamento */}
+                {/* Toggle 1: Móvel sem tamponamento (Override direto para Caixa Simples) */}
                 <label className="flex items-start gap-2.5 p-2.5 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
                   <Checkbox
-                    checked={Boolean(composicao?.semTamponamento)}
+                    checked={
+                      perfilEfetivo === 'Caixa Simples' || Boolean(composicao?.semTamponamento)
+                    }
                     onCheckedChange={(checked) => {
                       onComposicaoChange?.((prev) => ({
                         ...prev,
                         semTamponamento: Boolean(checked),
+                        perfilConstrutivo: checked
+                          ? 'Caixa Simples'
+                          : (selectedModule?.perfil_construtivo as PerfilConstrutivo) ||
+                            'Fechado Envelopado',
                       }))
                     }}
                     className="mt-0.5"
@@ -831,7 +910,7 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                       Móvel sem tamponamento
                     </span>
                     <span className="text-[10px] text-slate-500 leading-tight block">
-                      Desligado = Caixa dupla envelopada (padrão). Ligado = Caixa simples.
+                      Override manual: força Caixa Simples sem caixaria interna.
                     </span>
                   </div>
                 </label>
@@ -839,7 +918,10 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                 {/* Toggle 2: Tampo de pedra */}
                 <label className="flex items-start gap-2.5 p-2.5 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
                   <Checkbox
-                    checked={Boolean(composicao?.tampoPedra)}
+                    checked={Boolean(
+                      composicao?.tampoPedra ||
+                      perfilEfetivo === 'Balcão (tampo por conta do cliente)',
+                    )}
                     onCheckedChange={(checked) => {
                       onComposicaoChange?.((prev) => ({
                         ...prev,
@@ -849,7 +931,9 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                     className="mt-0.5"
                   />
                   <div className="min-w-0">
-                    <span className="text-xs font-bold text-slate-800 block">Tampo de pedra</span>
+                    <span className="text-xs font-bold text-slate-800 block">
+                      Tampo de pedra / avulso
+                    </span>
                     <span className="text-[10px] text-slate-500 leading-tight block">
                       Travessas no topo; nenhum tampo entra automaticamente.
                     </span>

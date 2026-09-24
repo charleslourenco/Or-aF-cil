@@ -55,6 +55,8 @@ import {
   type ModuleIconType,
   type PecaMdfItem,
   type FerragemItem,
+  type PerfilConstrutivo,
+  PERFIS_CONSTRUTIVOS_INFO,
 } from '@/services/templates'
 import {
   AlertDialog,
@@ -78,9 +80,10 @@ interface ModuleFormState {
   assinatura_visual: string
   icon_type: ModuleIconType
   imagem_url: string
+  perfil_construtivo: PerfilConstrutivo
 }
 
-const EMPTY_FORM: ModuleFormState = {
+const EMPTY_FORM: FormData = {
   codigo: '',
   nome_template: '',
   categoria: '',
@@ -90,8 +93,8 @@ const EMPTY_FORM: ModuleFormState = {
   assinatura_visual: '',
   icon_type: 'wardrobe',
   imagem_url: '',
+  perfil_construtivo: 'Fechado Envelopado',
 }
-
 export interface ExtractedPecaMdf {
   codigo?: string
   descricao?: string
@@ -184,6 +187,7 @@ export default function LibraryPage() {
   const [previewCodigo, setPreviewCodigo] = useState('')
   const [previewNome, setPreviewNome] = useState('')
   const [previewDimensoes, setPreviewDimensoes] = useState('')
+  const [previewPerfil, setPreviewPerfil] = useState<PerfilConstrutivo>('Fechado Envelopado')
   const [previewCategoria, setPreviewCategoria] = useState('Cozinha')
 
   // FETCH REAL DO SUPABASE — catálogo de módulos da tabela TemplatesEngenharia.
@@ -243,6 +247,7 @@ export default function LibraryPage() {
       assinatura_visual: (mod.assinatura_visual ?? []).join(', '),
       icon_type: normalizeIconType(mod.icon_type),
       imagem_url: mod.imagem_url ?? '',
+      perfil_construtivo: (mod.perfil_construtivo as PerfilConstrutivo) || 'Fechado Envelopado',
     })
     setFormPecasMdf(mod.pecas_mdf ?? null)
     setFormFerragens(mod.ferragens ?? null)
@@ -299,6 +304,7 @@ export default function LibraryPage() {
       pecas_mdf: formPecasMdf,
       ferragens: formFerragens,
       imagem_url: form.imagem_url.trim() || null,
+      perfil_construtivo: form.perfil_construtivo,
     }
 
     setSaving(true)
@@ -463,6 +469,7 @@ export default function LibraryPage() {
     setPreviewNome('')
     setPreviewDimensoes('')
     setPreviewCategoria('Cozinha')
+    setPreviewPerfil('Fechado Envelopado')
     setImportModalOpen(true)
   }
 
@@ -575,6 +582,28 @@ export default function LibraryPage() {
       setPreviewDimensoes(dimensoes)
       setPreviewCategoria(categoria)
 
+      // Sugere perfil adequado por nome/categoria na importação de PDF
+      const nomeLower = nome.toLowerCase()
+      if (
+        nomeLower.includes('painel') ||
+        nomeLower.includes('tv') ||
+        nomeLower.includes('rack') ||
+        nomeLower.includes('estante')
+      ) {
+        setPreviewPerfil('Aberto / Painel')
+      } else if (
+        nomeLower.includes('balcão') ||
+        nomeLower.includes('balcao') ||
+        nomeLower.includes('pia') ||
+        nomeLower.includes('bancada')
+      ) {
+        setPreviewPerfil('Balcão (tampo por conta do cliente)')
+      } else if (nomeLower.includes('aereo') || nomeLower.includes('aéreo')) {
+        setPreviewPerfil('Caixa Simples')
+      } else {
+        setPreviewPerfil('Fechado Envelopado')
+      }
+
       toast({
         title: 'PDF processado com sucesso!',
         description: `Módulo ${codigo} extraído da ficha técnica.`,
@@ -680,6 +709,7 @@ export default function LibraryPage() {
         pecas_mdf: normalizedPecasMdf.length > 0 ? normalizedPecasMdf : null,
         ferragens: normalizedFerragens.length > 0 ? normalizedFerragens : null,
         imagem_url: uploadedImageUrl || null,
+        perfil_construtivo: previewPerfil,
       }
 
       const result = await createTemplateEngenharia(payload)
@@ -959,6 +989,15 @@ export default function LibraryPage() {
                           {mod.categoria}
                         </Badge>
                       )}
+                      {mod.perfil_construtivo && (
+                        <Badge
+                          variant="outline"
+                          className="bg-sky-50 text-sky-800 border-sky-300 text-[10px] font-semibold"
+                          title="Perfil Construtivo"
+                        >
+                          ⚙️ {mod.perfil_construtivo}
+                        </Badge>
+                      )}
                       {mod.dimensoes && (
                         <Badge
                           variant="outline"
@@ -1076,6 +1115,12 @@ export default function LibraryPage() {
                         <span className="flex items-center gap-1">
                           <Boxes className="w-3.5 h-3.5 text-slate-700" />
                           <strong>Material:</strong> {selectedDetailModule.material}
+                        </span>
+                      )}
+                      {selectedDetailModule.perfil_construtivo && (
+                        <span className="flex items-center gap-1 font-semibold text-sky-800">
+                          <strong>Perfil Construtivo:</strong>{' '}
+                          {selectedDetailModule.perfil_construtivo}
                         </span>
                       )}
                     </div>
@@ -1388,6 +1433,43 @@ export default function LibraryPage() {
               </div>
             </div>
 
+            {/* Campo Perfil Construtivo */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <Label
+                htmlFor="form_perfil_construtivo"
+                className="text-xs font-semibold text-slate-900"
+              >
+                Perfil Construtivo <span className="text-rose-500">*</span>
+              </Label>
+              <Select
+                value={form.perfil_construtivo}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, perfil_construtivo: v as PerfilConstrutivo }))
+                }
+              >
+                <SelectTrigger id="form_perfil_construtivo" className="h-9 text-xs bg-white">
+                  <SelectValue placeholder="Selecione o perfil construtivo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(PERFIS_CONSTRUTIVOS_INFO) as PerfilConstrutivo[]).map((pk) => {
+                    const info = PERFIS_CONSTRUTIVOS_INFO[pk]
+                    return (
+                      <SelectItem key={pk} value={pk} className="text-xs">
+                        <div className="flex flex-col text-left py-0.5">
+                          <span className="font-semibold">{info.label}</span>
+                          <span className="text-[11px] text-slate-500">{info.descCurta}</span>
+                        </div>
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-slate-500">
+                {PERFIS_CONSTRUTIVOS_INFO[form.perfil_construtivo]?.descCurta} — Exemplo:{' '}
+                <em>{PERFIS_CONSTRUTIVOS_INFO[form.perfil_construtivo]?.exemplo}</em>
+              </p>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="dimensoes" className="text-xs font-semibold">
                 Dimensões
@@ -1677,6 +1759,35 @@ export default function LibraryPage() {
                         <SelectItem value="Geral">Geral</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label
+                      htmlFor="preview_perfil"
+                      className="text-xs font-semibold text-slate-700"
+                    >
+                      Perfil Construtivo
+                    </Label>
+                    <Select
+                      value={previewPerfil}
+                      onValueChange={(v) => setPreviewPerfil(v as PerfilConstrutivo)}
+                    >
+                      <SelectTrigger id="preview_perfil" className="h-9 text-xs bg-white">
+                        <SelectValue placeholder="Selecione o perfil construtivo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(PERFIS_CONSTRUTIVOS_INFO) as PerfilConstrutivo[]).map(
+                          (pk) => (
+                            <SelectItem key={pk} value={pk} className="text-xs">
+                              {pk}
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-slate-500">
+                      {PERFIS_CONSTRUTIVOS_INFO[previewPerfil]?.descCurta}
+                    </p>
                   </div>
                 </div>
 

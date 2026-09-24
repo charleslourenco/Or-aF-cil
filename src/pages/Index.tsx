@@ -125,6 +125,7 @@ export default function Index() {
   const [isCustomModuleIA, setIsCustomModuleIA] = useState<boolean>(false)
   const [customModuleNameIA, setCustomModuleNameIA] = useState<string>('')
   const [adaptacoesIA, setAdaptacoesIA] = useState<string | null>(null)
+  const [perfilSugeridoIA, setPerfilSugeridoIA] = useState<string | null>(null)
 
   // 🗄️ DECOMPOSIÇÃO ESTRUTURADA DE MÓDULO (portas, gavetas, prateleiras, interior)
   const [composicaoModulo, setComposicaoModulo] = useState<ModuloComposicao>({
@@ -701,6 +702,16 @@ export default function Index() {
       setErrors((prev) => ({ ...prev, selectedModule: undefined }))
     }
 
+    // Atualiza o perfil construtivo na composição a partir do módulo selecionado
+    const modEscolhido = modulosDisponiveis.find((m) => m.id === val)
+    if (modEscolhido?.perfil_construtivo) {
+      setComposicaoModulo((prev) => ({
+        ...prev,
+        perfilConstrutivo: modEscolhido.perfil_construtivo || undefined,
+        semTamponamento: modEscolhido.perfil_construtivo === 'Caixa Simples',
+      }))
+    }
+
     // Auto-preenche o ambiente quando vazio, com base na categoria do módulo.
     const modulo = modulosDisponiveis.find((m) => m.id === val)
     if (!ambienteSelecionado && !room && modulo?.categoria) {
@@ -764,6 +775,7 @@ export default function Index() {
       codigo_modulo: string
       nome: string
       e_customizado?: boolean
+      perfil_construcao_sugerido?: string
       dimensao_estimada?: { largura: number; altura: number; profundidade: number }
       dimensoes_originais?: { largura: number; altura: number; profundidade: number }
       fator_escala?: number
@@ -835,6 +847,7 @@ export default function Index() {
     // Limpa a justificativa anterior sempre que novos arquivos chegam.
     setMatchJustificativa(null)
     setAdaptacoesIA(null)
+    setPerfilSugeridoIA(null)
     setFatorEscalaIA(null)
     setDimensoesOriginaisIA(null)
     setDimensoesEstimadasIA(null)
@@ -894,6 +907,9 @@ export default function Index() {
           const primeiroModulo = modulosDetectados[0]
           const codigoModulo = primeiroModulo.codigo_modulo
           const eCustom = Boolean(primeiroModulo.e_customizado || codigoModulo === 'MODULO-CUSTOM')
+          if (primeiroModulo.perfil_construcao_sugerido) {
+            setPerfilSugeridoIA(primeiroModulo.perfil_construcao_sugerido)
+          }
 
           setIsCustomModuleIA(eCustom)
           setCustomModuleNameIA(primeiroModulo.nome || 'Módulo Personalizado (Análise IA)')
@@ -977,6 +993,13 @@ export default function Index() {
             }
           })
 
+          // O perfil construtivo vem prioritariamente do módulo da biblioteca casado;
+          // se for módulo customizado ou falhar match, usa a sugestão da IA.
+          const moduloCasado = modulosAtuais.find((m) => m.id === idFinal)
+          const perfilDoModulo =
+            moduloCasado?.perfil_construtivo ||
+            (eCustom ? primeiroModulo.perfil_construcao_sugerido : undefined)
+
           setComposicaoModulo({
             divisorias: {
               qtd: qtdDiv,
@@ -995,6 +1018,8 @@ export default function Index() {
             cabideiro: cabideiroDetectado,
             sapateira: sapateiraDetectada,
             puxadores: puxadoresDetectados,
+            perfilConstrutivo: perfilDoModulo || undefined,
+            semTamponamento: perfilDoModulo === 'Caixa Simples',
           })
 
           // 3. Adiciona cada ferragem obrigatória / material ausente como item manual
@@ -2340,26 +2365,42 @@ export default function Index() {
               </div>
             </div>
 
-            {/* Controles Construtivos do Módulo (Envelopamento e Tampo de Pedra) */}
+            {/* Controles Construtivos do Módulo (Perfil e Overrides) */}
             <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-4">
+              <div className="text-xs bg-sky-50 text-sky-900 border border-sky-200 px-3 py-2 rounded-xl flex items-center gap-2">
+                <span className="font-bold">Perfil Construtivo:</span>
+                <span className="font-semibold">
+                  {composicaoModulo?.perfilConstrutivo ||
+                    selectedModuleObj?.perfil_construtivo ||
+                    (composicaoModulo?.semTamponamento ? 'Caixa Simples' : 'Fechado Envelopado')}
+                </span>
+              </div>
+
               <label className="flex items-center gap-2 cursor-pointer select-none bg-slate-50/80 hover:bg-slate-100 px-3 py-2 rounded-xl border border-slate-200 transition-colors">
                 <Checkbox
                   id="toggle-sem-tamponamento"
-                  checked={Boolean(composicaoModulo?.semTamponamento)}
+                  checked={Boolean(
+                    composicaoModulo?.semTamponamento ||
+                    composicaoModulo?.perfilConstrutivo === 'Caixa Simples',
+                  )}
                   onCheckedChange={(checked) => {
                     setSavedLoadedItems(null)
                     setComposicaoModulo((prev) => ({
                       ...prev,
                       semTamponamento: Boolean(checked),
+                      perfilConstrutivo: checked
+                        ? 'Caixa Simples'
+                        : selectedModuleObj?.perfil_construtivo || 'Fechado Envelopado',
                     }))
                   }}
                 />
                 <div className="text-xs">
                   <span className="font-bold text-slate-800 block">Móvel sem tamponamento</span>
                   <span className="text-[10px] text-slate-500 block">
-                    {composicaoModulo?.semTamponamento
-                      ? 'Caixa simples ativa (sem lateral/teto/base internos)'
-                      : 'Envelopamento ativo por padrão (caixa dupla estrutural)'}
+                    {composicaoModulo?.semTamponamento ||
+                    composicaoModulo?.perfilConstrutivo === 'Caixa Simples'
+                      ? 'Override ativo: Caixa simples (sem laterais/teto/base internos)'
+                      : 'Respeita o perfil do módulo (ex: caixa dupla envelopada ou estrutura aberta)'}
                   </span>
                 </div>
               </label>
@@ -2367,7 +2408,11 @@ export default function Index() {
               <label className="flex items-center gap-2 cursor-pointer select-none bg-slate-50/80 hover:bg-slate-100 px-3 py-2 rounded-xl border border-slate-200 transition-colors">
                 <Checkbox
                   id="toggle-tampo-pedra"
-                  checked={Boolean(composicaoModulo?.tampoPedra)}
+                  checked={Boolean(
+                    composicaoModulo?.tampoPedra ||
+                    composicaoModulo?.perfilConstrutivo === 'Balcão (tampo por conta do cliente)' ||
+                    selectedModuleObj?.perfil_construtivo === 'Balcão (tampo por conta do cliente)',
+                  )}
                   onCheckedChange={(checked) => {
                     setSavedLoadedItems(null)
                     setComposicaoModulo((prev) => ({
@@ -2377,11 +2422,9 @@ export default function Index() {
                   }}
                 />
                 <div className="text-xs">
-                  <span className="font-bold text-slate-800 block">Tampo de pedra</span>
+                  <span className="font-bold text-slate-800 block">Tampo de pedra / avulso</span>
                   <span className="text-[10px] text-slate-500 block">
-                    {composicaoModulo?.tampoPedra
-                      ? 'Travessas no topo; nenhum tampo entra automaticamente'
-                      : 'Topo normal em MDF incluído na caixaria'}
+                    Travessas no topo; nenhum tampo entra automaticamente no orçamento
                   </span>
                 </div>
               </label>
@@ -2458,6 +2501,7 @@ export default function Index() {
                 setSavedLoadedItems(null)
               }}
               adaptacoes={adaptacoesIA}
+              perfilSugeridoIA={perfilSugeridoIA}
               onModuleChange={(id) => {
                 // Troca manual de gabarito: atualiza o card e reseta o estado de análise.
                 handleModuleChange(id)

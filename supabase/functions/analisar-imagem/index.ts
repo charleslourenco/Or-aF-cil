@@ -8,6 +8,7 @@ interface ModuloInfo {
   dimensoes?: string | null
   assinatura_visual?: string[] | null
   descricao?: string | null
+  perfil_construtivo?: string | null
 }
 
 interface CatalogoMaterialInfo {
@@ -46,10 +47,17 @@ export interface DecomposicaoModulo {
   puxadores: number
 }
 
+export type PerfilConstrucaoSugerido =
+  | 'Fechado Envelopado'
+  | 'Balcão (tampo por conta do cliente)'
+  | 'Aberto / Painel'
+  | 'Caixa Simples'
+
 interface ModuloDetectado {
   codigo_modulo: string
   nome: string
   e_customizado?: boolean
+  perfil_construcao_sugerido?: PerfilConstrucaoSugerido
   dimensao_estimada?: Dimensoes3D
   dimensoes_originais?: Dimensoes3D
   fator_escala?: number
@@ -151,7 +159,8 @@ Deno.serve(async (req: Request) => {
               const tags = m.assinatura_visual?.join(', ') ?? ''
               const cat = m.categoria ? ` | Categoria: ${m.categoria}` : ''
               const dim = m.dimensoes ? ` | Dimensões padrão: ${m.dimensoes}` : ''
-              return `ID: ${m.id} | Nome: ${m.nome_template}${cat}${dim}${tags ? ` | Tags: ${tags}` : ''}`
+              const perf = m.perfil_construtivo ? ` | Perfil: ${m.perfil_construtivo}` : ''
+              return `ID: ${m.id} | Nome: ${m.nome_template}${cat}${dim}${perf}${tags ? ` | Tags: ${tags}` : ''}`
             })
             .join('\n')
         : 'Nenhum módulo pré-cadastrado na biblioteca.'
@@ -182,6 +191,11 @@ ${listaCatalogoText}
      "codigo_modulo": "MODULO-CUSTOM",
      "nome": "Módulo Personalizado (Análise IA)",
      "e_customizado": true
+   - Sugira o "perfil_construcao_sugerido" para o módulo (apenas como sugestão, especialmente para módulos customizados):
+     * "Fechado Envelopado": para armários, roupeiros, guarda-roupas, móveis fechados com caixa dupla.
+     * "Balcão (tampo por conta do cliente)": para balcões de pia, gabinetes inferiores ou bancadas de cozinha/banheiro onde o topo receberá tampo de granito/madeira avulso.
+     * "Aberto / Painel": para painel de TV, racks abertos, estantes abertas, nichos sem fechamento, sem base/teto internos nem rodateto.
+     * "Caixa Simples": para aéreos simples e caixas sem tamponamento externo.
    - NUNCA invente IDs aleatórios e NUNCA force o primeiro módulo da lista se não houver correspondência exata/adequada.
 
 2. DECOMPOSIÇÃO ESTRUTURADA DE COMPONENTES E INTERIOR VISÍVEL:
@@ -214,6 +228,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
       "codigo_modulo": "ID_REAL_OU_MODULO-CUSTOM",
       "nome": "Nome do módulo",
       "e_customizado": false,
+      "perfil_construcao_sugerido": "Fechado Envelopado",
       "dimensao_estimada": { "largura": 1800, "altura": 2200, "profundidade": 600 },
       "divisorias": { "qtd": 1 },
       "portas": { "qtd": 2, "tipo": "abrir" },
@@ -371,10 +386,42 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
       const sapateira = Boolean(m.sapateira)
       const puxadores = Math.max(0, Number(m.puxadores ?? qtdPortas + qtdGavetas) || 0)
 
+      // Validação do perfil sugerido
+      let perfilSugerido: PerfilConstrucaoSugerido = 'Fechado Envelopado'
+      const perfilRaw = String(m.perfil_construcao_sugerido || '').trim()
+      if (
+        perfilRaw === 'Fechado Envelopado' ||
+        perfilRaw === 'Balcão (tampo por conta do cliente)' ||
+        perfilRaw === 'Aberto / Painel' ||
+        perfilRaw === 'Caixa Simples'
+      ) {
+        perfilSugerido = perfilRaw as PerfilConstrucaoSugerido
+      } else {
+        const nomeLower = nome.toLowerCase()
+        if (
+          nomeLower.includes('painel') ||
+          nomeLower.includes('tv') ||
+          nomeLower.includes('rack') ||
+          nomeLower.includes('estante')
+        ) {
+          perfilSugerido = 'Aberto / Painel'
+        } else if (
+          nomeLower.includes('balcão') ||
+          nomeLower.includes('balcao') ||
+          nomeLower.includes('pia') ||
+          nomeLower.includes('bancada')
+        ) {
+          perfilSugerido = 'Balcão (tampo por conta do cliente)'
+        } else if (nomeLower.includes('aereo') || nomeLower.includes('aéreo')) {
+          perfilSugerido = 'Caixa Simples'
+        }
+      }
+
       return {
         codigo_modulo: codigo,
         nome,
         e_customizado: eCustomizado,
+        perfil_construcao_sugerido: perfilSugerido,
         dimensao_estimada: dimensaoEstimada,
         dimensoes_originais: dimensoesOriginais,
         fator_escala: fatorEscala,
@@ -415,6 +462,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
           codigo_modulo: 'MODULO-CUSTOM',
           nome: 'Módulo Personalizado (Análise IA)',
           e_customizado: true,
+          perfil_construcao_sugerido: 'Fechado Envelopado',
           dimensao_estimada: { largura: 1800, altura: 2200, profundidade: 600 },
           fator_escala: 1.0,
           divisorias: { qtd: 0 },

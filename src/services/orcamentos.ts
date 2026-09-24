@@ -73,6 +73,7 @@ export interface ComposicaoModuloPersistida {
   adaptacoes?: string
   semTamponamento?: boolean
   tampoPedra?: boolean
+  perfilConstrutivo?: string
 }
 
 export interface ModuloOrcamento {
@@ -89,6 +90,7 @@ export interface ModuloOrcamento {
   subtotal: number
   composicao?: ComposicaoModuloPersistida
   adaptacoes?: string
+  perfil_construtivo?: string
 }
 
 export interface AmbienteOrcamento {

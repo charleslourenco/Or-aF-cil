@@ -2,6 +2,45 @@ import { supabase } from '@/lib/supabase/client'
 
 export type ModuleIconType = 'wardrobe' | 'counter' | 'aerial'
 
+/**
+ * Perfis construtivos definidos por cada módulo de engenharia na biblioteca.
+ * Nomenclatura oficial do ofício de marcenaria.
+ */
+export type PerfilConstrutivo =
+  | 'Fechado Envelopado'
+  | 'Balcão (tampo por conta do cliente)'
+  | 'Aberto / Painel'
+  | 'Caixa Simples'
+
+export const PERFIS_CONSTRUTIVOS_INFO: Record<
+  PerfilConstrutivo,
+  { label: string; descCurta: string; exemplo: string }
+> = {
+  'Fechado Envelopado': {
+    label: 'Fechado Envelopado',
+    descCurta:
+      'Caixa dupla: laterais externas + internas, tampo externo + teto interno, base interna, rodapé e rodateto.',
+    exemplo: 'Roupeiro, armário fechado, guarda-roupa.',
+  },
+  'Balcão (tampo por conta do cliente)': {
+    label: 'Balcão (tampo por conta do cliente)',
+    descCurta:
+      'Caixa com travessas de apoio no topo (frontal + traseira). Sem tampo de MDF nem pedra.',
+    exemplo: 'Balcão de pia, bancada, gabinete inferior.',
+  },
+  'Aberto / Painel': {
+    label: 'Aberto / Painel',
+    descCurta:
+      'Estrutura aberta: laterais, base inferior, prateleiras/travessas. Sem teto interno, sem base interna, sem rodateto, sem fundo fechado.',
+    exemplo: 'Painel de TV, rack, estante aberta, nicho.',
+  },
+  'Caixa Simples': {
+    label: 'Caixa Simples',
+    descCurta: 'Caixa única tradicional sem caixaria interna (sem envelopamento).',
+    exemplo: 'Aéreo simples, nicho fechado básico.',
+  },
+}
+
 export interface PecaMdfItem {
   codigo?: string | null
   descricao?: string | null
@@ -28,6 +67,7 @@ export interface TemplateEngenharia {
   pecas_mdf?: PecaMdfItem[] | null
   ferragens?: FerragemItem[] | null
   imagem_url?: string | null
+  perfil_construtivo?: PerfilConstrutivo | string | null
 }
 
 /** Payload aceito pelas funções de criação/atualização de módulos. */
@@ -43,6 +83,7 @@ export type TemplateEngenhariaInput = {
   pecas_mdf?: PecaMdfItem[] | null
   ferragens?: FerragemItem[] | null
   imagem_url?: string | null
+  perfil_construtivo?: PerfilConstrutivo | string | null
 }
 
 /**
@@ -60,7 +101,7 @@ export async function fetchTemplatesEngenharia(): Promise<{
   const { data, error } = await (supabase as any)
     .from('TemplatesEngenharia')
     .select(
-      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens, imagem_url',
+      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens, imagem_url, perfil_construtivo',
     )
     .order('nome_template')
     .limit(100)
@@ -94,9 +135,10 @@ export async function createTemplateEngenharia(
       pecas_mdf: payload.pecas_mdf ?? null,
       ferragens: payload.ferragens ?? null,
       imagem_url: payload.imagem_url ?? null,
+      perfil_construtivo: payload.perfil_construtivo ?? 'Fechado Envelopado',
     })
     .select(
-      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens, imagem_url',
+      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens, imagem_url, perfil_construtivo',
     )
     .single()
 
@@ -130,10 +172,14 @@ export async function updateTemplateEngenharia(
       pecas_mdf: payload.pecas_mdf ?? null,
       ferragens: payload.ferragens ?? null,
       imagem_url: payload.imagem_url !== undefined ? payload.imagem_url : undefined,
+      perfil_construtivo:
+        payload.perfil_construtivo !== undefined
+          ? (payload.perfil_construtivo ?? 'Fechado Envelopado')
+          : undefined,
     })
     .eq('id', id)
     .select(
-      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens, imagem_url',
+      'id, nome_template, categoria, dimensoes, material, descricao, icon_type, assinatura_visual, codigo, pecas_mdf, ferragens, imagem_url, perfil_construtivo',
     )
     .single()
 

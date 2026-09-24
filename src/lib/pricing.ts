@@ -1,5 +1,6 @@
 import { BudgetItem } from '@/data/mockData'
 import type { CatalogoMaterial } from '@/services/catalogo'
+import type { PerfilConstrutivo } from '@/services/templates'
 
 /**
  * Tipos de entrada para o motor de cálculo geométrico da BOM (Bill of Materials).
@@ -51,6 +52,8 @@ export interface ModuloComposicao {
   semTamponamento?: boolean
   /** Se true ou se o móvel for balcão com tampo de pedra, substitui o tampo/topo por travessas (padrão: false) */
   tampoPedra?: boolean
+  /** Perfil construtivo selecionado ou override (Fechado Envelopado, Balcão, Aberto / Painel, Caixa Simples) */
+  perfilConstrutivo?: PerfilConstrutivo | string
 }
 
 /**
@@ -248,7 +251,10 @@ function findItemCatalogo(
 }
 
 export function calcularBOM(
-  modulo: { id: string; nome_template?: string } | null | undefined,
+  modulo:
+    | { id: string; nome_template?: string; perfil_construtivo?: string | null }
+    | null
+    | undefined,
   dimensoes: Dimensoes,
   mdfExterno: MdfSpec,
   mdfInterno: MdfSpec,
@@ -278,17 +284,55 @@ export function calcularBOM(
   const pecas: BudgetItem[] = []
 
   // Verifica se há decomposição/composição fornecida (portas/gavetas/prateleiras/cabideiro/sapateira)
-  // Se composicao não for informada, mantém a receita padrão fixa de 6 itens (legado).
   const temComposicao = composicao !== null && composicao !== undefined
 
-  // Detecção de balcão pelo nome do template ou opção explícita
+  // =========================================================================
+  // DETERMINAÇÃO DO PERFIL CONSTRUTIVO
+  // Prioridade:
+  // 1. Override explícito em composicao.perfilConstrutivo (se setado)
+  // 2. Override legado / atalho: semTamponamento força "Caixa Simples"
+  // 3. Perfil definido no cadastro do módulo da biblioteca (modulo.perfil_construtivo)
+  // 4. Inferência por nome de template como fallback seguro
+  // 5. Default seguro: 'Fechado Envelopado'
+  // =========================================================================
   const nomeTemplateLower = (modulo?.nome_template || '').toLowerCase()
-  const isBalcaoPorNome =
-    nomeTemplateLower.includes('balcão') || nomeTemplateLower.includes('balcao')
-  const isTampoPedra = Boolean(composicao?.tampoPedra || isBalcaoPorNome)
+  let perfilEfetivo: PerfilConstrutivo = 'Fechado Envelopado'
 
-  // Envelopamento é o PADRÃO para todos os móveis, a menos que o usuário ative "Móvel sem tamponamento"
-  const isSemTamponamento = Boolean(composicao?.semTamponamento)
+  if (composicao?.perfilConstrutivo) {
+    perfilEfetivo = composicao.perfilConstrutivo as PerfilConstrutivo
+  } else if (composicao?.semTamponamento) {
+    perfilEfetivo = 'Caixa Simples'
+  } else if (modulo?.perfil_construtivo) {
+    perfilEfetivo = modulo.perfil_construtivo as PerfilConstrutivo
+  } else {
+    // Fallback por nome
+    if (
+      nomeTemplateLower.includes('painel') ||
+      nomeTemplateLower.includes('tv') ||
+      nomeTemplateLower.includes('rack') ||
+      nomeTemplateLower.includes('estante') ||
+      nomeTemplateLower.includes('nicho')
+    ) {
+      perfilEfetivo = 'Aberto / Painel'
+    } else if (
+      nomeTemplateLower.includes('balcão') ||
+      nomeTemplateLower.includes('balcao') ||
+      nomeTemplateLower.includes('pia') ||
+      nomeTemplateLower.includes('bancada')
+    ) {
+      perfilEfetivo = 'Balcão (tampo por conta do cliente)'
+    } else if (nomeTemplateLower.includes('aereo') || nomeTemplateLower.includes('aéreo')) {
+      perfilEfetivo = 'Caixa Simples'
+    } else {
+      perfilEfetivo = 'Fechado Envelopado'
+    }
+  }
+
+  // Flags derivadas do perfil efetivo
+  const isFechadoEnvelopado = perfilEfetivo === 'Fechado Envelopado'
+  const isBalcao = perfilEfetivo === 'Balcão (tampo por conta do cliente)'
+  const isAbertoPainel = perfilEfetivo === 'Aberto / Painel'
+  const isCaixaSimples = perfilEfetivo === 'Caixa Simples'
 
   // =========================================================================
   // DIMENSÕES E SUBTRAÇÕES PARAMÉTRICAS (MEDIDAS EXTERNAS SÃO AS FINAIS)
@@ -297,6 +341,7 @@ export function calcularBOM(
     PARAMS_CONSTRUTIVOS
 
   // 1. Laterais Externas: 2x (A × P) em MDF Externo
+  // Presente em todos os perfis estruturais
   const areaLateralExt = ((A * P) / 1_000_000) * PERDA * escala
   pecas.push(
     criarPeca(
@@ -311,15 +356,14 @@ export function calcularBOM(
     ),
   )
 
-  // 2. Tampo/Topo Externo vs Travessas de apoio (para tampo de pedra)
-  // Largura entre as laterais externas
   const larguraEntreLateraisExt = Math.max(100, L - 2 * espExt)
+  const profInterna = Math.max(100, P - recuo_caixa_interna_mm)
+  const largCaixariaInt = Math.max(100, L - 2 * espExt - 2 * espInt)
 
-  if (isTampoPedra) {
-    // Balcão com tampo de pedra: NÃO gerar tampo de MDF nem pedra.
-    // Gerar TRAVESSAS de apoio no topo da caixa:
-    // - Travessa frontal: L × altura_travessa_mm (ou entre laterais)
-    // - Travessa traseira: larguraEntreLateraisExt × altura_travessa_mm
+  // 2. Cobertura / Topo e Base de acordo com o Perfil Construtivo:
+  if (isBalcao) {
+    // BALCÃO: NUNCA gera tampo de MDF (nem pedra).
+    // Gera TRAVESSAS de apoio no topo (frontal e traseira) + BASE inferior estrutural simples.
     const areaTravessaFrontal = ((L * altura_travessa_mm) / 1_000_000) * PERDA * escala
     const areaTravessaTraseira =
       ((larguraEntreLateraisExt * altura_travessa_mm) / 1_000_000) * PERDA * escala
@@ -350,73 +394,94 @@ export function calcularBOM(
       ),
     )
 
-    // Se sem tamponamento e com tampo de pedra, precisa da base inferior externa/simples
-    if (isSemTamponamento) {
-      const areaBaseSimples = ((larguraEntreLateraisExt * P) / 1_000_000) * PERDA * escala
+    // Base inferior do balcão (1x)
+    const areaBaseBalcao = ((larguraEntreLateraisExt * P) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-base-simples',
+        `Base Inferior (1x) — ${larguraEntreLateraisExt}×${P}mm`,
+        'MDF Externo',
+        espExt,
+        areaBaseBalcao,
+        'm²',
+        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+
+    // Rodapé de balcão (se tiver altura_rodape_mm)
+    if (altura_rodape_mm > 0) {
+      const areaRodapeM2 = (((L + 2 * P) * altura_rodape_mm) / 1_000_000) * PERDA * escala
       pecas.push(
         criarPeca(
-          'bom-base-simples',
-          `Base Inferior (1x) — ${larguraEntreLateraisExt}×${P}mm`,
+          'bom-rodape',
+          `Rodapé Inferior (1 jogo: frente + 2 lat.) — h=${altura_rodape_mm}mm`,
           'MDF Externo',
           espExt,
-          areaBaseSimples,
+          areaRodapeM2,
           'm²',
           resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
           effectiveMarkup,
         ),
       )
     }
+  } else if (isAbertoPainel) {
+    // ABERTO / PAINEL: estrutura aberta.
+    // Base/estrutura inferior (1x) e tampo/topo estrutural simples (1x) se aplicável.
+    // SEM teto interno, SEM base interna, SEM rodateto, SEM caixa dupla.
+    const areaBaseTopo = ((larguraEntreLateraisExt * P) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-base-inferior-painel',
+        `Base Inferior / Prateleira Estrutural (1x) — ${larguraEntreLateraisExt}×${P}mm`,
+        'MDF Externo',
+        espExt,
+        areaBaseTopo,
+        'm²',
+        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+  } else if (isCaixaSimples) {
+    // CAIXA SIMPLES: caixa única tradicional sem caixaria interna.
+    // Base e Topo (2x) em MDF Externo.
+    const areaBaseTopo = ((larguraEntreLateraisExt * P) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-base-topo',
+        `Base e Topo (2x) — ${larguraEntreLateraisExt}×${P}mm`,
+        'MDF Externo',
+        espExt,
+        areaBaseTopo * 2,
+        'm²',
+        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
   } else {
-    // Móvel tradicional (com topo de MDF):
-    if (isSemTamponamento) {
-      // Caixa simples: Base e Topo (2x)
-      const areaBaseTopo = ((larguraEntreLateraisExt * P) / 1_000_000) * PERDA * escala
-      pecas.push(
-        criarPeca(
-          'bom-base-topo',
-          `Base e Topo (2x) — ${larguraEntreLateraisExt}×${P}mm`,
-          'MDF Externo',
-          espExt,
-          areaBaseTopo * 2,
-          'm²',
-          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
-          effectiveMarkup,
-        ),
-      )
-    } else {
-      // Envelopado: Tampo/Teto Externo (1x) em MDF Externo
-      const areaTampoExt = ((larguraEntreLateraisExt * P) / 1_000_000) * PERDA * escala
-      pecas.push(
-        criarPeca(
-          'bom-tampo-externo',
-          `Tampo/Teto Externo (1x) — ${larguraEntreLateraisExt}×${P}mm`,
-          'MDF Externo',
-          espExt,
-          areaTampoExt,
-          'm²',
-          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
-          effectiveMarkup,
-        ),
-      )
-    }
-  }
+    // FECHADO ENVELOPADO (Caixa Dupla Completa):
+    // 1x Tampo/Teto Externo em MDF Externo
+    const areaTampoExt = ((larguraEntreLateraisExt * P) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-tampo-externo',
+        `Tampo/Teto Externo (1x) — ${larguraEntreLateraisExt}×${P}mm`,
+        'MDF Externo',
+        espExt,
+        areaTampoExt,
+        'm²',
+        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
 
-  // 3. Caixaria Interna Estrutural (Envelopamento)
-  // Calculada se NÃO for semTamponamento
-  // - Lateral interna (2x) em MDF Interno
-  // - Teto interno (1x) em MDF Interno (o teto interno continua contando como caixaria normal mesmo em tampo de pedra)
-  // - Base interna (1x) em MDF Interno
-  // - Rodapé (1 jogo) em MDF Externo
-  // - Rodateto (1 jogo) em MDF Externo (se não for balcão com tampo de pedra)
-  const profInterna = Math.max(100, P - recuo_caixa_interna_mm)
-  // Altura da lateral interna: assenta sobre rodapé e encosta sob o teto externo/travessa
-  // Subtrai rodapé e a espessura do topo externo (ou travessa)
-  const altLateralInt = Math.max(100, A - altura_rodape_mm - (isTampoPedra ? 0 : espExt))
-  // Largura interna da caixaria: entre as laterais externas e entre as laterais internas
-  const largCaixariaInt = Math.max(100, L - 2 * espExt - 2 * espInt)
-
-  if (!isSemTamponamento) {
-    // 3a. Laterais Internas Estruturais (2x) em MDF Interno
+    // Caixaria Interna Estrutural (Envelopamento):
+    // - Lateral interna (2x) em MDF Interno
+    // - Teto interno (1x) em MDF Interno
+    // - Base interna (1x) em MDF Interno
+    // - Rodapé (1 jogo) em MDF Externo
+    // - Rodateto (1 jogo) em MDF Externo
+    const altLateralInt = Math.max(100, A - altura_rodape_mm - espExt)
     const areaLatInt = ((altLateralInt * profInterna) / 1_000_000) * PERDA * escala
     pecas.push(
       criarPeca(
@@ -431,7 +496,6 @@ export function calcularBOM(
       ),
     )
 
-    // 3b. Teto Interno Estrutural (1x) em MDF Interno
     const areaTetoInt = ((largCaixariaInt * profInterna) / 1_000_000) * PERDA * escala
     pecas.push(
       criarPeca(
@@ -446,7 +510,6 @@ export function calcularBOM(
       ),
     )
 
-    // 3c. Base Interna Estrutural (1x) em MDF Interno
     const areaBaseInt = ((largCaixariaInt * profInterna) / 1_000_000) * PERDA * escala
     pecas.push(
       criarPeca(
@@ -461,7 +524,6 @@ export function calcularBOM(
       ),
     )
 
-    // 3d. Rodapé (1 jogo: frente + 2 laterais do vão inferior) em MDF Externo
     const areaRodapeM2 = (((L + 2 * P) * altura_rodape_mm) / 1_000_000) * PERDA * escala
     pecas.push(
       criarPeca(
@@ -476,8 +538,7 @@ export function calcularBOM(
       ),
     )
 
-    // 3e. Rodateto (1 jogo: frente + 2 laterais do vão superior) em MDF Externo (apenas se não for tampo de pedra)
-    if (!isTampoPedra && altura_rodateto_mm > 0) {
+    if (altura_rodateto_mm > 0) {
       const areaRodatetoM2 = (((L + 2 * P) * altura_rodateto_mm) / 1_000_000) * PERDA * escala
       pecas.push(
         criarPeca(
@@ -494,26 +555,35 @@ export function calcularBOM(
     }
   }
 
-  // 4. Fundo: 1x (L × A) com fator de escala aplicado aos m² de MDF
-  const areaFundo = ((L * A) / 1_000_000) * PERDA * escala
-  pecas.push(
-    criarPeca(
-      'bom-fundo',
-      `Fundo (1x) — ${L}×${A}mm`,
-      'MDF Fundo',
-      6,
-      areaFundo,
-      'm²',
-      resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto),
-      effectiveMarkup,
-    ),
-  )
+  // 3. Fundo:
+  // Em Fechado Envelopado, Balcão e Caixa Simples o fundo fechado (1x L×A) em 6mm é gerado.
+  // Em "Aberto / Painel", o fundo fechado de 6mm NÃO é gerado compulsoriamente (móvel aberto).
+  if (!isAbertoPainel) {
+    const areaFundo = ((L * A) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-fundo',
+        `Fundo (1x) — ${L}×${A}mm`,
+        'MDF Fundo',
+        6,
+        areaFundo,
+        'm²',
+        resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+  }
+
+  // Altura lateral interna de referência para peças internas
+  const altLateralIntRef = isFechadoEnvelopado
+    ? Math.max(100, A - altura_rodape_mm - espExt)
+    : Math.max(100, A - 2 * espExt)
 
   // Vão livre útil para prateleiras internas e portas
-  const larguraVaoUtil = isSemTamponamento ? larguraEntreLateraisExt : largCaixariaInt
-  const alturaVaoUtil = isSemTamponamento
-    ? Math.max(100, A - 2 * espExt)
-    : Math.max(100, altLateralInt - 2 * espInt)
+  const larguraVaoUtil = isFechadoEnvelopado ? largCaixariaInt : larguraEntreLateraisExt
+  const alturaVaoUtil = isFechadoEnvelopado
+    ? Math.max(100, altLateralIntRef - 2 * espInt)
+    : Math.max(100, A - 2 * espExt)
 
   if (!temComposicao) {
     // RECEITA FIXA LEGADA (para orçamentos antigos reabertos ou módulos sem decomposição)
@@ -576,9 +646,10 @@ export function calcularBOM(
     Math.round((larguraVaoUtil - qtdDivisorias * espInt) / qtdCorpos),
   )
 
-  // Altura da divisória vertical: igual à altura das laterais internas estruturais
-  // Profundidade da divisória: igual a profInterna (P - recuo_caixa_interna)
-  const altDivisoria = isSemTamponamento ? Math.max(100, A - 2 * espExt) : altLateralInt
+  // Altura da divisória vertical: igual à altura interna
+  const altDivisoria = isFechadoEnvelopado
+    ? Math.max(100, A - altura_rodape_mm - espExt)
+    : Math.max(100, A - 2 * espExt)
   const profDivisoria = profInterna
 
   // 3f. Divisórias Verticais Internas (em MDF Interno)
@@ -648,9 +719,10 @@ export function calcularBOM(
   // Acumulador de fita de borda (em mm)
   // Estrutura externa base: laterais (2x frentes + 2x fundos) + tampo/base + fita de borda de peças internas visíveis
   let perimetroFitaMm = (2 * (A * 2) + 2 * (larguraEntreLateraisExt * 2)) * escala
-  if (!isSemTamponamento) {
+  if (isFechadoEnvelopado) {
     // Bordas frontais das laterais internas, teto e base internos
-    perimetroFitaMm += (2 * altLateralInt + 2 * largCaixariaInt) * escala
+    const altLatInt = Math.max(100, A - altura_rodape_mm - espExt)
+    perimetroFitaMm += (2 * altLatInt + 2 * largCaixariaInt) * escala
   }
 
   // Fita de borda na frente vertical de cada divisória interna
