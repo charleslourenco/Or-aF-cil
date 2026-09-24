@@ -415,6 +415,14 @@ export async function deleteOrcamento(id: string): Promise<boolean> {
       return false
     }
 
+    // Se houver qualquer rascunho vinculado a este orçamento no localStorage, descarta imediatamente
+    try {
+      const { clearDraftIfMatchesOrcamentoId } = await import('@/lib/draftStorage')
+      clearDraftIfMatchesOrcamentoId(id)
+    } catch {
+      // Falha silenciosa em ambiente sem window/localStorage
+    }
+
     return true
   } catch (err) {
     console.error(`Erro inesperado ao deletar orçamento com id ${id}:`, err)

@@ -75,38 +75,15 @@ import type {
 import { ChevronDown, ChevronUp, Trash2, FolderPlus, RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
+import {
+  clearDraftStorage as clearDraftUtil,
+  readDraftFromStorage,
+  writeDraftToStorage,
+  type DraftData,
+} from '@/lib/draftStorage'
 
 // Ambientes permitidos no Select (array estático conforme especificação).
 const AMBIENTES = ['Cozinha', 'Quarto', 'Sala', 'Banheiro']
-
-const DRAFT_STORAGE_PREFIX = 'orcafacil_draft_novo_orcamento'
-
-interface DraftData {
-  version: 1
-  savedAt: number
-  clientName: string
-  room: string
-  ambienteSelecionado: string
-  selectedModuleId: string
-  ambientes: AmbienteOrcamento[]
-  activeAmbienteId: string
-  dimensoes: { largura: number; altura: number; profundidade: number }
-  composicaoModulo: ModuloComposicao
-  padraoProjeto: PadraoProjeto
-  mdfExterno: { cor: string; espessura: 15 | 18 }
-  mdfInterno: { cor: string; espessura: 15 | 18 }
-  mdfFundo: string
-  formaPagamento: string
-  observacoes: string
-  showResults: boolean
-  manualItems: BudgetItem[]
-  uploadedFilesMeta: Array<{
-    id: string
-    name: string
-    size: number
-    previewUrl?: string
-  }>
-}
 
 export default function Index() {
   const [searchParams] = useSearchParams()
@@ -240,12 +217,10 @@ export default function Index() {
   const [observacoes, setObservacoes] = useState('')
 
   // 📝 RASCUNHO AUTOMÁTICO (localStorage)
-  const draftStorageKey = useMemo(() => {
-    return user?.id ? `${DRAFT_STORAGE_PREFIX}_${user.id}` : DRAFT_STORAGE_PREFIX
-  }, [user?.id])
-
   const [hasRestoredDraft, setHasRestoredDraft] = useState<boolean>(false)
   const [draftRestoredTime, setDraftRestoredTime] = useState<string | null>(null)
+  // ID do orçamento ao qual o rascunho atual está vinculado (se houver)
+  const [draftLinkedOrcamentoId, setDraftLinkedOrcamentoId] = useState<string | null>(null)
   const isDraftInitializedRef = useRef<boolean>(false)
 
   // Section references for scrolling
@@ -255,13 +230,8 @@ export default function Index() {
 
   // Função para limpar rascunho com segurança
   const clearDraftStorage = () => {
-    try {
-      localStorage.removeItem(draftStorageKey)
-      // Remove também a chave genérica caso estivesse salva nela
-      localStorage.removeItem(DRAFT_STORAGE_PREFIX)
-    } catch (e) {
-      console.warn('Erro ao limpar rascunho do localStorage:', e)
-    }
+    clearDraftUtil(user?.id)
+    setDraftLinkedOrcamentoId(null)
   }
 
   // Função para restaurar o formulário zerado ao descartar rascunho
@@ -269,6 +239,7 @@ export default function Index() {
     clearDraftStorage()
     setHasRestoredDraft(false)
     setDraftRestoredTime(null)
+    setDraftLinkedOrcamentoId(null)
     setClientName('')
     setRoom('')
     setAmbienteSelecionado('')
@@ -308,68 +279,92 @@ export default function Index() {
     if (isDraftInitializedRef.current) return
     isDraftInitializedRef.current = true
 
-    try {
-      const raw =
-        localStorage.getItem(draftStorageKey) || localStorage.getItem(DRAFT_STORAGE_PREFIX)
-      if (!raw) return
+    let isCancelled = false
 
-      const parsed: DraftData = JSON.parse(raw)
-      if (!parsed || parsed.version !== 1) return
+    const initDraft = async () => {
+      try {
+        const parsed = readDraftFromStorage(user?.id)
+        if (!parsed) return
 
-      // Verifica se o rascunho tem algum dado preenchido
-      const hasContent =
-        Boolean(parsed.clientName?.trim()) ||
-        Boolean(parsed.selectedModuleId) ||
-        (Array.isArray(parsed.ambientes) && parsed.ambientes.length > 0) ||
-        (Array.isArray(parsed.manualItems) && parsed.manualItems.length > 0)
+        // 1. SE O RASCUNHO ESTIVER VINCULADO A UM ORÇAMENTO, VALIDA SE ELE AINDA EXISTE NO BANCO
+        if (parsed.orcamentoId) {
+          const { data: existingRecord, error } = await supabase
+            .from('Orcamentos')
+            .select('id')
+            .eq('id', parsed.orcamentoId)
+            .maybeSingle()
 
-      if (!hasContent) return
+          if (isCancelled) return
 
-      if (parsed.clientName) setClientName(parsed.clientName)
-      if (parsed.room) setRoom(parsed.room)
-      if (parsed.ambienteSelecionado) setAmbienteSelecionado(parsed.ambienteSelecionado)
-      if (parsed.selectedModuleId) setSelectedModuleId(parsed.selectedModuleId)
-      if (Array.isArray(parsed.ambientes)) setAmbientes(parsed.ambientes)
-      if (parsed.activeAmbienteId) setActiveAmbienteId(parsed.activeAmbienteId)
-      if (parsed.dimensoes) setDimensoes(parsed.dimensoes)
-      if (parsed.composicaoModulo) setComposicaoModulo(parsed.composicaoModulo)
-      if (parsed.padraoProjeto) setPadraoProjeto(parsed.padraoProjeto)
-      if (parsed.mdfExterno) setMdfExterno(parsed.mdfExterno)
-      if (parsed.mdfInterno) setMdfInterno(parsed.mdfInterno)
-      if (parsed.mdfFundo) setMdfFundo(parsed.mdfFundo)
-      if (parsed.formaPagamento) setFormaPagamento(parsed.formaPagamento)
-      if (parsed.observacoes) setObservacoes(parsed.observacoes)
-      if (typeof parsed.showResults === 'boolean') setShowResults(parsed.showResults)
-      if (Array.isArray(parsed.manualItems)) setManualItems(parsed.manualItems)
+          // Se deu erro ou o orçamento não existe mais no banco, descarta o rascunho silenciosamente
+          if (error || !existingRecord) {
+            clearDraftUtil(user?.id)
+            return
+          }
+        }
 
-      if (Array.isArray(parsed.uploadedFilesMeta) && parsed.uploadedFilesMeta.length > 0) {
-        const restoredUploads: UploadedFileState[] = parsed.uploadedFilesMeta.map((meta) => ({
-          file: new File([], meta.name, { type: 'image/jpeg' }),
-          previewUrl: meta.previewUrl || '',
-          name: meta.name,
-          sizeFormatted: meta.size > 0 ? `${(meta.size / 1024).toFixed(1)} KB` : '0 B',
-          isPdf: meta.name.toLowerCase().endsWith('.pdf'),
-        }))
-        setUploadedFiles(restoredUploads)
+        // 2. Verifica se o rascunho tem algum dado preenchido
+        const hasContent =
+          Boolean(parsed.clientName?.trim()) ||
+          Boolean(parsed.selectedModuleId) ||
+          (Array.isArray(parsed.ambientes) && parsed.ambientes.length > 0) ||
+          (Array.isArray(parsed.manualItems) && parsed.manualItems.length > 0)
+
+        if (!hasContent) return
+
+        if (parsed.clientName) setClientName(parsed.clientName)
+        if (parsed.room) setRoom(parsed.room)
+        if (parsed.ambienteSelecionado) setAmbienteSelecionado(parsed.ambienteSelecionado)
+        if (parsed.selectedModuleId) setSelectedModuleId(parsed.selectedModuleId)
+        if (Array.isArray(parsed.ambientes)) setAmbientes(parsed.ambientes)
+        if (parsed.activeAmbienteId) setActiveAmbienteId(parsed.activeAmbienteId)
+        if (parsed.dimensoes) setDimensoes(parsed.dimensoes)
+        if (parsed.composicaoModulo) setComposicaoModulo(parsed.composicaoModulo)
+        if (parsed.padraoProjeto) setPadraoProjeto(parsed.padraoProjeto)
+        if (parsed.mdfExterno) setMdfExterno(parsed.mdfExterno)
+        if (parsed.mdfInterno) setMdfInterno(parsed.mdfInterno)
+        if (parsed.mdfFundo) setMdfFundo(parsed.mdfFundo)
+        if (parsed.formaPagamento) setFormaPagamento(parsed.formaPagamento)
+        if (parsed.observacoes) setObservacoes(parsed.observacoes)
+        if (typeof parsed.showResults === 'boolean') setShowResults(parsed.showResults)
+        if (Array.isArray(parsed.manualItems)) setManualItems(parsed.manualItems)
+        if (parsed.orcamentoId) setDraftLinkedOrcamentoId(parsed.orcamentoId)
+
+        if (Array.isArray(parsed.uploadedFilesMeta) && parsed.uploadedFilesMeta.length > 0) {
+          const restoredUploads: UploadedFileState[] = parsed.uploadedFilesMeta.map((meta) => ({
+            file: new File([], meta.name, { type: 'image/jpeg' }),
+            previewUrl: meta.previewUrl || '',
+            name: meta.name,
+            sizeFormatted: meta.size > 0 ? `${(meta.size / 1024).toFixed(1)} KB` : '0 B',
+            isPdf: meta.name.toLowerCase().endsWith('.pdf'),
+          }))
+          setUploadedFiles(restoredUploads)
+        }
+
+        setHasRestoredDraft(true)
+        const dateStr = parsed.savedAt
+          ? new Date(parsed.savedAt).toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : null
+        setDraftRestoredTime(dateStr)
+      } catch (err) {
+        console.warn('Erro ao restaurar rascunho de orcamento:', err)
       }
-
-      setHasRestoredDraft(true)
-      const dateStr = parsed.savedAt
-        ? new Date(parsed.savedAt).toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-        : null
-      setDraftRestoredTime(dateStr)
-    } catch (err) {
-      console.warn('Erro ao restaurar rascunho de orcamento:', err)
     }
-  }, [editingId, draftStorageKey])
+
+    initDraft()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [editingId, user?.id])
 
   // EFEITO: Autosave com debounce (~500ms) quando os estados mudam
   useEffect(() => {
-    // Não salva rascunho de orçamento já gravado em modo edição
-    if (editingId) return
+    // Se estiver editando um orçamento específico (?id=), vincula as alterações a esse ID
+    const effectiveOrcamentoId = editingId || draftLinkedOrcamentoId || null
 
     const timer = setTimeout(() => {
       try {
@@ -388,6 +383,7 @@ export default function Index() {
         const draftPayload: DraftData = {
           version: 1,
           savedAt: Date.now(),
+          orcamentoId: effectiveOrcamentoId,
           clientName,
           room,
           ambienteSelecionado,
@@ -415,7 +411,7 @@ export default function Index() {
           })),
         }
 
-        localStorage.setItem(draftStorageKey, JSON.stringify(draftPayload))
+        writeDraftToStorage(draftPayload, user?.id)
       } catch (err) {
         // Blindagem contra QuotaExceededError ou JSON circular
         console.warn('Falha ao persistir rascunho no localStorage:', err)
@@ -425,7 +421,8 @@ export default function Index() {
     return () => clearTimeout(timer)
   }, [
     editingId,
-    draftStorageKey,
+    draftLinkedOrcamentoId,
+    user?.id,
     clientName,
     room,
     ambienteSelecionado,
@@ -496,6 +493,9 @@ export default function Index() {
           })
           return
         }
+
+        // Vincula o rascunho ao ID do orçamento em edição
+        setDraftLinkedOrcamentoId(quoteId)
 
         // Preenche campos principais
         setClientName(orcamento.cliente_nome || '')
@@ -2092,8 +2092,9 @@ export default function Index() {
       }
 
       if (savedRecord) {
-        // Ao salvar com sucesso no banco, limpa o rascunho automático
+        // Ao salvar com sucesso no banco, vincula o rascunho ao ID recém-salvo e limpa o estado
         clearDraftStorage()
+        setDraftLinkedOrcamentoId(savedRecord.id)
         setHasRestoredDraft(false)
         setSavedOrcamentoRecord(savedRecord)
         setIsQuoteSaved(true)
@@ -2105,6 +2106,7 @@ export default function Index() {
         })
       } else {
         clearDraftStorage()
+        setDraftLinkedOrcamentoId(null)
         setHasRestoredDraft(false)
         toast({
           title: 'Aviso',
