@@ -71,15 +71,46 @@ import type {
   AmbienteOrcamento,
   ModuloOrcamento,
 } from '@/services/orcamentos'
-import { ChevronDown, ChevronUp, Trash2, FolderPlus } from 'lucide-react'
+import { ChevronDown, ChevronUp, Trash2, FolderPlus, RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
+import { useAuth } from '@/hooks/use-auth'
 
 // Ambientes permitidos no Select (array estático conforme especificação).
 const AMBIENTES = ['Cozinha', 'Quarto', 'Sala', 'Banheiro']
 
+const DRAFT_STORAGE_PREFIX = 'orcafacil_draft_novo_orcamento'
+
+interface DraftData {
+  version: 1
+  savedAt: number
+  clientName: string
+  room: string
+  ambienteSelecionado: string
+  selectedModuleId: string
+  ambientes: AmbienteOrcamento[]
+  activeAmbienteId: string
+  dimensoes: { largura: number; altura: number; profundidade: number }
+  composicaoModulo: ModuloComposicao
+  padraoProjeto: PadraoProjeto
+  mdfExterno: { cor: string; espessura: 15 | 18 }
+  mdfInterno: { cor: string; espessura: 15 | 18 }
+  mdfFundo: string
+  formaPagamento: string
+  observacoes: string
+  showResults: boolean
+  manualItems: BudgetItem[]
+  uploadedFilesMeta: Array<{
+    id: string
+    name: string
+    size: number
+    previewUrl?: string
+  }>
+}
+
 export default function Index() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const editingId = searchParams.get('id')
 
@@ -205,9 +236,210 @@ export default function Index() {
   const [formaPagamento, setFormaPagamento] = useState('')
   const [observacoes, setObservacoes] = useState('')
 
+  // 📝 RASCUNHO AUTOMÁTICO (localStorage)
+  const draftStorageKey = useMemo(() => {
+    return user?.id ? `${DRAFT_STORAGE_PREFIX}_${user.id}` : DRAFT_STORAGE_PREFIX
+  }, [user?.id])
+
+  const [hasRestoredDraft, setHasRestoredDraft] = useState<boolean>(false)
+  const [draftRestoredTime, setDraftRestoredTime] = useState<string | null>(null)
+  const isDraftInitializedRef = useRef<boolean>(false)
+
   // Section references for scrolling
   const topRef = useRef<HTMLDivElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
+
+  // Função para limpar rascunho com segurança
+  const clearDraftStorage = () => {
+    try {
+      localStorage.removeItem(draftStorageKey)
+      // Remove também a chave genérica caso estivesse salva nela
+      localStorage.removeItem(DRAFT_STORAGE_PREFIX)
+    } catch (e) {
+      console.warn('Erro ao limpar rascunho do localStorage:', e)
+    }
+  }
+
+  // Função para restaurar o formulário zerado ao descartar rascunho
+  const handleDiscardDraft = () => {
+    clearDraftStorage()
+    setHasRestoredDraft(false)
+    setDraftRestoredTime(null)
+    setClientName('')
+    setRoom('')
+    setAmbienteSelecionado('')
+    setSelectedModuleId('')
+    setAmbientes([])
+    setActiveAmbienteId('')
+    setDimensoes({ largura: 1800, altura: 2200, profundidade: 600 })
+    setComposicaoModulo({
+      portas: { qtd: 0, tipo: 'nenhum' },
+      gavetas: { qtd: 0 },
+      prateleiras: { qtd: 2 },
+      cabideiro: false,
+      sapateira: false,
+      puxadores: 0,
+      semTamponamento: false,
+      tampoPedra: false,
+    })
+    setPadraoProjeto('comercial')
+    setMdfExterno({ cor: 'Branco TX', espessura: 18 })
+    setMdfInterno({ cor: 'Branco TX', espessura: 15 })
+    setMdfFundo('MDF 6mm Branco TX')
+    setFormaPagamento('')
+    setObservacoes('')
+    setShowResults(false)
+    setManualItems([])
+    setUploadedFiles([])
+    setErrors({})
+    toast({
+      title: 'Rascunho descartado',
+      description: 'O formulário foi reiniciado do zero.',
+    })
+  }
+
+  // EFEITO: Restauração do rascunho ao montar a tela (se não estiver em modo edição ?id=)
+  useEffect(() => {
+    if (editingId) return // Não restaura rascunho quando está editando orçamento específico
+    if (isDraftInitializedRef.current) return
+    isDraftInitializedRef.current = true
+
+    try {
+      const raw =
+        localStorage.getItem(draftStorageKey) || localStorage.getItem(DRAFT_STORAGE_PREFIX)
+      if (!raw) return
+
+      const parsed: DraftData = JSON.parse(raw)
+      if (!parsed || parsed.version !== 1) return
+
+      // Verifica se o rascunho tem algum dado preenchido
+      const hasContent =
+        Boolean(parsed.clientName?.trim()) ||
+        Boolean(parsed.selectedModuleId) ||
+        (Array.isArray(parsed.ambientes) && parsed.ambientes.length > 0) ||
+        (Array.isArray(parsed.manualItems) && parsed.manualItems.length > 0)
+
+      if (!hasContent) return
+
+      if (parsed.clientName) setClientName(parsed.clientName)
+      if (parsed.room) setRoom(parsed.room)
+      if (parsed.ambienteSelecionado) setAmbienteSelecionado(parsed.ambienteSelecionado)
+      if (parsed.selectedModuleId) setSelectedModuleId(parsed.selectedModuleId)
+      if (Array.isArray(parsed.ambientes)) setAmbientes(parsed.ambientes)
+      if (parsed.activeAmbienteId) setActiveAmbienteId(parsed.activeAmbienteId)
+      if (parsed.dimensoes) setDimensoes(parsed.dimensoes)
+      if (parsed.composicaoModulo) setComposicaoModulo(parsed.composicaoModulo)
+      if (parsed.padraoProjeto) setPadraoProjeto(parsed.padraoProjeto)
+      if (parsed.mdfExterno) setMdfExterno(parsed.mdfExterno)
+      if (parsed.mdfInterno) setMdfInterno(parsed.mdfInterno)
+      if (parsed.mdfFundo) setMdfFundo(parsed.mdfFundo)
+      if (parsed.formaPagamento) setFormaPagamento(parsed.formaPagamento)
+      if (parsed.observacoes) setObservacoes(parsed.observacoes)
+      if (typeof parsed.showResults === 'boolean') setShowResults(parsed.showResults)
+      if (Array.isArray(parsed.manualItems)) setManualItems(parsed.manualItems)
+
+      if (Array.isArray(parsed.uploadedFilesMeta) && parsed.uploadedFilesMeta.length > 0) {
+        const restoredUploads: UploadedFileState[] = parsed.uploadedFilesMeta.map((meta) => ({
+          file: new File([], meta.name, { type: 'image/jpeg' }),
+          previewUrl: meta.previewUrl || '',
+          name: meta.name,
+          sizeFormatted: meta.size > 0 ? `${(meta.size / 1024).toFixed(1)} KB` : '0 B',
+          isPdf: meta.name.toLowerCase().endsWith('.pdf'),
+        }))
+        setUploadedFiles(restoredUploads)
+      }
+
+      setHasRestoredDraft(true)
+      const dateStr = parsed.savedAt
+        ? new Date(parsed.savedAt).toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : null
+      setDraftRestoredTime(dateStr)
+    } catch (err) {
+      console.warn('Erro ao restaurar rascunho de orcamento:', err)
+    }
+  }, [editingId, draftStorageKey])
+
+  // EFEITO: Autosave com debounce (~500ms) quando os estados mudam
+  useEffect(() => {
+    // Não salva rascunho de orçamento já gravado em modo edição
+    if (editingId) return
+
+    const timer = setTimeout(() => {
+      try {
+        // Checa se há algo para salvar
+        const hasContent =
+          Boolean(clientName.trim()) ||
+          Boolean(selectedModuleId) ||
+          ambientes.length > 0 ||
+          manualItems.length > 0 ||
+          showResults
+
+        if (!hasContent) {
+          return
+        }
+
+        const draftPayload: DraftData = {
+          version: 1,
+          savedAt: Date.now(),
+          clientName,
+          room,
+          ambienteSelecionado,
+          selectedModuleId,
+          ambientes,
+          activeAmbienteId,
+          dimensoes,
+          composicaoModulo,
+          padraoProjeto,
+          mdfExterno,
+          mdfInterno,
+          mdfFundo,
+          formaPagamento,
+          observacoes,
+          showResults,
+          manualItems,
+          uploadedFilesMeta: uploadedFiles.map((f, idx) => ({
+            id: `upload-${idx}-${f.name}`,
+            name: f.name || f.file?.name || 'arquivo',
+            size: f.file?.size || 0,
+            previewUrl:
+              f.previewUrl && !f.previewUrl.startsWith('blob:') && f.previewUrl.length < 500000
+                ? f.previewUrl
+                : undefined,
+          })),
+        }
+
+        localStorage.setItem(draftStorageKey, JSON.stringify(draftPayload))
+      } catch (err) {
+        // Blindagem contra QuotaExceededError ou JSON circular
+        console.warn('Falha ao persistir rascunho no localStorage:', err)
+      }
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [
+    editingId,
+    draftStorageKey,
+    clientName,
+    room,
+    ambienteSelecionado,
+    selectedModuleId,
+    ambientes,
+    activeAmbienteId,
+    dimensoes,
+    composicaoModulo,
+    padraoProjeto,
+    mdfExterno,
+    mdfInterno,
+    mdfFundo,
+    formaPagamento,
+    observacoes,
+    showResults,
+    manualItems,
+    uploadedFiles,
+  ])
 
   // FETCH REAL DO SUPABASE — carrega os módulos da tabela TemplatesEngenharia.
   useEffect(() => {
@@ -617,7 +849,11 @@ export default function Index() {
     () =>
       calcularBOM(
         selectedModuleObj
-          ? { id: selectedModuleObj.id, nome_template: selectedModuleObj.nome_template }
+          ? {
+              id: selectedModuleObj.id,
+              nome_template: selectedModuleObj.nome_template,
+              perfil_construtivo: selectedModuleObj.perfil_construtivo,
+            }
           : null,
         dimensoes,
         mdfExterno,
@@ -711,10 +947,19 @@ export default function Index() {
     // Atualiza o perfil construtivo na composição a partir do módulo selecionado
     const modEscolhido = modulosDisponiveis.find((m) => m.id === val)
     if (modEscolhido?.perfil_construtivo) {
+      const perfilMod = modEscolhido.perfil_construtivo as PerfilConstrutivo
       setComposicaoModulo((prev) => ({
         ...prev,
-        perfilConstrutivo: modEscolhido.perfil_construtivo || undefined,
-        semTamponamento: modEscolhido.perfil_construtivo === 'Caixa Simples',
+        perfilConstrutivo: perfilMod,
+        semTamponamento: perfilMod === 'Caixa Simples',
+        tampoPedra: perfilMod === 'Balcão (tampo por conta do cliente)' ? true : prev.tampoPedra,
+      }))
+    } else if (val && val !== 'MODULO-CUSTOM') {
+      // Se o módulo não tiver perfil explícito, remove override anterior para que o fallback funcione
+      setComposicaoModulo((prev) => ({
+        ...prev,
+        perfilConstrutivo: undefined,
+        semTamponamento: false,
       }))
     }
 
@@ -1188,8 +1433,11 @@ export default function Index() {
       newErrors.selectedModule = 'Selecione um módulo da biblioteca'
     }
 
-    if (uploadedFiles.length === 0 && !editingId) {
-      newErrors.uploadedFile = 'Envie ao menos uma foto ou projeto do cliente para comparação'
+    // Foto é opcional se o usuário já selecionou um módulo da biblioteca ou está em modo edição.
+    // Só é exigida se não houver nem arquivo nem módulo selecionado.
+    if (uploadedFiles.length === 0 && !editingId && !selectedModuleId) {
+      newErrors.uploadedFile =
+        'Envie ao menos uma foto/projeto ou selecione um módulo da biblioteca'
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -1197,7 +1445,7 @@ export default function Index() {
       toast({
         title: 'Campos Obrigatórios Pendentes',
         description:
-          'Preencha o nome do cliente, anexe o arquivo e selecione o módulo correspondente.',
+          'Preencha o nome do cliente e selecione o módulo ou anexe o arquivo correspondente.',
         variant: 'destructive',
       })
       return
@@ -1814,6 +2062,9 @@ export default function Index() {
       }
 
       if (savedRecord) {
+        // Ao salvar com sucesso no banco, limpa o rascunho automático
+        clearDraftStorage()
+        setHasRestoredDraft(false)
         setSavedOrcamentoRecord(savedRecord)
         setIsQuoteSaved(true)
         toast({
@@ -1823,6 +2074,8 @@ export default function Index() {
           description: `Orçamento de ${clientName} ${editingId ? 'atualizado' : 'registrado'}. Escolha os relatórios em PDF para download.`,
         })
       } else {
+        clearDraftStorage()
+        setHasRestoredDraft(false)
         toast({
           title: 'Aviso',
           description: 'Orçamento processado. Redirecionando para a lista.',
@@ -2004,6 +2257,47 @@ export default function Index() {
 
   return (
     <div ref={topRef} className="space-y-8 pb-20">
+      {/* Banner de Rascunho Restaurado */}
+      {hasRestoredDraft && !editingId && (
+        <div className="bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-fade-in">
+          <div className="flex items-center gap-2.5">
+            <RotateCcw className="w-4 h-4 text-amber-700 shrink-0" />
+            <div className="text-xs sm:text-sm">
+              <span className="font-bold">Rascunho automático restaurado</span>
+              {draftRestoredTime && (
+                <span className="text-amber-800 ml-1 opacity-90">
+                  (salvo às {draftRestoredTime})
+                </span>
+              )}
+              <span className="block sm:inline sm:ml-1 text-amber-700 text-xs">
+                — Seus dados preenchidos anteriormente foram recuperados.
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDiscardDraft}
+              className="h-8 px-3 text-xs border-amber-300 bg-white hover:bg-amber-100 text-amber-900 font-semibold rounded-xl"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1 text-amber-700" />
+              Descartar
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setHasRestoredDraft(false)}
+              className="h-8 px-2 text-xs text-amber-700 hover:text-amber-900 hover:bg-amber-100 rounded-xl"
+            >
+              Dispensar
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* 1. Header Hero Title */}
       <div className="space-y-1">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-800 text-xs font-semibold mb-1">
