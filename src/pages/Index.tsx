@@ -987,15 +987,19 @@ export default function Index() {
   // - OU quando showResults estiver explicitamente ligado (após Gerar Orçamento ou carregar orçamento existente com itens)
   // - OU quando houver itens nos ambientes consolidados (mesmo após "+ Adicionar Outro Módulo ao Ambiente")
   // - OU quando houver itens salvos carregados (savedLoadedItems)
+  // - OU se houver qualquer item em pricingItems ou effectiveDisplayItems
   // - Mantém OCULTO quando for orçamento novo zerado sem ação do usuário (sem módulo selecionado e sem consolidados).
   const hasActiveConfiguredItems =
-    (Boolean(selectedModuleObj) && pricingItems.length > 0) || manualItems.length > 0
+    (Boolean(selectedModuleObj) && pricingItems.length > 0) ||
+    manualItems.length > 0 ||
+    pricingItems.length > 0
 
   const shouldShowResultsSection =
     showResults ||
     hasActiveConfiguredItems ||
     hasConsolidatedItems ||
-    (savedLoadedItems !== null && savedLoadedItems.length > 0)
+    (savedLoadedItems !== null && savedLoadedItems.length > 0) ||
+    effectiveDisplayItems.length > 0
 
   // Totais consolidados (custo e valor de venda).
   const totalCusto = useMemo(() => custoConsolidado(pricingItems), [pricingItems])
