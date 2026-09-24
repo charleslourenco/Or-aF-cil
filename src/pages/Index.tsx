@@ -3424,34 +3424,7 @@ export default function Index() {
           </div>
         </div>
       </section>
-      {/* 4. BOTÃO DE AÇÃO PRINCIPAL */}
-      <div className="flex flex-col items-center justify-center pt-2 pb-4">
-        <Button
-          type="button"
-          size="lg"
-          onClick={handleGenerateBudget}
-          disabled={isGenerating}
-          className="w-full max-w-md h-14 bg-slate-700 hover:bg-slate-800 active:scale-[0.98] text-white font-bold text-base rounded-2xl shadow-lg shadow-slate-700/25 transition-all flex items-center justify-center gap-2.5 group"
-        >
-          {isGenerating ? (
-            <>
-              <RefreshCw className="w-5 h-5 animate-spin" />
-              <span>Processando Parâmetros e Peças...</span>
-            </>
-          ) : (
-            <>
-              <span className="text-xl group-hover:rotate-45 transition-transform duration-300">
-                ⚙️
-              </span>
-              <span>Gerar Orçamento do Módulo</span>
-            </>
-          )}
-        </Button>
-        <p className="text-xs text-slate-400 mt-2 text-center">
-          Calcula automaticamente caixaria, frentes, puxadores e margem comercial
-        </p>
-      </div>
-      {/* 5. RESULTADOS: TABELA DE PRECIFICAÇÃO DINÂMICA */}
+      {/* 4. RESULTADOS: TABELA DE PRECIFICAÇÃO DINÂMICA */}
       {shouldShowResultsSection && (
         <section
           ref={resultsRef}
@@ -3480,32 +3453,74 @@ export default function Index() {
             </span>
           </div>
 
-          {effectiveDisplayItems.length > 0 ? (
-            <PricingTable
-              items={effectiveDisplayItems}
-              dimensoes={dimensoes}
-              moduleName={hasCurrentModuleEditing ? currentModuleName : 'Módulos Consolidados'}
-            />
-          ) : dimensoesValidas ? (
-            <PricingTable
-              items={pricingItems}
-              dimensoes={dimensoes}
-              moduleName={currentModuleName}
-            />
-          ) : (
-            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center">
-              <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
-                <HelpCircle className="w-6 h-6" />
+          <div className="space-y-2">
+            {effectiveDisplayItems.length > 0 ? (
+              <PricingTable
+                items={effectiveDisplayItems}
+                dimensoes={dimensoes}
+                moduleName={hasCurrentModuleEditing ? currentModuleName : 'Módulos Consolidados'}
+              />
+            ) : dimensoesValidas ? (
+              <PricingTable
+                items={pricingItems}
+                dimensoes={dimensoes}
+                moduleName={currentModuleName}
+              />
+            ) : (
+              <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center">
+                <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                  <HelpCircle className="w-6 h-6" />
+                </div>
+                <p className="text-sm font-semibold text-slate-700">
+                  Selecione um módulo e preencha as dimensões para gerar a precificação.
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  A tabela de peças é calculada em tempo real a partir das medidas e materiais
+                  informados acima.
+                </p>
               </div>
-              <p className="text-sm font-semibold text-slate-700">
-                Selecione um módulo e preencha as dimensões para gerar a precificação.
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                A tabela de peças é calculada em tempo real a partir das medidas e materiais
-                informados acima.
-              </p>
+            )}
+
+            {/* Linha discreta de adicionar item manualmente imediatamente após a tabela de Peças e Precificação */}
+            <div className="flex items-center justify-between pt-1 pb-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded-lg border border-dashed border-slate-300 hover:border-slate-400 hover:bg-slate-50/80 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-slate-600" />
+                    <span>+ Adicionar item manualmente</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  side="bottom"
+                  className="w-56 p-1.5 rounded-xl shadow-lg border-slate-200"
+                >
+                  <DropdownMenuItem
+                    onClick={() => setIsCatalogModalOpen(true)}
+                    className="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer rounded-lg"
+                  >
+                    <Package className="w-4 h-4 text-slate-600" />
+                    <span>📄 Do Catálogo</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setIsCustomItemModalOpen(true)}
+                    className="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer rounded-lg"
+                  >
+                    <Plus className="w-4 h-4 text-slate-600" />
+                    <span>✏️ Item Avulso</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <span className="text-[11px] text-slate-400">
+                Itens avulsos ou do catálogo adicionados a este módulo
+              </span>
             </div>
-          )}
+          </div>
 
           {/* ⚠️ ALERTA AMARELO: ITENS NÃO CADASTRADOS NO CATÁLOGO (ADICIONADOS POR ESTIMATIVA) */}
           {itensNaoCadastrados.length > 0 && (
@@ -3545,27 +3560,6 @@ export default function Index() {
               ))}
             </div>
           )}
-
-          {/* 🌟 BOTÕES DE ADIÇÃO MANUAL DE ITENS */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsCatalogModalOpen(true)}
-              className="flex-1 h-11 border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-800 font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2"
-            >
-              <Package className="w-4 h-4 text-slate-700" />+ Adicionar do Catálogo
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsCustomItemModalOpen(true)}
-              className="flex-1 h-11 border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-800 font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4 text-slate-700" />+ Item Avulso (Fora do Catálogo)
-            </Button>
-          </div>
 
           {/* Rodapé de Totais Consolidados — exibido quando há itens na tabela */}
           {(dimensoesValidas || effectiveDisplayItems.length > 0) && (
@@ -3673,6 +3667,35 @@ export default function Index() {
           </div>
         </section>
       )}
+
+      {/* 5. BOTÃO DE AÇÃO PRINCIPAL: GERAR ORÇAMENTO DO MÓDULO (Fim do fluxo) */}
+      <div className="flex flex-col items-center justify-center pt-4 pb-4">
+        <Button
+          type="button"
+          size="lg"
+          onClick={handleGenerateBudget}
+          disabled={isGenerating}
+          className="w-full max-w-md h-14 bg-slate-700 hover:bg-slate-800 active:scale-[0.98] text-white font-bold text-base rounded-2xl shadow-lg shadow-slate-700/25 transition-all flex items-center justify-center gap-2.5 group"
+        >
+          {isGenerating ? (
+            <>
+              <RefreshCw className="w-5 h-5 animate-spin" />
+              <span>Processando Parâmetros e Peças...</span>
+            </>
+          ) : (
+            <>
+              <span className="text-xl group-hover:rotate-45 transition-transform duration-300">
+                ⚙️
+              </span>
+              <span>Gerar Orçamento do Módulo</span>
+            </>
+          )}
+        </Button>
+        <p className="text-xs text-slate-400 mt-2 text-center">
+          Calcula automaticamente caixaria, frentes, puxadores e margem comercial
+        </p>
+      </div>
+
       {/* 6. RODAPÉ DE AÇÕES FIXO (Sticky Bottom Bar) */}
       <aside
         aria-label="Ações do Orçamento"
@@ -3681,39 +3704,6 @@ export default function Index() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Secondary Action Buttons (Left) */}
           <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full sm:w-auto text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl h-10 shadow-2xs inline-flex items-center justify-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4 text-slate-500" />+ Adicionar Item Manualmente
-                  <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                side="top"
-                className="w-56 p-1.5 rounded-xl shadow-lg border-slate-200"
-              >
-                <DropdownMenuItem
-                  onClick={() => setIsCatalogModalOpen(true)}
-                  className="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer rounded-lg"
-                >
-                  <Package className="w-4 h-4 text-slate-600" />
-                  <span>📄 Do Catálogo</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setIsCustomItemModalOpen(true)}
-                  className="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer rounded-lg"
-                >
-                  <Plus className="w-4 h-4 text-slate-600" />
-                  <span>✏️ Item Avulso</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             <Button
               type="button"
               variant="outline"
