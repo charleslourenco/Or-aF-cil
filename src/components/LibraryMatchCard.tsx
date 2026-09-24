@@ -18,7 +18,10 @@ import {
   Footprints,
   SlidersHorizontal,
   Columns,
+  AlertTriangle,
+  Check,
 } from 'lucide-react'
+import { ModuloBlueprint2D } from '@/components/ModuloBlueprint2D'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -71,6 +74,14 @@ interface LibraryMatchCardProps {
   adaptacoes?: string | null
   /** Sugestão de perfil de construção da IA */
   perfilSugeridoIA?: string | null
+  /** Nível de confiança da IA: alta, media ou baixa */
+  confiancaIA?: 'alta' | 'media' | 'baixa' | null
+  /** Callback para confirmar módulo quando a confiança for media/baixa */
+  onConfirmarModulo?: () => void
+  /** Callback para tratar como módulo personalizado */
+  onTratarPersonalizado?: () => void
+  /** Se o módulo já foi confirmado pelo usuário */
+  isModuloConfirmado?: boolean
 }
 
 export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
@@ -90,6 +101,10 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
   onComposicaoChange,
   adaptacoes = null,
   perfilSugeridoIA = null,
+  confiancaIA = null,
+  onConfirmarModulo,
+  onTratarPersonalizado,
+  isModuloConfirmado = false,
 }) => {
   const isMatched = !!selectedModule
   const [showSwap, setShowSwap] = useState(false)
@@ -126,6 +141,122 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl border border-slate-200 p-6 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+      {/* CARD/MODAL DE CONFIRMAÇÃO DE MÓDULO ANTES DO BOM QUANDO CONFIANÇA !== 'ALTA' */}
+      {isMatched && confiancaIA && confiancaIA !== 'alta' && !isModuloConfirmado && (
+        <div className="mb-4 p-4 rounded-xl border-2 border-amber-400 bg-amber-50/70 shadow-sm animate-fade-in space-y-3">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-extrabold text-sm text-amber-950">
+                  A IA identificou: &ldquo;{selectedModule?.nome_template}&rdquo; — confere?
+                </span>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'text-[10px] font-bold px-2 py-0.2 rounded-full uppercase',
+                    confiancaIA === 'media'
+                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                      : 'bg-rose-100 text-rose-900 border-rose-300',
+                  )}
+                >
+                  Confiança {confiancaIA}
+                </Badge>
+              </div>
+              <p className="text-xs text-amber-800 mt-1">
+                Por favor, valide se este módulo corresponde ao projeto antes de calcular as peças.
+              </p>
+            </div>
+          </div>
+
+          {/* Miniatura ModuloBlueprint2D + Dimensões + Composição */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-3 rounded-lg border border-amber-200">
+            <div className="flex flex-col items-center justify-center min-h-[140px] bg-slate-900 rounded-lg p-1 border border-slate-700">
+              <ModuloBlueprint2D
+                type={
+                  selectedModule?.icon_type === 'balcao'
+                    ? 'counter'
+                    : selectedModule?.icon_type === 'aereo'
+                      ? 'aerial'
+                      : 'wardrobe'
+                }
+                dimensoes={{
+                  largura: dimensoes.largura,
+                  altura: dimensoes.altura,
+                  profundidade: dimensoes.profundidade,
+                }}
+                className="w-full h-32"
+              />
+            </div>
+
+            <div className="flex flex-col justify-center space-y-1.5 text-xs text-slate-700">
+              <div>
+                <span className="font-bold text-slate-900 block text-xs uppercase text-slate-500">
+                  Dimensões:
+                </span>
+                <span className="font-mono font-bold text-slate-800">
+                  {dimensoes.largura}L × {dimensoes.altura}A × {dimensoes.profundidade}P mm
+                </span>
+              </div>
+              <div>
+                <span className="font-bold text-slate-900 block text-xs uppercase text-slate-500">
+                  Composição identificada:
+                </span>
+                <span className="text-[11px] text-slate-600 block">
+                  • Portas: {composicao?.portas?.qtd ?? 0}{' '}
+                  {composicao?.portas?.qtd ? `(${composicao.portas.tipo || 'abrir'})` : ''}
+                  <br />• Gavetas: {composicao?.gavetas?.qtd ?? 0}
+                  <br />• Prateleiras: {composicao?.prateleiras?.qtd ?? 0}
+                  {composicao?.cabideiro && (
+                    <>
+                      <br />• Cabideiro
+                    </>
+                  )}
+                  {composicao?.sapateira && (
+                    <>
+                      <br />• Sapateira
+                    </>
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Botões de Ação do Card de Confirmação */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Button
+              type="button"
+              size="sm"
+              onClick={onConfirmarModulo}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg h-9 px-3 shadow-xs flex items-center gap-1.5"
+            >
+              <Check className="w-4 h-4" />✓ Sim, confirmar módulo
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSwap(true)}
+              className="border-slate-300 bg-white hover:bg-slate-100 text-slate-800 font-semibold text-xs rounded-lg h-9 px-3"
+            >
+              <Repeat2 className="w-3.5 h-3.5 mr-1" />
+              Trocar por outro da biblioteca
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onTratarPersonalizado}
+              className="text-amber-900 hover:bg-amber-100 text-xs font-semibold rounded-lg h-9 px-2.5"
+            >
+              Tratar como módulo personalizado
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col gap-2 pb-4 border-b border-slate-100">
         <div className="flex items-start justify-between gap-2">
@@ -169,12 +300,29 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
                 Analisando...
               </Badge>
             ) : isMatched ? (
-              <Badge
-                variant="outline"
-                className="bg-slate-100 text-slate-800 border-slate-400 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-fade-in"
-              >
-                <CheckCircle className="w-3.5 h-3.5 text-slate-700" />✓ Match Encontrado
-              </Badge>
+              <div className="flex items-center gap-1.5">
+                {confiancaIA && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'text-[10px] font-bold px-2 py-0.5 rounded-full capitalize',
+                      confiancaIA === 'alta'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                        : confiancaIA === 'media'
+                          ? 'bg-amber-50 text-amber-800 border-amber-300'
+                          : 'bg-rose-50 text-rose-700 border-rose-300',
+                    )}
+                  >
+                    Confiança {confiancaIA}
+                  </Badge>
+                )}
+                <Badge
+                  variant="outline"
+                  className="bg-slate-100 text-slate-800 border-slate-400 font-semibold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs animate-fade-in"
+                >
+                  <CheckCircle className="w-3.5 h-3.5 text-slate-700" />✓ Match Encontrado
+                </Badge>
+              </div>
             ) : (
               <Badge
                 variant="outline"

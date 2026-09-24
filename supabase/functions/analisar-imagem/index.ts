@@ -57,6 +57,7 @@ interface ModuloDetectado {
   codigo_modulo: string
   nome: string
   e_customizado?: boolean
+  confianca?: 'alta' | 'media' | 'baixa'
   perfil_construcao_sugerido?: PerfilConstrucaoSugerido
   dimensao_estimada?: Dimensoes3D
   dimensoes_originais?: Dimensoes3D
@@ -191,6 +192,10 @@ ${listaCatalogoText}
      "codigo_modulo": "MODULO-CUSTOM",
      "nome": "Módulo Personalizado (Análise IA)",
      "e_customizado": true
+   - Preencha o campo "confianca" com 'alta' | 'media' | 'baixa':
+     * 'alta' = match direto na biblioteca com escala 0.7–1.4;
+     * 'media' = match aproximado ou variação acentuada;
+     * 'baixa' = MODULO-CUSTOM, imagem ruim ou dúvidas nas divisões.
    - Sugira o "perfil_construcao_sugerido" para o módulo (apenas como sugestão, especialmente para módulos customizados):
      * "Fechado Envelopado": para armários, roupeiros, guarda-roupas, móveis fechados com caixa dupla.
      * "Balcão (tampo por conta do cliente)": para balcões de pia, gabinetes inferiores ou bancadas de cozinha/banheiro onde o topo receberá tampo de granito/madeira avulso.
@@ -228,6 +233,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
       "codigo_modulo": "ID_REAL_OU_MODULO-CUSTOM",
       "nome": "Nome do módulo",
       "e_customizado": false,
+      "confianca": "alta",
       "perfil_construcao_sugerido": "Fechado Envelopado",
       "dimensao_estimada": { "largura": 1800, "altura": 2200, "profundidade": 600 },
       "divisorias": { "qtd": 1 },
@@ -386,6 +392,23 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
       const sapateira = Boolean(m.sapateira)
       const puxadores = Math.max(0, Number(m.puxadores ?? qtdPortas + qtdGavetas) || 0)
 
+      // Determinação da confiança da IA
+      let confianca: 'alta' | 'media' | 'baixa' = 'baixa'
+      const confiancaRaw = String(m.confianca || '')
+        .toLowerCase()
+        .trim()
+      if (confiancaRaw === 'alta' || confiancaRaw === 'media' || confiancaRaw === 'baixa') {
+        confianca = confiancaRaw as 'alta' | 'media' | 'baixa'
+      } else {
+        if (eCustomizado || codigo === 'MODULO-CUSTOM') {
+          confianca = 'baixa'
+        } else if (fatorEscala < 0.7 || fatorEscala > 1.4) {
+          confianca = 'media'
+        } else {
+          confianca = 'alta'
+        }
+      }
+
       // Validação do perfil sugerido
       let perfilSugerido: PerfilConstrucaoSugerido = 'Fechado Envelopado'
       const perfilRaw = String(m.perfil_construcao_sugerido || '').trim()
@@ -421,6 +444,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         codigo_modulo: codigo,
         nome,
         e_customizado: eCustomizado,
+        confianca,
         perfil_construcao_sugerido: perfilSugerido,
         dimensao_estimada: dimensaoEstimada,
         dimensoes_originais: dimensoesOriginais,
@@ -462,6 +486,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
           codigo_modulo: 'MODULO-CUSTOM',
           nome: 'Módulo Personalizado (Análise IA)',
           e_customizado: true,
+          confianca: 'baixa',
           perfil_construcao_sugerido: 'Fechado Envelopado',
           dimensao_estimada: { largura: 1800, altura: 2200, profundidade: 600 },
           fator_escala: 1.0,

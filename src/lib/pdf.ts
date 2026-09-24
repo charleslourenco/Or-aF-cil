@@ -103,6 +103,130 @@ function formatMoeda(val: number | null | undefined): string {
  * Retorna um nome amigável e comercial para o módulo evitando termos internos
  * brutos como "Módulo Personalizado (Análise IA)" para o cliente final.
  */
+export interface MontarDescricaoNaturalParams {
+  nome?: string | null
+  dimensoes?: {
+    largura?: number | null
+    altura?: number | null
+    profundidade?: number | null
+  } | null
+  mdfExterno?: string | null
+  composicao?: {
+    portas?: { qtd?: number | null; tipo?: string | null } | null
+    gavetas?: { qtd?: number | null } | null
+    prateleiras?: { qtd?: number | null } | null
+    cabideiro?: boolean | null
+    sapateira?: boolean | null
+  } | null
+}
+
+/**
+ * Monta descrição natural determinística para o módulo na Proposta Comercial do PDF.
+ * Exemplo: "Guarda-roupa em MDF cor Amadeirado, com 2 portas de correr, 4 gavetas internas, cabideiro e prateleiras internas — 1550×2500×650mm".
+ * Fallback: "Móvel Sob Medida (L×A×Pmm)" ou "Móvel Sob Medida".
+ */
+export function montarDescricaoNaturalModulo({
+  nome,
+  dimensoes,
+  mdfExterno,
+  composicao,
+}: MontarDescricaoNaturalParams): string {
+  const dimStr =
+    dimensoes && dimensoes.largura && dimensoes.altura
+      ? `${dimensoes.largura}×${dimensoes.altura}${dimensoes.profundidade ? `×${dimensoes.profundidade}` : ''}mm`
+      : ''
+
+  const nomeRaw = (nome || '').trim()
+  const nomeLower = nomeRaw.toLowerCase()
+  const isCustomOuIA =
+    !nomeRaw ||
+    nomeLower.includes('módulo personalizado') ||
+    nomeLower.includes('modulo personalizado') ||
+    nomeLower.includes('análise ia') ||
+    nomeLower.includes('analise ia') ||
+    nomeRaw === 'MODULO-CUSTOM' ||
+    nomeLower === 'módulo planejado' ||
+    nomeLower === 'modulo planejado'
+
+  const tipoMovel = isCustomOuIA ? 'Móvel sob medida' : nomeRaw
+
+  // MDF cor limpa (ex: "Amadeirado (18mm)" -> "Amadeirado")
+  let corLimpa = ''
+  if (mdfExterno && typeof mdfExterno === 'string' && mdfExterno.trim()) {
+    corLimpa = mdfExterno.replace(/\s*\(\d+mm\)/gi, '').trim()
+  }
+
+  // Composição
+  const itensComposicao: string[] = []
+  const portasQtd = Number(composicao?.portas?.qtd) || 0
+  const portasTipo = composicao?.portas?.tipo || 'abrir'
+  if (portasQtd > 0) {
+    if (portasTipo === 'correr') {
+      itensComposicao.push(
+        `${portasQtd} ${portasQtd === 1 ? 'porta de correr' : 'portas de correr'}`,
+      )
+    } else if (portasTipo === 'batente') {
+      itensComposicao.push(
+        `${portasQtd} ${portasQtd === 1 ? 'porta basculante' : 'portas basculantes'}`,
+      )
+    } else if (portasTipo !== 'nenhum') {
+      itensComposicao.push(`${portasQtd} ${portasQtd === 1 ? 'porta de abrir' : 'portas de abrir'}`)
+    }
+  }
+
+  const gavetasQtd = Number(composicao?.gavetas?.qtd) || 0
+  if (gavetasQtd > 0) {
+    itensComposicao.push(
+      `${gavetasQtd} ${gavetasQtd === 1 ? 'gaveta interna' : 'gavetas internas'}`,
+    )
+  }
+
+  if (composicao?.cabideiro) {
+    itensComposicao.push('cabideiro')
+  }
+
+  const prateleirasQtd = Number(composicao?.prateleiras?.qtd) || 0
+  if (prateleirasQtd > 0) {
+    itensComposicao.push('prateleiras internas')
+  }
+
+  if (composicao?.sapateira) {
+    itensComposicao.push('sapateira')
+  }
+
+  // Fallback quando não há composição nem material
+  if (itensComposicao.length === 0 && !corLimpa) {
+    if (isCustomOuIA) {
+      return dimStr ? `Móvel Sob Medida (${dimStr})` : 'Móvel Sob Medida'
+    }
+    return dimStr ? `${tipoMovel} — ${dimStr}` : tipoMovel
+  }
+
+  // Montagem natural
+  let desc = tipoMovel
+  if (corLimpa) {
+    desc += ` em MDF cor ${corLimpa}`
+  }
+
+  if (itensComposicao.length > 0) {
+    let composicaoStr = ''
+    if (itensComposicao.length === 1) {
+      composicaoStr = itensComposicao[0]
+    } else {
+      const todosMenosUltimo = itensComposicao.slice(0, -1).join(', ')
+      const ultimo = itensComposicao[itensComposicao.length - 1]
+      composicaoStr = `${todosMenosUltimo} e ${ultimo}`
+    }
+    desc += `, com ${composicaoStr}`
+  }
+
+  if (dimStr) {
+    desc += ` — ${dimStr}`
+  }
+
+  return desc
+}
+
 function getNomeModuloAmigavel(
   nomeOriginal?: string | null,
   dimensoes?: { largura?: number; altura?: number; profundidade?: number } | null,
@@ -239,48 +363,23 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       }
     }
 
-    // Coluna Direita: Badge / Retângulo escuro
-    const badgeWidth = 42
-    const badgeHeight = 18
-    const badgeX = pageWidth - margin - badgeWidth
-    const badgeY = y
+    // Cabeçalho mais leve: sem o badge escuro (#1E293B) no topo.
+    // A coluna de dados da empresa ganha a largura total.
+    const headerLeftMaxW = contentWidth
 
-    doc.setFillColor(30, 41, 59) // #1E293B
-    doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, 2, 2, 'F')
-
-    // Linha 1: "ORÇAMENTO"
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(7)
-    doc.setTextColor(148, 163, 184) // Slate-400
-    doc.text('ORÇAMENTO', badgeX + badgeWidth / 2, badgeY + 4.8, { align: 'center' })
-
-    // Linha 2: Código do orçamento (#001 sequencial ou fallback)
-    const codigoOrc =
+    // Código do orçamento formatado
+    const numeroFormatado =
       dados.numeroSequencial !== undefined && dados.numeroSequencial !== null
-        ? `#${String(dados.numeroSequencial).padStart(3, '0')}`
+        ? String(dados.numeroSequencial).padStart(3, '0')
         : dados.codigo
-          ? `#${dados.codigo.replace(/^#/, '')}`
-          : `#${
-              (dados.orcamentoId || '000000')
-                .replace(/[^a-zA-Z0-9]/g, '')
-                .slice(-6)
-                .toUpperCase() || '000'
-            }`
-
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(12)
-    doc.setTextColor(255, 255, 255) // Branco
-    doc.text(codigoOrc, badgeX + badgeWidth / 2, badgeY + 10.5, { align: 'center' })
-
-    // Linha 3: Data formatada
+          ? dados.codigo.replace(/^#/, '')
+          : (dados.orcamentoId || '000000')
+              .replace(/[^a-zA-Z0-9]/g, '')
+              .slice(-6)
+              .toUpperCase() || '001'
+    const textoNumeroOrcamento = `Orçamento Nº ${numeroFormatado}`
     const dataFormatada = formatarData(dados.data)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(7)
-    doc.setTextColor(148, 163, 184) // Slate-400
-    doc.text(dataFormatada, badgeX + badgeWidth / 2, badgeY + 15.2, { align: 'center' })
-
-    // Coluna Esquerda: Nome fixo "BENDER HAUSSFORM" e dados institucionais
-    const headerLeftMaxW = badgeX - margin - 5
+    const textoEmissao = `Emissão: ${dataFormatada}`
 
     let textStartY = y
     if (logoCarregada) {
@@ -337,7 +436,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       subTextY += (Array.isArray(splitLinha3) ? splitLinha3.length : 1) * 3.6
     }
 
-    y = Math.max(subTextY + 2, badgeY + badgeHeight + 5)
+    y = subTextY + 2
 
     // Linha divisória após cabeçalho
     doc.setDrawColor(226, 232, 240) // #E2E8F0
@@ -352,7 +451,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     doc.text('PROPOSTA COMERCIAL', pageWidth / 2, y + 4, { align: 'center' })
     y += 8
 
-    // 3. BOX DO CLIENTE
+    // 3. BOX DO CLIENTE (com "Orçamento Nº XXX" logo acima do nome do cliente e "Emissão: DD/MM/AAAA" à direita)
     const contatosClienteArr = [
       dados.cliente.telefone ? `Tel: ${dados.cliente.telefone}` : '',
       dados.cliente.email ? `Email: ${dados.cliente.email}` : '',
@@ -360,7 +459,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     ].filter(Boolean)
 
     const hasExtraClientData = contatosClienteArr.length > 0
-    const clientBoxHeight = hasExtraClientData ? 20 : 14
+    const clientBoxHeight = hasExtraClientData ? 24 : 18
 
     doc.setFillColor(248, 250, 252) // #F8FAFC
     doc.roundedRect(margin, y, contentWidth, clientBoxHeight, 2, 2, 'F')
@@ -368,16 +467,27 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     doc.setLineWidth(0.3)
     doc.roundedRect(margin, y, contentWidth, clientBoxHeight, 2, 2, 'S')
 
-    // "CLIENTE:" + Nome do cliente
+    // Linha superior do box: "Orçamento Nº 016" (helvetica bold, 10pt, #0F172A) à esquerda | "Emissão: DD/MM/AAAA" à direita
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(15, 23, 42) // #0F172A
+    doc.text(textoNumeroOrcamento, margin + 5, y + 5.5)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(100, 116, 139) // #64748B
+    doc.text(textoEmissao, margin + contentWidth - 5, y + 5.5, { align: 'right' })
+
+    // Linha inferior do box: "CLIENTE:" + Nome do cliente
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.setTextColor(51, 65, 85) // #334155
-    doc.text('CLIENTE:', margin + 5, y + 6)
+    doc.text('CLIENTE:', margin + 5, y + 11.5)
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
     doc.setTextColor(15, 23, 42) // #0F172A
-    doc.text(dados.cliente.nome || 'Cliente não informado', margin + 24, y + 6)
+    doc.text(dados.cliente.nome || 'Cliente não informado', margin + 24, y + 11.5)
 
     if (hasExtraClientData) {
       doc.setFont('helvetica', 'normal')
@@ -387,7 +497,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
         contatosClienteArr.join('   |   '),
         contentWidth - 10,
       )
-      doc.text(splitClienteExtra, margin + 5, y + 13)
+      doc.text(splitClienteExtra, margin + 5, y + 18.5)
     }
 
     y += clientBoxHeight + 7
@@ -1260,14 +1370,15 @@ export async function downloadPropostaComercialFromOrcamento(
       subtotal: amb.subtotal ?? 0,
       itens: (amb.modulos || []).map((mod) => {
         const nomeApresentavel = getNomeModuloAmigavel(mod.nome, mod.dimensoes)
-        const dimensoesFormatadas = mod.dimensoes
-          ? `${mod.dimensoes.largura}L × ${mod.dimensoes.altura}A × ${mod.dimensoes.profundidade}P mm`
-          : ''
+        const descNatural = montarDescricaoNaturalModulo({
+          nome: mod.nome,
+          dimensoes: mod.dimensoes,
+          mdfExterno: mod.mdf_externo || orcamento.mdf_externo,
+          composicao: mod.composicao,
+        })
         return {
           nome: nomeApresentavel,
-          descricao: dimensoesFormatadas
-            ? `Dimensões: ${dimensoesFormatadas}`
-            : 'Projeto sob medida conforme especificações técnicas aprovadas',
+          descricao: descNatural,
           quantidade: 1,
           valorUnitario: mod.subtotal ?? 0,
           valorTotal: mod.subtotal ?? 0,
@@ -1291,6 +1402,12 @@ export async function downloadPropostaComercialFromOrcamento(
       observacoes: orcamento.observacoes,
     })
   } else {
+    const descNatural = montarDescricaoNaturalModulo({
+      nome: orcamento.modulo,
+      dimensoes: orcamento.dimensoes_json,
+      mdfExterno: orcamento.mdf_externo,
+      composicao: null,
+    })
     await gerarPropostaComercial({
       orcamentoId: orcamento.id,
       numeroSequencial: orcamento.numero_sequencial,
@@ -1303,9 +1420,7 @@ export async function downloadPropostaComercialFromOrcamento(
       ambientes: [
         {
           nome: orcamento.ambiente || 'Ambiente Planejado',
-          descricao: orcamento.modulo
-            ? `Módulo: ${getNomeModuloAmigavel(orcamento.modulo, orcamento.dimensoes_json)}`
-            : 'Projeto de Marcenaria sob medida',
+          descricao: descNatural,
           quantidade: 1,
           valorUnitario: valorTotal,
           valorTotal: valorTotal,

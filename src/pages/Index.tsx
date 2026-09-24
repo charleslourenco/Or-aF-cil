@@ -64,7 +64,7 @@ import {
 import { fetchCatalogoMateriais, type CatalogoMaterial } from '@/services/catalogo'
 import { fetchPerfilEmpresa, type PerfilEmpresa } from '@/services/empresa'
 import { fetchConfigEngenharia } from '@/services/engenharia'
-import { gerarPropostaComercial, gerarAnaliseCusto } from '@/lib/pdf'
+import { gerarPropostaComercial, gerarAnaliseCusto, montarDescricaoNaturalModulo } from '@/lib/pdf'
 import type {
   Orcamento,
   OrcamentoBOMItem,
@@ -162,6 +162,8 @@ export default function Index() {
   const [customModuleNameIA, setCustomModuleNameIA] = useState<string>('')
   const [adaptacoesIA, setAdaptacoesIA] = useState<string | null>(null)
   const [perfilSugeridoIA, setPerfilSugeridoIA] = useState<string | null>(null)
+  const [confiancaIA, setConfiancaIA] = useState<'alta' | 'media' | 'baixa' | null>(null)
+  const [isModuloConfirmado, setIsModuloConfirmado] = useState<boolean>(false)
 
   // 🗄️ DECOMPOSIÇÃO ESTRUTURADA DE MÓDULO (portas, gavetas, prateleiras, interior)
   const [composicaoModulo, setComposicaoModulo] = useState<ModuloComposicao>({
@@ -249,6 +251,7 @@ export default function Index() {
   // Section references for scrolling
   const topRef = useRef<HTMLDivElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
+  const matchCardRef = useRef<HTMLDivElement>(null)
 
   // Função para limpar rascunho com segurança
   const clearDraftStorage = () => {
@@ -1104,6 +1107,8 @@ export default function Index() {
     setDimensoesOriginaisIA(null)
     setDimensoesEstimadasIA(null)
     setIsCustomModuleIA(false)
+    setConfiancaIA(null)
+    setIsModuloConfirmado(false)
 
     if (errors.uploadedFile) {
       setErrors((prev) => ({ ...prev, uploadedFile: undefined }))
@@ -1162,6 +1167,14 @@ export default function Index() {
           if (primeiroModulo.perfil_construcao_sugerido) {
             setPerfilSugeridoIA(primeiroModulo.perfil_construcao_sugerido)
           }
+
+          // Confiança da IA (alta | media | baixa)
+          const conf =
+            (primeiroModulo as { confianca?: 'alta' | 'media' | 'baixa' }).confianca ||
+            (eCustom ? 'baixa' : 'alta')
+          setConfiancaIA(conf)
+          // Se for 'alta', confirmação não é exigida de antemão (fluxo direto)
+          setIsModuloConfirmado(conf === 'alta')
 
           setIsCustomModuleIA(eCustom)
           setCustomModuleNameIA(primeiroModulo.nome || 'Módulo Personalizado (Análise IA)')
@@ -1382,6 +1395,8 @@ export default function Index() {
           // Fallback sem módulos identificados: define como módulo personalizado
           setSelectedModuleId('MODULO-CUSTOM')
           setIsCustomModuleIA(true)
+          setConfiancaIA('baixa')
+          setIsModuloConfirmado(false)
           setCustomModuleNameIA('Módulo Personalizado (Análise IA)')
           setMatchJustificativa(justificativaGeral)
           setIsAnalyzing(false)
@@ -1395,6 +1410,8 @@ export default function Index() {
       .catch((err) => {
         console.error('Falha na análise visual da IA (Edge Function):', err)
         // Fallback para o mock em caso de erro na chamada da IA.
+        setConfiancaIA('baixa')
+        setIsModuloConfirmado(false)
         runMockMatch(
           modulosAtuais,
           '⚠️ A IA falhou, mas o match manual está disponível.',
@@ -1412,6 +1429,18 @@ export default function Index() {
 
   // Action: "⚙️ Gerar Orçamento do Módulo"
   const handleGenerateBudget = () => {
+    // Se a IA encontrou match com confiança !== 'alta' e o usuário ainda não confirmou, bloqueia e rola até o card
+    if (confiancaIA && confiancaIA !== 'alta' && !isModuloConfirmado) {
+      toast({
+        title: 'Confirmação do Módulo Necessária',
+        description:
+          'Por favor, confirme se o módulo identificado confere antes de gerar o orçamento.',
+        variant: 'destructive',
+      })
+      matchCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+
     const newErrors: {
       clientName?: string
       room?: string
@@ -2110,14 +2139,15 @@ export default function Index() {
         subtotal: amb.subtotal ?? 0,
         itens: (amb.modulos || []).map((m) => {
           const nomeLimpo = m.nome.replace(/\s*\(em edição\)\s*/gi, '').trim() || m.nome
-          const dimensoesFormatadas = m.dimensoes
-            ? `${m.dimensoes.largura}L × ${m.dimensoes.altura}A × ${m.dimensoes.profundidade}P mm`
-            : ''
+          const descNatural = montarDescricaoNaturalModulo({
+            nome: nomeLimpo,
+            dimensoes: m.dimensoes,
+            mdfExterno: m.mdf_externo || `${mdfExterno.cor} (${mdfExterno.espessura}mm)`,
+            composicao: m.composicao,
+          })
           return {
             nome: nomeLimpo,
-            descricao: dimensoesFormatadas
-              ? `Dimensões: ${dimensoesFormatadas}`
-              : 'Projeto sob medida conforme especificações técnicas aprovadas',
+            descricao: descNatural,
             quantidade: 1,
             valorUnitario: m.subtotal ?? 0,
             valorTotal: m.subtotal ?? 0,
@@ -2822,7 +2852,7 @@ export default function Index() {
           </div>
 
           {/* Right Column: Match da Biblioteca */}
-          <div className="flex flex-col h-full">
+          <div ref={matchCardRef} className="flex flex-col h-full">
             <LibraryMatchCard
               selectedModule={selectedModuleObj}
               isAnalyzing={isAnalyzing}
@@ -2842,9 +2872,29 @@ export default function Index() {
               }}
               adaptacoes={adaptacoesIA}
               perfilSugeridoIA={perfilSugeridoIA}
+              confiancaIA={confiancaIA}
+              isModuloConfirmado={isModuloConfirmado}
+              onConfirmarModulo={() => {
+                setIsModuloConfirmado(true)
+                toast({
+                  title: 'Módulo confirmado!',
+                  description: 'Você já pode prosseguir para gerar o orçamento.',
+                })
+              }}
+              onTratarPersonalizado={() => {
+                setSelectedModuleId('MODULO-CUSTOM')
+                setIsCustomModuleIA(true)
+                setCustomModuleNameIA('Módulo Personalizado (Análise IA)')
+                setIsModuloConfirmado(true)
+                toast({
+                  title: 'Definido como Módulo Personalizado',
+                  description: 'O móvel será orçado com perfil sob medida.',
+                })
+              }}
               onModuleChange={(id) => {
-                // Troca manual de gabarito: atualiza o card e reseta o estado de análise.
+                // Troca manual de gabarito: atualiza o card, confirma o módulo e reseta o estado de análise.
                 handleModuleChange(id)
+                setIsModuloConfirmado(true)
                 setIsAnalyzing(false)
                 if (analyzeTimeoutRef.current) {
                   clearTimeout(analyzeTimeoutRef.current)
