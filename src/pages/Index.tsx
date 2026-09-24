@@ -3319,7 +3319,11 @@ export default function Index() {
           </div>
 
           {dimensoesValidas ? (
-            <PricingTable items={pricingItems} />
+            <PricingTable
+              items={pricingItems}
+              dimensoes={dimensoes}
+              moduleName={currentModuleName}
+            />
           ) : (
             <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center">
               <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">

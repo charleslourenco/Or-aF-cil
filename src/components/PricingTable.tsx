@@ -8,6 +8,10 @@ interface PricingTableProps {
   items: BudgetItem[]
   /** Quantidade de peças físicas representadas pela BOM. */
   totalPecas?: number
+  /** Dimensões do módulo orçado para checagem de sanidade técnica */
+  dimensoes?: { largura: number; altura: number; profundidade: number }
+  /** Nome ou perfil do módulo */
+  moduleName?: string
 }
 
 const formatCurrency = (val: number) =>
@@ -28,7 +32,12 @@ const formatMetragem = (item: BudgetItem): string => {
   return `${metragem.toFixed(casas)} ${unidade}`
 }
 
-export const PricingTable: React.FC<PricingTableProps> = ({ items, totalPecas }) => {
+export const PricingTable: React.FC<PricingTableProps> = ({
+  items,
+  totalPecas,
+  dimensoes,
+  moduleName,
+}) => {
   const totalCostSum = custoConsolidado(items)
   const totalSaleSum = valorConsolidado(items)
   const totalLucro = totalSaleSum - totalCostSum
@@ -36,8 +45,45 @@ export const PricingTable: React.FC<PricingTableProps> = ({ items, totalPecas })
 
   const qtdPecas = totalPecas ?? items.length
 
+  // Checagem de sanidade técnica: móvel grande com valor de venda incompativelmente baixo
+  // Ex: móvel com largura >= 1800mm ou área de chapa frontal >= 1.5m² com venda < R$ 200
+  const isMovelGrande = Boolean(
+    dimensoes &&
+    (dimensoes.largura >= 1600 || (dimensoes.largura * dimensoes.altura) / 1_000_000 >= 1.5),
+  )
+  const isValorAnormalmenteBaixo = isMovelGrande && totalSaleSum > 0 && totalSaleSum < 200
+
   return (
     <div className="space-y-4">
+      {/* ⚠️ ALERTA AMARELO DE SANIDADE: CUSTO/VALOR ABSURDAMENTE BAIXO PARA O PORTE DO MÓVEL */}
+      {isValorAnormalmenteBaixo && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 p-4 rounded-xl border-2 text-xs leading-relaxed animate-fade-in"
+          style={{
+            backgroundColor: '#FEF3C7',
+            borderColor: '#F59E0B',
+            color: '#92400E',
+          }}
+        >
+          <span className="text-xl leading-none shrink-0 mt-0.5">⚠️</span>
+          <div className="space-y-1">
+            <span className="font-extrabold text-sm block">
+              Alerta de Sanidade: Valor orçado incomumente baixo para as dimensões deste móvel
+            </span>
+            <p className="opacity-95">
+              O módulo {moduleName ? `"${moduleName}"` : ''} tem{' '}
+              <strong>
+                {dimensoes?.largura}mm de largura × {dimensoes?.altura}mm de altura
+              </strong>
+              , mas o valor total gerado é de apenas <strong>{formatCurrency(totalSaleSum)}</strong>
+              . Verifique se o perfil construtivo (Painel, Balcão ou Caixa) e a lista de materiais
+              cadastrados no catálogo estão corretos antes de aprovar a proposta comercial.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex items-center gap-3.5">

@@ -335,13 +335,192 @@ export function calcularBOM(
   const isCaixaSimples = perfilEfetivo === 'Caixa Simples'
 
   // =========================================================================
-  // DIMENSÕES E SUBTRAÇÕES PARAMÉTRICAS (MEDIDAS EXTERNAS SÃO AS FINAIS)
+  // DIMENSÕES E SUBTRAÇÕES PARAMÉTRICAS
   // =========================================================================
   const { recuo_caixa_interna_mm, altura_rodape_mm, altura_rodateto_mm, altura_travessa_mm } =
     PARAMS_CONSTRUTIVOS
 
+  // =========================================================================
+  // TRATAMENTO ESPECÍFICO: PERFIL "ABERTO / PAINEL" (EX: PAINEL DE TV, NICHOS)
+  // O corpo do móvel é uma CHAPA TRASEIRA ESTRUTURAL (L × A) em MDF Externo 18mm,
+  // mais estrutura de fixação/rebaixos (sarrafos franceses / mão-amiga 100mm),
+  // e prateleiras/nichos/gavetas apenas se a composição pedir.
+  // ZERO laterais de caixa rasa, ZERO base inferior de box, ZERO teto interno,
+  // ZERO base interna, ZERO rodateto.
+  // =========================================================================
+  if (isAbertoPainel) {
+    // 1. Chapa Traseira Estrutural de Painel (L × A) em MDF Externo (18mm)
+    const areaPainelPrincipal = ((L * A) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-painel-traseiro-estrutural',
+        `Chapa Traseira Estrutural de Painel (1x) — ${L}×${A}mm`,
+        'MDF Externo',
+        espExt,
+        areaPainelPrincipal,
+        'm²',
+        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+
+    // 2. Sarrafos de Fixação Traseira / Estrutura Francesa / Mão-Amiga (2 sarrafos de 100mm × L)
+    const largSarrafo = Math.max(100, L - 100)
+    const altSarrafoMm = 100
+    const areaSarrafos = ((largSarrafo * altSarrafoMm * 2) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-sarrafos-fixacao-painel',
+        `Sarrafos Estruturais de Fixação / Mão-Amiga (2x) — ${largSarrafo}×${altSarrafoMm}mm`,
+        'MDF Externo',
+        espExt,
+        areaSarrafos,
+        'm²',
+        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+
+    // Acumulador de fita de borda para o painel (perímetro da chapa traseira)
+    let perimetroFitaMmPainel = 2 * (L + A) * escala
+
+    // 3. Prateleiras ou nichos abertos suspensos (se informados na composição)
+    const qtdPrateleirasPainel = Math.max(0, composicao?.prateleiras?.qtd ?? 0)
+    if (qtdPrateleirasPainel > 0) {
+      // Usa a profundidade informada do projeto (ex: 200-300mm para prateleira de TV)
+      const profPratPainel = Math.max(120, P)
+      const largPratPainel = Math.max(200, Math.round(L * 0.85))
+      const areaPratPainel = ((largPratPainel * profPratPainel) / 1_000_000) * PERDA * escala
+      pecas.push(
+        criarPeca(
+          'bom-prateleiras-painel',
+          `Prateleira Suspensa de Apoio (${qtdPrateleirasPainel}x) — ${largPratPainel}×${profPratPainel}mm`,
+          'MDF Externo',
+          espExt,
+          areaPratPainel * qtdPrateleirasPainel,
+          'm²',
+          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+          effectiveMarkup,
+        ),
+      )
+      perimetroFitaMmPainel +=
+        qtdPrateleirasPainel * (2 * largPratPainel + 2 * profPratPainel) * escala
+    }
+
+    // 4. Gavetas no rack/nicho suspenso acoplado (se houver)
+    const qtdGavetasPainel = Math.max(0, composicao?.gavetas?.qtd ?? 0)
+    if (qtdGavetasPainel > 0) {
+      const profGavPainel = Math.max(250, P - 50)
+      const largFrentePainel = Math.max(200, Math.round(L / qtdGavetasPainel))
+      const altFrentePainel = 160
+      const areaFrentes = ((largFrentePainel * altFrentePainel) / 1_000_000) * PERDA * escala
+      pecas.push(
+        criarPeca(
+          'bom-gavetas-frentes-painel',
+          `Frentes de Gaveta (${qtdGavetasPainel}x) — ${largFrentePainel}×${altFrentePainel}mm`,
+          'MDF Externo',
+          espExt,
+          areaFrentes * qtdGavetasPainel,
+          'm²',
+          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+          effectiveMarkup,
+        ),
+      )
+      perimetroFitaMmPainel += qtdGavetasPainel * 2 * (largFrentePainel + altFrentePainel) * escala
+
+      // Caixotes internos
+      const largCaixote = Math.max(150, largFrentePainel - 30)
+      const altCaixote = 120
+      const areaCaixote =
+        ((2 * profGavPainel * altCaixote + 2 * largCaixote * altCaixote) / 1_000_000) *
+        PERDA *
+        escala
+      pecas.push(
+        criarPeca(
+          'bom-gavetas-caixotes-painel',
+          `Caixotes de Gaveta (${qtdGavetasPainel}x internos) — MDF 15mm`,
+          'MDF Interno',
+          espInt,
+          areaCaixote * qtdGavetasPainel,
+          'm²',
+          resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+          effectiveMarkup,
+        ),
+      )
+
+      // Fundos 6mm
+      const areaFundoGav = ((largCaixote * profGavPainel) / 1_000_000) * PERDA * escala
+      pecas.push(
+        criarPeca(
+          'bom-gavetas-fundos-painel',
+          `Fundos de Gaveta (${qtdGavetasPainel}x) — ${largCaixote}×${profGavPainel}mm MDF 6mm`,
+          'MDF Fundo',
+          6,
+          areaFundoGav * qtdGavetasPainel,
+          'm²',
+          resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto),
+          effectiveMarkup,
+        ),
+      )
+
+      // Corrediças
+      const corredicaMat = findItemCatalogo(catalogoPrecos, ['corrediça', 'corredica'])
+      const unitCostCorredica = corredicaMat ? Number(corredicaMat.preco_custo) || 95.0 : 50.0
+      pecas.push({
+        id: 'bom-ferragem-corredicas-painel',
+        description: corredicaMat
+          ? `Corrediças com amortecedor (${qtdGavetasPainel} pares)`
+          : `Corrediças telescópicas (${qtdGavetasPainel} pares) — Estimado`,
+        material: 'Ferragem',
+        metragem: qtdGavetasPainel,
+        unidade: corredicaMat?.unidade === 'un' ? 'un' : 'par',
+        unitCost: unitCostCorredica,
+        totalCost: round2(unitCostCorredica * qtdGavetasPainel),
+        markup: effectiveMarkup,
+        salePrice: round2(unitCostCorredica * qtdGavetasPainel * effectiveMarkup),
+        item_nao_cadastrado: !corredicaMat,
+        catalogo_id: corredicaMat?.id || null,
+      })
+    }
+
+    // 5. Fita de Borda para o painel
+    const perimetroFitaM = perimetroFitaMmPainel / 1000
+    pecas.push(
+      criarPeca(
+        'bom-fita-borda-painel',
+        `Fita de Borda — ${round2(perimetroFitaM)}m linear`,
+        'Fita de Borda',
+        0,
+        perimetroFitaM,
+        'm',
+        resolverCustoUnitario('Fita de Borda', catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+
+    // 6. Kit de Fixação e Buchas Estruturais para Alvenaria/Drywall
+    pecas.push({
+      id: 'bom-kit-fixacao-painel',
+      description: 'Kit de Fixação Reforçado para Painel Suspenso (Buchas 10mm + Parafusos)',
+      material: 'Ferragem',
+      metragem: 1,
+      unidade: 'jogo',
+      unitCost: 35.0,
+      totalCost: 35.0,
+      markup: effectiveMarkup,
+      salePrice: round2(35.0 * effectiveMarkup),
+      item_nao_cadastrado: false,
+      catalogo_id: null,
+    })
+
+    return pecas
+  }
+
+  // =========================================================================
+  // PERFIS DE CAIXA: FECHADO ENVELOPADO, BALCÃO, CAIXA SIMPLES
+  // =========================================================================
+
   // 1. Laterais Externas: 2x (A × P) em MDF Externo
-  // Presente em todos os perfis estruturais
   const areaLateralExt = ((A * P) / 1_000_000) * PERDA * escala
   pecas.push(
     criarPeca(
@@ -425,23 +604,6 @@ export function calcularBOM(
         ),
       )
     }
-  } else if (isAbertoPainel) {
-    // ABERTO / PAINEL: estrutura aberta.
-    // Base/estrutura inferior (1x) e tampo/topo estrutural simples (1x) se aplicável.
-    // SEM teto interno, SEM base interna, SEM rodateto, SEM caixa dupla.
-    const areaBaseTopo = ((larguraEntreLateraisExt * P) / 1_000_000) * PERDA * escala
-    pecas.push(
-      criarPeca(
-        'bom-base-inferior-painel',
-        `Base Inferior / Prateleira Estrutural (1x) — ${larguraEntreLateraisExt}×${P}mm`,
-        'MDF Externo',
-        espExt,
-        areaBaseTopo,
-        'm²',
-        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
-        effectiveMarkup,
-      ),
-    )
   } else if (isCaixaSimples) {
     // CAIXA SIMPLES: caixa única tradicional sem caixaria interna.
     // Base e Topo (2x) em MDF Externo.
@@ -557,22 +719,19 @@ export function calcularBOM(
 
   // 3. Fundo:
   // Em Fechado Envelopado, Balcão e Caixa Simples o fundo fechado (1x L×A) em 6mm é gerado.
-  // Em "Aberto / Painel", o fundo fechado de 6mm NÃO é gerado compulsoriamente (móvel aberto).
-  if (!isAbertoPainel) {
-    const areaFundo = ((L * A) / 1_000_000) * PERDA * escala
-    pecas.push(
-      criarPeca(
-        'bom-fundo',
-        `Fundo (1x) — ${L}×${A}mm`,
-        'MDF Fundo',
-        6,
-        areaFundo,
-        'm²',
-        resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto),
-        effectiveMarkup,
-      ),
-    )
-  }
+  const areaFundo = ((L * A) / 1_000_000) * PERDA * escala
+  pecas.push(
+    criarPeca(
+      'bom-fundo',
+      `Fundo (1x) — ${L}×${A}mm`,
+      'MDF Fundo',
+      6,
+      areaFundo,
+      'm²',
+      resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto),
+      effectiveMarkup,
+    ),
+  )
 
   // Altura lateral interna de referência para peças internas
   const altLateralIntRef = isFechadoEnvelopado
@@ -752,8 +911,8 @@ export function calcularBOM(
     perimetroFitaMm += qtdPrateleiras * larguraCorpo * escala
   }
 
-  // 5. Portas (MDF Externo) e Ferragens de Porta
-  if (qtdPortas > 0 && tipoPorta !== 'nenhum') {
+  // 5. Portas (MDF Externo) e Ferragens de Porta (para perfis de caixa)
+  if (!isAbertoPainel && qtdPortas > 0 && tipoPorta !== 'nenhum') {
     const largPorta = Math.round(larguraEntreLateraisExt / qtdPortas)
     const altPorta = Math.max(100, A - 2 * espExt)
     const areaUmaPorta = ((largPorta * altPorta) / 1_000_000) * PERDA * escala
