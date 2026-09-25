@@ -122,6 +122,16 @@ export default function OrcamentoV2() {
   // IDs dos ambientes abertos no accordion
   const [expandedAmbientes, setExpandedAmbientes] = useState<string[]>([])
 
+  // Ambiente Ativo (em edição guiada). Apenas um por vez fica ativo.
+  const [activeAmbienteId, setActiveAmbienteId] = useState<string | null>(null)
+
+  // Estado que indica se o orçamento foi concluído via fluxo guiado (exibe resumo geral)
+  const [isOrcamentoFinalizado, setIsOrcamentoFinalizado] = useState(false)
+
+  // Referência para o container seletor de ambientes (para dar foco ao finalizar ambiente)
+  const selectorContainerRef = useRef<HTMLDivElement>(null)
+  const resumoGeralRef = useRef<HTMLDivElement>(null)
+
   // Estado para renomear ambiente inline
   const [editingAmbienteId, setEditingAmbienteId] = useState<string | null>(null)
   const [editingAmbienteNome, setEditingAmbienteNome] = useState('')
@@ -175,7 +185,12 @@ export default function OrcamentoV2() {
                   : [],
               }))
               setAmbientes(mappedAmbientes)
-              setExpandedAmbientes(mappedAmbientes.map((a) => a.id))
+              // Em orçamentos carregados, se houver ambientes, define o primeiro ou último como ativo, ou mantém recolhidos
+              if (mappedAmbientes.length > 0) {
+                const ultimo = mappedAmbientes[mappedAmbientes.length - 1]
+                setActiveAmbienteId(ultimo.id)
+                setExpandedAmbientes([ultimo.id])
+              }
             }
           }
         })
@@ -238,12 +253,14 @@ export default function OrcamentoV2() {
     }
 
     setAmbientes((prev) => [...prev, novoAmbiente])
-    // Abre o novo ambiente automaticamente no accordion
-    setExpandedAmbientes((prev) => [...prev, novoId])
+    // Define o novo ambiente como o Ambiente Ativo e garante que ele esteja expandido
+    setActiveAmbienteId(novoId)
+    setExpandedAmbientes((prev) => (prev.includes(novoId) ? prev : [...prev, novoId]))
+    setIsOrcamentoFinalizado(false)
 
     toast({
       title: 'Ambiente adicionado',
-      description: `O ambiente "${nomeLimpo}" foi criado com sucesso.`,
+      description: `O ambiente "${nomeLimpo}" agora é o ambiente ativo para configuração.`,
     })
   }
 
@@ -279,7 +296,17 @@ export default function OrcamentoV2() {
   // Exclusão de ambiente
   const handleRemoveAmbiente = (ambienteId: string) => {
     const alvo = ambientes.find((a) => a.id === ambienteId)
-    setAmbientes((prev) => prev.filter((a) => a.id !== ambienteId))
+    setAmbientes((prev) => {
+      const restantes = prev.filter((a) => a.id !== ambienteId)
+      if (activeAmbienteId === ambienteId) {
+        const prox = restantes.length > 0 ? restantes[restantes.length - 1].id : null
+        setActiveAmbienteId(prox)
+        if (prox) {
+          setExpandedAmbientes((cur) => (cur.includes(prox) ? cur : [...cur, prox]))
+        }
+      }
+      return restantes
+    })
     setExpandedAmbientes((prev) => prev.filter((id) => id !== ambienteId))
     if (editingAmbienteId === ambienteId) {
       setEditingAmbienteId(null)
@@ -288,6 +315,58 @@ export default function OrcamentoV2() {
       title: 'Ambiente removido',
       description: `O ambiente "${alvo?.nome || ''}" foi removido do orçamento.`,
     })
+  }
+
+  // Ação Guiada 1: Finalizar Ambiente e Criar Novo
+  const handleFinalizarAmbienteECriarNovo = (ambienteId: string) => {
+    const amb = ambientes.find((a) => a.id === ambienteId)
+    // Recolhe o card do ambiente que estava ativo
+    setExpandedAmbientes((prev) => prev.filter((id) => id !== ambienteId))
+    // Sai do estado de ativo
+    setActiveAmbienteId(null)
+    setIsOrcamentoFinalizado(false)
+
+    toast({
+      title: 'Ambiente finalizado!',
+      description: `"${amb?.nome || 'Ambiente'}" foi concluído e recolhido. Selecione o próximo ambiente acima.`,
+    })
+
+    // Rola e dá destaque para o container do seletor de ambientes
+    setTimeout(() => {
+      if (selectorContainerRef.current) {
+        selectorContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        selectorContainerRef.current.classList.add(
+          'ring-2',
+          'ring-slate-900',
+          'dark:ring-slate-100',
+        )
+        setTimeout(() => {
+          selectorContainerRef.current?.classList.remove(
+            'ring-2',
+            'ring-slate-900',
+            'dark:ring-slate-100',
+          )
+        }, 1500)
+      }
+    }, 100)
+  }
+
+  // Ação Guiada 2: Finalizar Orçamento (fecha o lançamento de ambientes e calcula o resumo geral do projeto)
+  const handleFinalizarOrcamentoGuiado = () => {
+    // Recolhe todos os ambientes
+    setExpandedAmbientes([])
+    setActiveAmbienteId(null)
+    setIsOrcamentoFinalizado(true)
+
+    toast({
+      title: 'Orçamento Finalizado!',
+      description: 'Lançamento de ambientes concluído. Confira o resumo geral do projeto.',
+    })
+
+    // Rola suavemente até o card de resumo geral
+    setTimeout(() => {
+      resumoGeralRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 150)
   }
 
   // Controle de expansão do Accordion
@@ -654,7 +733,10 @@ export default function OrcamentoV2() {
           </div>
 
           {/* Seletor dropdown ao lado do botão destacado '+ Adicionar Ambiente' */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <div
+            ref={selectorContainerRef}
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto p-1 rounded-2xl transition-all duration-300"
+          >
             <Select
               value={selectedAmbienteOpcao}
               onValueChange={(val) => {
@@ -733,6 +815,7 @@ export default function OrcamentoV2() {
           <div className="space-y-3.5">
             {ambientes.map((amb) => {
               const isOpen = expandedAmbientes.includes(amb.id)
+              const isActive = activeAmbienteId === amb.id
               const subtotalAmbiente = subtotalPorAmbiente.get(amb.id) || 0
               const qtdModulos = amb.modulos.length
               const isEditing = editingAmbienteId === amb.id
@@ -741,10 +824,12 @@ export default function OrcamentoV2() {
                 <div
                   key={amb.id}
                   className={cn(
-                    'rounded-2xl border transition-all duration-200 bg-white dark:bg-slate-900 overflow-hidden shadow-xs',
-                    isOpen
-                      ? 'border-slate-300 dark:border-slate-700 shadow-sm'
-                      : 'border-slate-200/90 dark:border-slate-800 hover:border-slate-300',
+                    'rounded-2xl border transition-all duration-200 overflow-hidden',
+                    isActive
+                      ? 'bg-white dark:bg-slate-900 ring-2 ring-slate-900 dark:ring-slate-100 border-slate-900 dark:border-slate-100 shadow-md shadow-slate-900/5'
+                      : isOpen
+                        ? 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 shadow-xs'
+                        : 'bg-slate-50/70 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 hover:border-slate-300 opacity-90 hover:opacity-100 shadow-2xs',
                   )}
                 >
                   {/* Cabeçalho do Card Accordion: Nome, Qtd de módulos, Subtotal e Ações */}
@@ -762,11 +847,16 @@ export default function OrcamentoV2() {
                         toggleAccordion(amb.id)
                       }
                     }}
-                    className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3.5 text-left select-none cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                    className={cn(
+                      'w-full flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3.5 text-left select-none cursor-pointer transition-colors',
+                      isActive
+                        ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                        : 'hover:bg-slate-100/70 dark:hover:bg-slate-800/40 text-slate-900 dark:text-slate-100',
+                    )}
                   >
-                    {/* Lado esquerdo: Chevron indicador, Nome editável e Badge de qtd de módulos */}
+                    {/* Lado esquerdo: Chevron indicador, Badge de Ambiente Ativo, Nome editável e Badge de qtd de módulos */}
                     <div
-                      className="flex items-center gap-3 min-w-0"
+                      className="flex items-center gap-2.5 min-w-0"
                       onClick={(e) => {
                         // Não propaga o toggle quando interagir com a edição do nome
                         if (isEditing) {
@@ -777,7 +867,12 @@ export default function OrcamentoV2() {
                       <button
                         type="button"
                         aria-label={isOpen ? 'Recolher ambiente' : 'Expandir ambiente'}
-                        className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center shrink-0 transition-transform duration-200"
+                        className={cn(
+                          'w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200',
+                          isActive
+                            ? 'bg-white/15 text-white dark:bg-slate-900/15 dark:text-slate-900'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300',
+                        )}
                       >
                         <ChevronRight
                           className={cn(
@@ -786,6 +881,18 @@ export default function OrcamentoV2() {
                           )}
                         />
                       </button>
+
+                      {/* Tag destacada de Ambiente Ativo */}
+                      {isActive ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white text-slate-900 dark:bg-slate-900 dark:text-white shrink-0 shadow-xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Ambiente Ativo
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 shrink-0">
+                          Concluído
+                        </span>
+                      )}
 
                       {isEditing ? (
                         <div
@@ -805,7 +912,7 @@ export default function OrcamentoV2() {
                                 handleCancelRename()
                               }
                             }}
-                            className="h-8 text-sm font-bold w-48 sm:w-64 rounded-lg bg-white dark:bg-slate-950 border-slate-300"
+                            className="h-8 text-sm font-bold w-48 sm:w-64 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 border-slate-300"
                             placeholder="Nome do ambiente..."
                           />
                           <Button
@@ -836,8 +943,15 @@ export default function OrcamentoV2() {
                           </Button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100 truncate">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={cn(
+                              'font-bold text-sm sm:text-base truncate',
+                              isActive
+                                ? 'text-white dark:text-slate-900'
+                                : 'text-slate-900 dark:text-slate-100',
+                            )}
+                          >
                             {amb.nome}
                           </span>
 
@@ -847,30 +961,76 @@ export default function OrcamentoV2() {
                               e.stopPropagation()
                               handleStartRename(amb)
                             }}
-                            className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-colors"
+                            className={cn(
+                              'w-7 h-7 rounded-lg flex items-center justify-center transition-colors',
+                              isActive
+                                ? 'text-white/70 hover:text-white hover:bg-white/10 dark:text-slate-900/70 dark:hover:text-slate-900 dark:hover:bg-slate-900/10'
+                                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800',
+                            )}
                             title="Editar nome do ambiente"
                             aria-label={`Editar nome de ${amb.nome}`}
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
 
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700 shrink-0">
+                          <span
+                            className={cn(
+                              'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0',
+                              isActive
+                                ? 'bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700',
+                            )}
+                          >
                             {qtdModulos} {qtdModulos === 1 ? 'módulo' : 'módulos'}
                           </span>
                         </div>
                       )}
                     </div>
 
-                    {/* Lado direito: Subtotal do ambiente e botão de excluir ambiente */}
+                    {/* Lado direito: Subtotal do ambiente, botão Tornar Ativo (se não for ativo) e botão de excluir */}
                     <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
                       <div className="text-left sm:text-right">
-                        <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider block">
+                        <span
+                          className={cn(
+                            'text-[10px] uppercase font-semibold tracking-wider block',
+                            isActive
+                              ? 'text-white/70 dark:text-slate-900/70'
+                              : 'text-slate-400 dark:text-slate-500',
+                          )}
+                        >
                           Subtotal
                         </span>
-                        <span className="text-sm sm:text-base font-bold font-mono text-slate-900 dark:text-slate-100">
+                        <span
+                          className={cn(
+                            'text-sm sm:text-base font-bold font-mono',
+                            isActive
+                              ? 'text-white dark:text-slate-900'
+                              : 'text-slate-900 dark:text-slate-100',
+                          )}
+                        >
                           {formatCurrency(subtotalAmbiente)}
                         </span>
                       </div>
+
+                      {!isActive && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setActiveAmbienteId(amb.id)
+                            setExpandedAmbientes((cur) =>
+                              cur.includes(amb.id) ? cur : [...cur, amb.id],
+                            )
+                            setIsOrcamentoFinalizado(false)
+                          }}
+                          className="h-7 px-2 text-[11px] font-semibold border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                          title="Tornar este o ambiente ativo para edição"
+                        >
+                          Editar Módulos
+                        </Button>
+                      )}
 
                       <Button
                         type="button"
@@ -880,7 +1040,12 @@ export default function OrcamentoV2() {
                           e.stopPropagation()
                           handleRemoveAmbiente(amb.id)
                         }}
-                        className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg shrink-0"
+                        className={cn(
+                          'h-8 w-8 p-0 rounded-lg shrink-0 transition-colors',
+                          isActive
+                            ? 'text-white/70 hover:text-white hover:bg-white/10 dark:text-slate-900/70 dark:hover:text-slate-900 dark:hover:bg-slate-900/10'
+                            : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40',
+                        )}
                         title={`Excluir ambiente "${amb.nome}"`}
                         aria-label={`Excluir ambiente ${amb.nome}`}
                       >
@@ -984,7 +1149,7 @@ export default function OrcamentoV2() {
                         </div>
                       </div>
 
-                      {/* Rodapé do card: botão '+ Adicionar Módulo neste Ambiente' */}
+                      {/* Linha com botão '+ Adicionar Módulo neste Ambiente' */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                         <Button
                           type="button"
@@ -1001,6 +1166,44 @@ export default function OrcamentoV2() {
                           Configure dimensões, foto/IA e perfil no painel lateral
                         </span>
                       </div>
+
+                      {/* Botões de Ação Guiada no Rodapé do Ambiente (apenas quando o ambiente está ATIVO) */}
+                      {isActive && (
+                        <div className="pt-4 mt-2 border-t border-slate-200/90 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5">
+                          {/* Botão Secundário: [ Finalizar Ambiente e Criar Novo ] */}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => handleFinalizarAmbienteECriarNovo(amb.id)}
+                            disabled={amb.modulos.length === 0}
+                            className="h-10 px-4 text-xs font-semibold rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-xs transition-all disabled:opacity-50"
+                            title={
+                              amb.modulos.length === 0
+                                ? 'Adicione pelo menos um módulo antes de finalizar o ambiente'
+                                : 'Conclui e recolhe este ambiente, abrindo a seleção do próximo'
+                            }
+                          >
+                            <Check className="w-4 h-4 text-slate-500 mr-1.5" />
+                            <span>Finalizar Ambiente e Criar Novo</span>
+                          </Button>
+
+                          {/* Botão Principal: [ Finalizar Orçamento ] */}
+                          <Button
+                            type="button"
+                            onClick={handleFinalizarOrcamentoGuiado}
+                            disabled={amb.modulos.length === 0}
+                            className="h-10 px-5 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 shadow-sm transition-all disabled:opacity-50"
+                            title={
+                              amb.modulos.length === 0
+                                ? 'Adicione pelo menos um módulo antes de finalizar o orçamento'
+                                : 'Encerra o lançamento de ambientes e calcula o resumo geral do projeto'
+                            }
+                          >
+                            <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                            <span>Finalizar Orçamento</span>
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1009,6 +1212,162 @@ export default function OrcamentoV2() {
           </div>
         )}
       </section>
+
+      {/* 4. Resumo Geral do Projeto (exibido quando o orçamento for finalizado pelo fluxo guiado ou quando houver ambientes) */}
+      {isOrcamentoFinalizado && ambientes.length > 0 && (
+        <section
+          ref={resumoGeralRef}
+          aria-labelledby="resumo-geral-heading"
+          className="rounded-2xl border-2 border-slate-900 dark:border-slate-100 bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 p-6 sm:p-7 shadow-lg space-y-6 animate-fade-in"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Lançamento Concluído</span>
+              </div>
+              <h2
+                id="resumo-geral-heading"
+                className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight"
+              >
+                Resumo Geral do Projeto
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                Cliente:{' '}
+                <strong className="text-slate-800 dark:text-slate-200">
+                  {nomeCliente || 'Não informado'}
+                </strong>{' '}
+                · Data: {dataOrcamento}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (ambientes.length > 0) {
+                    const firstId = ambientes[0].id
+                    setActiveAmbienteId(firstId)
+                    setExpandedAmbientes([firstId])
+                    setIsOrcamentoFinalizado(false)
+                  }
+                }}
+                className="h-9 px-3.5 text-xs font-semibold rounded-xl border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                Reabrir Lançamento
+              </Button>
+
+              <Button
+                type="button"
+                onClick={handleSalvarOrcamento}
+                disabled={isSaving}
+                className={cn(
+                  'h-9 px-4 text-xs font-bold rounded-xl text-white shadow-sm transition-all',
+                  isSavedSuccessfully
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900',
+                )}
+              >
+                {isSaving ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-1.5" />
+                    <span>Salvando...</span>
+                  </>
+                ) : isSavedSuccessfully ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                    <span>Salvo no Banco</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-1.5" />
+                    <span>Salvar Orçamento</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Cards com Métricas Gerais */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 flex flex-col justify-between shadow-2xs">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Total de Ambientes
+              </span>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-3xl font-extrabold text-slate-900 dark:text-slate-100">
+                  {ambientes.length}
+                </span>
+                <span className="text-xs text-slate-400">
+                  {ambientes.length === 1 ? 'ambiente' : 'ambientes'}
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 flex flex-col justify-between shadow-2xs">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Total de Módulos
+              </span>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-3xl font-extrabold text-slate-900 dark:text-slate-100">
+                  {ambientes.reduce((acc, a) => acc + a.modulos.length, 0)}
+                </span>
+                <span className="text-xs text-slate-400">
+                  {ambientes.reduce((acc, a) => acc + a.modulos.length, 0) === 1
+                    ? 'módulo'
+                    : 'módulos'}
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 p-4 flex flex-col justify-between shadow-md">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-300 dark:text-slate-600">
+                Valor Total Geral
+              </span>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl sm:text-3xl font-black font-mono tracking-tight">
+                  {formatCurrency(valorTotalGeral)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Discriminação por Ambiente */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+              <span>Detalhamento Comercial por Ambiente</span>
+              <span>Subtotal</span>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {ambientes.map((amb) => {
+                const sub = subtotalPorAmbiente.get(amb.id) || 0
+                return (
+                  <div
+                    key={amb.id}
+                    className="px-4 py-3 flex items-center justify-between text-xs sm:text-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Box className="w-4 h-4 text-slate-400" />
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        {amb.nome}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        ({amb.modulos.length} {amb.modulos.length === 1 ? 'módulo' : 'módulos'})
+                      </span>
+                    </div>
+                    <span className="font-bold font-mono text-slate-900 dark:text-slate-100">
+                      {formatCurrency(sub)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Modal/Dialog para Adicionar Ambiente com Nome Livre/Personalizado */}
       <Dialog open={isCustomDialogOpen} onOpenChange={setIsCustomDialogOpen}>
