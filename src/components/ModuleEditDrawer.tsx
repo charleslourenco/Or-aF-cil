@@ -1264,65 +1264,55 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
             </TabsContent>
 
             {/* ======================================================== */}
-            {/* ABA 3: Engenharia & Peças (Lista técnica interna)         */}
+            {/* ABA 3: Engenharia & Peças (Consulta Técnica Interna)       */}
             {/* ======================================================== */}
             <TabsContent
               value="engenharia-pecas"
               className="mt-0 space-y-4 focus-visible:outline-none"
             >
-              <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Settings2 className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span>
-                    <strong>Lista Técnica Interna da Marcenaria:</strong> Peças, cortes e ferragens
-                    calculadas automaticamente.
-                  </span>
-                </span>
+              {/* Banner informativo de uso exclusivamente técnico/interno */}
+              <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-900 dark:text-amber-200 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <Settings2 className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">
+                    <strong>Consulta Técnica Interna:</strong> Esta aba serve apenas para consulta
+                    técnica e conferência da decomposição de engenharia (corte e ferragens) antes de
+                    clicar em <em>Salvar Módulo no Ambiente</em>. Nenhuma peça individual é editável
+                    aqui e nada desta lista técnica vaza para a Proposta Comercial do ambiente —
+                    apenas os valores consolidados alimentarão a linha comercial.
+                  </div>
+                </div>
                 <Badge
                   variant="outline"
                   className="border-amber-400 text-amber-900 dark:text-amber-200 font-bold text-[10px] shrink-0"
                 >
-                  {pecasBOM.length} itens
+                  {pecasBOM.length} {pecasBOM.length === 1 ? 'item' : 'itens'}
                 </Badge>
               </div>
 
-              {/* Resumo de Custos Técnicos e Preço Sugerido */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
-                    Custo Direto de Produção (Unitário)
-                  </span>
-                  <span className="text-base sm:text-lg font-bold font-mono text-slate-800 dark:text-slate-200">
-                    {formatCurrency(totalCustoTecnico)}
-                  </span>
-                </div>
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
-                    Valor Sugerido de Venda (Unitário)
-                  </span>
-                  <span className="text-base sm:text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(totalVendaSugerido)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Tabela Técnica de Peças e Ferragens */}
+              {/* Tabela Detalhada de Engenharia (Decomposição do Móvel) */}
               <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
-                <div className="max-h-72 overflow-y-auto">
+                <div className="max-h-80 overflow-y-auto">
                   <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
-                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                          Peça / Item
+                    <TableHeader className="sticky top-0 bg-slate-50 dark:bg-slate-950 z-10">
+                      <TableRow className="border-b border-slate-200 dark:border-slate-800 hover:bg-transparent">
+                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Descrição da Peça
                         </TableHead>
-                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                          Material
-                        </TableHead>
-                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-600 dark:text-slate-400 text-center">
+                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-center whitespace-nowrap">
                           Metragem/Qtd
                         </TableHead>
-                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-600 dark:text-slate-400 text-right">
+                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap">
+                          Custo Unitário
+                        </TableHead>
+                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap">
                           Custo Total
+                        </TableHead>
+                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-center whitespace-nowrap">
+                          Markup
+                        </TableHead>
+                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap">
+                          Valor de Venda
                         </TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1330,35 +1320,105 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                       {pecasBOM.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={4}
-                            className="py-6 text-center text-xs text-slate-400"
+                            colSpan={6}
+                            className="py-8 text-center text-xs text-slate-400"
                           >
                             Nenhuma peça gerada. Verifique as dimensões na Aba 2.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        pecasBOM.map((peca) => (
-                          <TableRow
-                            key={peca.id}
-                            className="border-b border-slate-100 dark:border-slate-800"
-                          >
-                            <TableCell className="py-2.5 px-3 text-xs font-medium text-slate-800 dark:text-slate-200">
-                              {peca.description}
-                            </TableCell>
-                            <TableCell className="py-2.5 px-3 text-[11px] text-slate-500">
-                              {peca.material}
-                            </TableCell>
-                            <TableCell className="py-2.5 px-3 text-xs text-center font-mono text-slate-700 dark:text-slate-300">
-                              {peca.metragem.toFixed(2)} {peca.unidade}
-                            </TableCell>
-                            <TableCell className="py-2.5 px-3 text-xs text-right font-mono text-slate-700 dark:text-slate-300">
-                              {formatCurrency(peca.totalCost)}
-                            </TableCell>
-                          </TableRow>
-                        ))
+                        pecasBOM.map((peca) => {
+                          const metragemFormatada =
+                            typeof peca.metragem === 'number'
+                              ? peca.unidade === 'm²' || peca.unidade === 'm'
+                                ? `${peca.metragem.toLocaleString('pt-BR', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })} ${peca.unidade}`
+                                : `${peca.metragem} ${peca.unidade || 'un'}`
+                              : '-'
+
+                          return (
+                            <TableRow
+                              key={peca.id}
+                              className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
+                            >
+                              <TableCell className="py-2.5 px-3 text-xs font-medium text-slate-800 dark:text-slate-200">
+                                <div className="space-y-0.5">
+                                  <span>{peca.description}</span>
+                                  {peca.material && (
+                                    <span className="block text-[10px] text-slate-400 font-normal">
+                                      {peca.material}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-2.5 px-3 text-xs text-center font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                {metragemFormatada}
+                              </TableCell>
+                              <TableCell className="py-2.5 px-3 text-xs text-right font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                {formatCurrency(peca.unitCost || 0)}
+                              </TableCell>
+                              <TableCell className="py-2.5 px-3 text-xs text-right font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                {formatCurrency(peca.totalCost || 0)}
+                              </TableCell>
+                              <TableCell className="py-2.5 px-3 text-xs text-center font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                {typeof peca.markup === 'number'
+                                  ? `${peca.markup.toFixed(2)}x`
+                                  : '-'}
+                              </TableCell>
+                              <TableCell className="py-2.5 px-3 text-xs text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                                {formatCurrency(peca.salePrice || 0)}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })
                       )}
                     </TableBody>
                   </Table>
+                </div>
+              </div>
+
+              {/* Blocos de Resumo do Módulo no final da aba */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
+                      Custo Consolidado
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300"
+                    >
+                      Soma dos custos
+                    </Badge>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-extrabold font-mono text-slate-900 dark:text-slate-100">
+                    {formatCurrency(totalCustoTecnico)}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Custo direto de produção somando todas as peças e ferragens do módulo.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/20 shadow-2xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] uppercase font-bold text-emerald-700 dark:text-emerald-300 tracking-wider">
+                      Valor Consolidado
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50"
+                    >
+                      Soma dos valores de venda
+                    </Badge>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400">
+                    {formatCurrency(totalVendaSugerido)}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Valor sugerido de venda com markup aplicado que alimenta a linha comercial.
+                  </p>
                 </div>
               </div>
             </TabsContent>
