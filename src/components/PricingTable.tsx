@@ -1,5 +1,5 @@
 import React from 'react'
-import { Boxes, Ruler } from 'lucide-react'
+import { Boxes, Ruler, Trash2 } from 'lucide-react'
 import { BudgetItem } from '@/data/mockData'
 import { custoConsolidado, valorConsolidado } from '@/lib/pricing'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,8 @@ interface PricingTableProps {
   dimensoes?: { largura: number; altura: number; profundidade: number }
   /** Nome ou perfil do módulo */
   moduleName?: string
+  /** Callback para apagar o item clicado na tabela */
+  onDeleteItem?: (itemId: string, itemIndex: number) => void
 }
 
 const formatCurrency = (val: number) =>
@@ -37,6 +39,7 @@ export const PricingTable: React.FC<PricingTableProps> = ({
   totalPecas,
   dimensoes,
   moduleName,
+  onDeleteItem,
 }) => {
   const totalCostSum = custoConsolidado(items)
   const totalSaleSum = valorConsolidado(items)
@@ -115,14 +118,19 @@ export const PricingTable: React.FC<PricingTableProps> = ({
                 <th className="py-3.5 px-4 text-right font-semibold text-slate-900">
                   Valor de Venda (R$)
                 </th>
+                {onDeleteItem && (
+                  <th className="py-3.5 px-3 text-center font-semibold w-12">
+                    <span className="sr-only">Ações</span>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {items.map((item, idx) => (
                 <tr
-                  key={item.id || idx}
+                  key={item.id || `row-${idx}`}
                   className={cn(
-                    'transition-colors hover:bg-slate-50/80',
+                    'transition-colors hover:bg-slate-50/80 group',
                     idx % 2 === 1 ? 'bg-slate-50/30' : 'bg-white',
                   )}
                 >
@@ -157,6 +165,19 @@ export const PricingTable: React.FC<PricingTableProps> = ({
                   <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-800">
                     {formatCurrency(item.salePrice)}
                   </td>
+                  {onDeleteItem && (
+                    <td className="py-3.5 px-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => onDeleteItem(item.id, idx)}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        title={`Apagar "${item.description}"`}
+                        aria-label={`Apagar ${item.description}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -178,6 +199,7 @@ export const PricingTable: React.FC<PricingTableProps> = ({
                 <td className="py-4 px-4 text-right font-mono font-extrabold text-slate-800 text-lg">
                   {formatCurrency(totalSaleSum)}
                 </td>
+                {onDeleteItem && <td className="py-4 px-3" />}
               </tr>
             </tfoot>
           </table>
@@ -203,9 +225,22 @@ export const PricingTable: React.FC<PricingTableProps> = ({
                   </span>
                 )}
               </div>
-              <span className="font-mono font-bold text-slate-800 text-sm shrink-0">
-                {formatCurrency(item.salePrice)}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="font-mono font-bold text-slate-800 text-sm">
+                  {formatCurrency(item.salePrice)}
+                </span>
+                {onDeleteItem && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteItem(item.id, idx)}
+                    className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                    title={`Apagar "${item.description}"`}
+                    aria-label={`Apagar ${item.description}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-100">
