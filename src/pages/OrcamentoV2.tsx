@@ -45,6 +45,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { ModuleEditDrawer, ModuloSalvoData } from '@/components/ModuleEditDrawer'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
@@ -103,6 +104,10 @@ export default function OrcamentoV2() {
   // Estado para modal de inclusão com nome livre
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false)
   const [customAmbienteNome, setCustomAmbienteNome] = useState('')
+
+  // Estado do Drawer de Adicionar/Configurar Módulo
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [targetAmbienteId, setTargetAmbienteId] = useState<string | null>(null)
 
   // Subtotal por ambiente e Valor Total Geral do projeto
   const subtotalPorAmbiente = useMemo(() => {
@@ -229,13 +234,42 @@ export default function OrcamentoV2() {
     setEditingAmbienteNome('')
   }
 
-  // Clique em "+ Adicionar Módulo neste Ambiente"
-  const handleAddModuloClick = (ambienteNome: string) => {
+  // Clique em "+ Adicionar Módulo neste Ambiente" — abre o Drawer lateral
+  const handleOpenAddModuloDrawer = (ambienteId: string) => {
+    setTargetAmbienteId(ambienteId)
+    setIsDrawerOpen(true)
+  }
+
+  // Salvar Módulo vindo do Drawer
+  const handleSaveModuloNoAmbiente = (moduloData: ModuloSalvoData) => {
+    if (!targetAmbienteId) return
+
+    const novoModulo: ModuloComercialV2 = {
+      id: `mod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      modulo: moduloData.nome,
+      descricaoTipo: moduloData.descricaoTipo,
+      quantidade: moduloData.quantidade,
+      valorUnitario: moduloData.valorUnitario,
+      valorTotal: moduloData.valorTotal,
+    }
+
+    setAmbientes((prev) =>
+      prev.map((amb) =>
+        amb.id === targetAmbienteId ? { ...amb, modulos: [...amb.modulos, novoModulo] } : amb,
+      ),
+    )
+
+    const ambAlvo = ambientes.find((a) => a.id === targetAmbienteId)
     toast({
-      title: '+ Adicionar Módulo',
-      description: `A inclusão e parametrização de módulos em "${ambienteNome}" entrará na próxima etapa.`,
+      title: 'Módulo adicionado',
+      description: `"${moduloData.nome}" foi incluído em "${ambAlvo?.nome || 'Ambiente'}".`,
     })
   }
+
+  // Nome do ambiente alvo para o título do drawer
+  const targetAmbienteNome = useMemo(() => {
+    return ambientes.find((a) => a.id === targetAmbienteId)?.nome || ''
+  }, [ambientes, targetAmbienteId])
 
   return (
     <div className="relative min-h-[calc(100vh-10rem)] pb-28 space-y-6">
@@ -718,7 +752,7 @@ export default function OrcamentoV2() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => handleAddModuloClick(amb.nome)}
+                          onClick={() => handleOpenAddModuloDrawer(amb.id)}
                           className="h-9 px-3.5 gap-2 text-xs font-semibold rounded-xl border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-2xs w-full sm:w-auto"
                         >
                           <Plus className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
@@ -726,7 +760,7 @@ export default function OrcamentoV2() {
                         </Button>
 
                         <span className="text-[11px] text-slate-400 dark:text-slate-500 text-center sm:text-right">
-                          Módulos da biblioteca e perfil construtivo entrarão na próxima etapa
+                          Configure dimensões, foto/IA e perfil no painel lateral
                         </span>
                       </div>
                     </div>
@@ -796,6 +830,14 @@ export default function OrcamentoV2() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Drawer Lateral (Sheet) para Configuração do Módulo */}
+      <ModuleEditDrawer
+        open={isDrawerOpen}
+        onOpenChange={setIsDrawerOpen}
+        ambienteNome={targetAmbienteNome}
+        onSaveModulo={handleSaveModuloNoAmbiente}
+      />
 
       {/* 4. Barra fixa no rodapé com o Valor Total Geral dinâmico */}
       <aside
