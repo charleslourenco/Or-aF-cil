@@ -9,6 +9,7 @@ import AuthGuard from '@/components/AuthGuard'
 import LoginPage from './pages/LoginPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import Index from './pages/Index'
+import OrcamentoV2 from './pages/OrcamentoV2'
 import QuotesListPage from './pages/QuotesListPage'
 import LibraryPage from './pages/LibraryPage'
 import DashboardPage from './pages/DashboardPage'
@@ -39,6 +40,7 @@ const App = () => (
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/painel" element={<DashboardPage />} />
                 <Route path="/novo-orcamento" element={<Index />} />
+                <Route path="/orcamento-v2" element={<OrcamentoV2 />} />
                 <Route path="/orcamentos" element={<QuotesListPage />} />
                 <Route path="/biblioteca" element={<LibraryPage />} />
                 <Route path="/catalogo" element={<CatalogPage />} />

@@ -71,6 +71,14 @@ export default function Layout() {
         backHref: '/orcamentos',
       }
     }
+    if (location.pathname === '/orcamento-v2') {
+      return {
+        title: 'OrçaFácil 3.0',
+        breadcrumb: 'Orçamentos / Orçamento v2',
+        showBack: true,
+        backHref: '/orcamentos',
+      }
+    }
     if (location.pathname === '/orcamentos') {
       return {
         title: 'Orçamentos Cadastrados',
