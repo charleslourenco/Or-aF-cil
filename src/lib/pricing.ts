@@ -46,6 +46,10 @@ export interface ModuloComposicao {
     qtd: number
   }
   cabideiro?: boolean
+  /** Quantidade explícita de cabideiros quando fornecida */
+  qtdCabideiros?: number
+  /** Iluminação / Fita LED integrada */
+  iluminacaoLed?: boolean
   sapateira?: boolean
   puxadores?: number
   /** Se true, o móvel é calculado como caixa simples sem envelopamento (padrão: false) */
@@ -861,10 +865,21 @@ export function calcularBOM(
     }
   }
 
-  // Totais consolidados derivados dos corpos
-  const qtdGavetas = corposConfig.reduce((acc, c) => acc + (Number(c.gavetas) || 0), 0)
-  const qtdPrateleiras = corposConfig.reduce((acc, c) => acc + (Number(c.prateleiras) || 0), 0)
-  const qtdCabideiros = corposConfig.filter((c) => Boolean(c.cabideiro)).length
+  // Totais consolidados derivados dos corpos ou override da composição direta
+  const qtdGavetas =
+    composicao.gavetas?.qtd !== undefined
+      ? Math.max(0, composicao.gavetas.qtd)
+      : corposConfig.reduce((acc, c) => acc + (Number(c.gavetas) || 0), 0)
+  const qtdPrateleiras =
+    composicao.prateleiras?.qtd !== undefined
+      ? Math.max(0, composicao.prateleiras.qtd)
+      : corposConfig.reduce((acc, c) => acc + (Number(c.prateleiras) || 0), 0)
+  const qtdCabideiros =
+    composicao.qtdCabideiros !== undefined
+      ? Math.max(0, composicao.qtdCabideiros)
+      : composicao.cabideiro
+        ? 1
+        : corposConfig.filter((c) => Boolean(c.cabideiro)).length
   const temSapateira = corposConfig.some((c) => Boolean(c.sapateira))
 
   const qtdPortas = Math.max(0, composicao.portas?.qtd ?? 0)
@@ -1144,7 +1159,31 @@ export function calcularBOM(
     })
   }
 
-  // 10. Fita de Borda consolidada para o módulo decomposto
+  // 10. Iluminação / Perfil LED (se ativado na composição)
+  if (composicao.iluminacaoLed) {
+    const perfilLedMat = findItemCatalogo(catalogoPrecos, ['led', 'perfil'])
+    const unitCostLed = perfilLedMat ? Number(perfilLedMat.preco_custo) || 85.0 : 85.0
+    // Metragem estimada de LED baseada na largura do módulo (em metros lineares, mínimo 1m)
+    const metrosLed = Math.max(1, Math.round((L / 1000) * 10) / 10)
+
+    pecas.push({
+      id: 'bom-acessorio-led',
+      description: perfilLedMat
+        ? `Kit Iluminação LED de Embutir + Fonte Slim (${metrosLed}m)`
+        : `Kit Iluminação / Fita LED de Embutir + Fonte Slim (${metrosLed}m) — Estimado`,
+      material: 'Ferragem',
+      metragem: metrosLed,
+      unidade: 'm',
+      unitCost: unitCostLed,
+      totalCost: round2(unitCostLed * metrosLed),
+      markup: effectiveMarkup,
+      salePrice: round2(unitCostLed * metrosLed * effectiveMarkup),
+      item_nao_cadastrado: !perfilLedMat,
+      catalogo_id: perfilLedMat?.id || null,
+    })
+  }
+
+  // 11. Fita de Borda consolidada para o módulo decomposto
   const perimetroFitaM = perimetroFitaMm / 1000
   pecas.push(
     criarPeca(
