@@ -5,14 +5,12 @@ import {
   FileDown,
   User,
   Calendar,
-  FolderPlus,
   Layers,
   Plus,
   Pencil,
   Check,
   X,
   Trash2,
-  ChevronDown,
   Box,
   ChevronRight,
   Info,
@@ -24,13 +22,13 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -128,6 +126,9 @@ export default function OrcamentoV2() {
   const [editingAmbienteId, setEditingAmbienteId] = useState<string | null>(null)
   const [editingAmbienteNome, setEditingAmbienteNome] = useState('')
   const renameInputRef = useRef<HTMLInputElement>(null)
+
+  // Estado do seletor dropdown do topo de ambientes
+  const [selectedAmbienteOpcao, setSelectedAmbienteOpcao] = useState<string>('')
 
   // Estado para modal de inclusão com nome livre
   const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false)
@@ -251,7 +252,28 @@ export default function OrcamentoV2() {
     if (!nome) return
     handleAddAmbiente(nome)
     setCustomAmbienteNome('')
+    setSelectedAmbienteOpcao('')
     setIsCustomDialogOpen(false)
+  }
+
+  // Handler acionado pelo botão destacado "+ Adicionar Ambiente" ao lado do dropdown
+  const handleAddAmbienteClick = () => {
+    if (!selectedAmbienteOpcao) {
+      toast({
+        title: 'Selecione um ambiente',
+        description: 'Escolha uma opção no dropdown ou digite um nome personalizado.',
+      })
+      return
+    }
+
+    if (selectedAmbienteOpcao === '__custom__') {
+      setCustomAmbienteNome('')
+      setIsCustomDialogOpen(true)
+      return
+    }
+
+    handleAddAmbiente(selectedAmbienteOpcao)
+    setSelectedAmbienteOpcao('')
   }
 
   // Exclusão de ambiente
@@ -631,50 +653,60 @@ export default function OrcamentoV2() {
             </div>
           </div>
 
-          {/* Botão no topo do container: '+ Adicionar Novo Ambiente' com dropdown de pré-definidos */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                className="h-10 px-4 gap-2 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 shadow-sm transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Adicionar Novo Ambiente</span>
-                <ChevronDown className="w-3.5 h-3.5 opacity-70 ml-1" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-56 rounded-xl border-slate-200 dark:border-slate-800 p-1.5 shadow-xl bg-white dark:bg-slate-950"
-            >
-              <DropdownMenuLabel className="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-2 py-1.5">
-                Opções Pré-definidas
-              </DropdownMenuLabel>
-              {OPCOES_PREDEFINIDAS_AMBIENTES.map((opcao) => (
-                <DropdownMenuItem
-                  key={opcao}
-                  onClick={() => handleAddAmbiente(opcao)}
-                  className="rounded-lg text-xs font-medium cursor-pointer py-2 px-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mr-2 shrink-0" />
-                  <span>{opcao}</span>
-                </DropdownMenuItem>
-              ))}
-
-              <DropdownMenuSeparator className="my-1 border-slate-100 dark:border-slate-800" />
-
-              <DropdownMenuItem
-                onClick={() => {
+          {/* Seletor dropdown ao lado do botão destacado '+ Adicionar Ambiente' */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+            <Select
+              value={selectedAmbienteOpcao}
+              onValueChange={(val) => {
+                setSelectedAmbienteOpcao(val)
+                if (val === '__custom__') {
                   setCustomAmbienteNome('')
                   setIsCustomDialogOpen(true)
-                }}
-                className="rounded-lg text-xs font-semibold cursor-pointer py-2 px-2.5 text-slate-900 dark:text-slate-100 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800"
+                }
+              }}
+            >
+              <SelectTrigger
+                aria-label="Selecionar ambiente"
+                className="h-10 w-full sm:w-60 rounded-xl text-xs font-medium border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 shadow-xs"
               >
-                <Plus className="w-3.5 h-3.5 mr-2 text-slate-600 dark:text-slate-300" />
-                <span>Outro nome personalizado…</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <SelectValue placeholder="Selecione um ambiente…" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border-slate-200 dark:border-slate-800 shadow-xl bg-white dark:bg-slate-950">
+                {OPCOES_PREDEFINIDAS_AMBIENTES.map((opcao) => (
+                  <SelectItem key={opcao} value={opcao} className="text-xs cursor-pointer">
+                    {opcao}
+                  </SelectItem>
+                ))}
+                <SelectSeparator className="my-1 border-slate-100 dark:border-slate-800" />
+                <SelectItem
+                  value="__custom__"
+                  className="text-xs font-semibold cursor-pointer text-slate-900 dark:text-slate-100"
+                >
+                  + Outro nome personalizado…
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              type="button"
+              onClick={handleAddAmbienteClick}
+              disabled={!selectedAmbienteOpcao}
+              className={cn(
+                'h-10 px-4 gap-2 text-xs font-bold rounded-xl shadow-sm transition-all',
+                selectedAmbienteOpcao
+                  ? 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 shadow-slate-900/15 cursor-pointer active:scale-[0.98]'
+                  : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border-0',
+              )}
+              title={
+                !selectedAmbienteOpcao
+                  ? 'Selecione uma opção no dropdown ao lado para adicionar o ambiente'
+                  : 'Adicionar este ambiente ao projeto'
+              }
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Adicionar Ambiente</span>
+            </Button>
+          </div>
         </div>
 
         {/* Estado vazio quando nenhum ambiente foi adicionado */}
@@ -688,51 +720,13 @@ export default function OrcamentoV2() {
                 Nenhum ambiente adicionado
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Clique no botão acima para adicionar o primeiro ambiente do projeto (ex.: Cozinha,
-                Quarto 01, Banheiro).
+                Escolha uma opção no seletor acima (ex.: Cozinha, Quarto 01, Banheiro) e clique em{' '}
+                <strong className="text-slate-700 dark:text-slate-300 font-semibold">
+                  + Adicionar Ambiente
+                </strong>
+                .
               </p>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-2 h-9 px-4 gap-2 text-xs font-semibold rounded-xl border-dashed border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 shadow-xs"
-                >
-                  <FolderPlus className="w-4 h-4 text-slate-500" />
-                  <span>Escolher Ambiente</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="center"
-                className="w-56 rounded-xl border-slate-200 dark:border-slate-800 p-1.5 shadow-xl bg-white dark:bg-slate-950"
-              >
-                <DropdownMenuLabel className="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-2 py-1.5">
-                  Opções Pré-definidas
-                </DropdownMenuLabel>
-                {OPCOES_PREDEFINIDAS_AMBIENTES.map((opcao) => (
-                  <DropdownMenuItem
-                    key={opcao}
-                    onClick={() => handleAddAmbiente(opcao)}
-                    className="rounded-lg text-xs font-medium cursor-pointer py-2 px-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mr-2 shrink-0" />
-                    <span>{opcao}</span>
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator className="my-1 border-slate-100 dark:border-slate-800" />
-                <DropdownMenuItem
-                  onClick={() => {
-                    setCustomAmbienteNome('')
-                    setIsCustomDialogOpen(true)
-                  }}
-                  className="rounded-lg text-xs font-semibold cursor-pointer py-2 px-2.5 text-slate-900 dark:text-slate-100 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800"
-                >
-                  <Plus className="w-3.5 h-3.5 mr-2 text-slate-600 dark:text-slate-300" />
-                  <span>Outro nome personalizado…</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         ) : (
           /* Lista de Cards Expansíveis (estilo Accordion) */

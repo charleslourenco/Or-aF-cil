@@ -239,7 +239,7 @@ export default function QuotesListPage() {
               asChild
               className="bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm rounded-xl text-xs h-10"
             >
-              <Link to="/novo-orcamento">
+              <Link to="/orcamento-v2">
                 <PlusCircle className="w-4 h-4 mr-2" />
                 Novo Orçamento
               </Link>
@@ -307,7 +307,7 @@ export default function QuotesListPage() {
                 asChild
                 className="mt-2 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-sm"
               >
-                <Link to="/novo-orcamento">
+                <Link to="/orcamento-v2">
                   <PlusCircle className="w-4 h-4 mr-2" />
                   Criar Primeiro Orçamento
                 </Link>

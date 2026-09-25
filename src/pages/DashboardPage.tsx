@@ -214,7 +214,7 @@ export default function DashboardPage() {
               asChild
               className="bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm rounded-lg text-xs"
             >
-              <Link to="/novo-orcamento" className="flex items-center gap-2">
+              <Link to="/orcamento-v2" className="flex items-center gap-2">
                 <Plus className="w-4 h-4" />
                 Criar Novo Orçamento
               </Link>
@@ -347,7 +347,7 @@ export default function DashboardPage() {
                 asChild
                 className="mt-2 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm"
               >
-                <Link to="/novo-orcamento" className="flex items-center gap-2">
+                <Link to="/orcamento-v2" className="flex items-center gap-2">
                   <Plus className="w-4 h-4" />
                   Criar Novo Orçamento
                 </Link>

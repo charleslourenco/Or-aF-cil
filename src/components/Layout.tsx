@@ -34,7 +34,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: 'Painel de Orçamentos', href: '/', icon: LayoutDashboard },
-  { name: 'Novo Orçamento', href: '/novo-orcamento', icon: PlusCircle },
+  { name: 'Novo Orçamento', href: '/orcamento-v2', icon: PlusCircle },
   { name: 'Biblioteca de Módulos', href: '/biblioteca', icon: Layers },
   { name: 'Catálogo de Materiais', href: '/catalogo', icon: BookOpen },
   { name: 'Engenharia Financeira', href: '/engenharia-financeira', icon: Wallet },
@@ -73,8 +73,8 @@ export default function Layout() {
     }
     if (location.pathname === '/orcamento-v2') {
       return {
-        title: 'OrçaFácil 3.0',
-        breadcrumb: 'Orçamentos / Orçamento v2',
+        title: 'Novo Orçamento',
+        breadcrumb: 'Orçamentos / Novo Orçamento',
         showBack: true,
         backHref: '/orcamentos',
       }
@@ -190,20 +190,8 @@ export default function Layout() {
             </button>
           </div>
 
-          {/* Quick Action Banner */}
-          <div className="p-4 pb-2">
-            <Link
-              to="/novo-orcamento"
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-700 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-slate-700/20 transition-all hover:shadow-lg hover:shadow-slate-700/30 active:scale-[0.98]"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>+ Novo Orçamento</span>
-            </Link>
-          </div>
-
           {/* Navigation Items */}
-          <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
+          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
             <div className="px-3 py-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
               Menu Principal
             </div>
