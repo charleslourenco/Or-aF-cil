@@ -87,6 +87,7 @@ import {
   writeDraftToStorage,
   type DraftData,
 } from '@/lib/draftStorage'
+import { generateUniqueBudgetItemId, ensureUniqueBudgetItemId } from '@/lib/budgetItemUtils'
 
 // Ambientes permitidos no Select (array estático conforme especificação).
 const AMBIENTES = ['Cozinha', 'Quarto', 'Sala', 'Banheiro']
@@ -168,6 +169,8 @@ export default function Index() {
   // Loading & Results Visibility state
   const [isGenerating, setIsGenerating] = useState(false)
   const [showResults, setShowResults] = useState(false)
+  // Flag que rastreia interação real do usuário na tela (evita injeção de módulo fantasma ao carregar orçamento)
+  const [isUserDirty, setIsUserDirty] = useState<boolean>(false)
 
   // Itens manuais adicionados pelo usuário (somam-se à BOM dinâmica).
   const [manualItems, setManualItems] = useState<BudgetItem[]>([])
@@ -269,6 +272,7 @@ export default function Index() {
     setFormaPagamento('')
     setObservacoes('')
     setShowResults(false)
+    setIsUserDirty(false)
     setManualItems([])
     setUploadedFiles([])
     setNomeMovelManual('')
@@ -323,7 +327,24 @@ export default function Index() {
         if (parsed.room) setRoom(parsed.room)
         if (parsed.ambienteSelecionado) setAmbienteSelecionado(parsed.ambienteSelecionado)
         if (parsed.selectedModuleId) setSelectedModuleId(parsed.selectedModuleId)
-        if (Array.isArray(parsed.ambientes)) setAmbientes(parsed.ambientes)
+        if (Array.isArray(parsed.ambientes)) {
+          setAmbientes(
+            parsed.ambientes.map((amb, aIdx) => ({
+              ...amb,
+              modulos: (amb.modulos || []).map((m, mIdx) => ({
+                ...m,
+                itens: (m.itens || []).map((it, itIdx) => ({
+                  ...it,
+                  id: ensureUniqueBudgetItemId(
+                    it.id,
+                    'consolidated',
+                    `draft-${aIdx}-${mIdx}-${itIdx}`,
+                  ),
+                })),
+              })),
+            })),
+          )
+        }
         if (parsed.activeAmbienteId) setActiveAmbienteId(parsed.activeAmbienteId)
         if (parsed.dimensoes) setDimensoes(parsed.dimensoes)
         if (parsed.composicaoModulo) setComposicaoModulo(parsed.composicaoModulo)
@@ -334,7 +355,14 @@ export default function Index() {
         if (parsed.formaPagamento) setFormaPagamento(parsed.formaPagamento)
         if (parsed.observacoes) setObservacoes(parsed.observacoes)
         if (typeof parsed.showResults === 'boolean') setShowResults(parsed.showResults)
-        if (Array.isArray(parsed.manualItems)) setManualItems(parsed.manualItems)
+        if (Array.isArray(parsed.manualItems)) {
+          setManualItems(
+            parsed.manualItems.map((it, itIdx) => ({
+              ...it,
+              id: ensureUniqueBudgetItemId(it.id, 'manual', `draft-${itIdx}`),
+            })),
+          )
+        }
         if (parsed.orcamentoId) setDraftLinkedOrcamentoId(parsed.orcamentoId)
 
         if (Array.isArray(parsed.uploadedFilesMeta) && parsed.uploadedFilesMeta.length > 0) {
@@ -609,7 +637,7 @@ export default function Index() {
               imagem_url: m.imagem_url,
               subtotal: Number(m.subtotal) || 0,
               itens: (m.itens || []).map((it, itIdx) => ({
-                id: it.id || `it-${itIdx}`,
+                id: ensureUniqueBudgetItemId(it.id, 'loaded', `amb-${aIdx}-mod-${mIdx}-${itIdx}`),
                 description: it.description || 'Item',
                 material: it.material,
                 espessura: it.espessura,
@@ -677,7 +705,7 @@ export default function Index() {
           orcamento.bom_json.length > 0
         ) {
           const loadedTodosItens: BudgetItem[] = orcamento.bom_json.map((item, index) => {
-            const itId = String(item.id || `loaded-${index}`)
+            const itId = ensureUniqueBudgetItemId(item.id, 'loaded', `bomjson-${index}`)
             const unidadeValida =
               item.unidade === 'm²' || item.unidade === 'm' || item.unidade === 'jogo'
                 ? item.unidade
@@ -704,7 +732,12 @@ export default function Index() {
           // Se não veio bom_json na raiz mas veio em ambientes_json, extrai itens do primeiro módulo
           const primMod = (orcamento.ambientes_json as any[])[0]?.modulos?.[0]
           if (primMod && Array.isArray(primMod.itens) && primMod.itens.length > 0) {
-            setSavedLoadedItems(primMod.itens)
+            setSavedLoadedItems(
+              primMod.itens.map((it: any, idx: number) => ({
+                ...it,
+                id: ensureUniqueBudgetItemId(it.id, 'loaded', `prim-${idx}`),
+              })),
+            )
           }
         }
 
@@ -728,7 +761,10 @@ export default function Index() {
                   padrao_projeto: orcamento.padrao_projeto || undefined,
                   subtotal: totalAntigo,
                   perfil_construtivo: undefined,
-                  itens: orcamento.bom_json,
+                  itens: (orcamento.bom_json || []).map((it: any, itIdx: number) => ({
+                    ...it,
+                    id: ensureUniqueBudgetItemId(it.id, 'loaded', `legado-${itIdx}`),
+                  })),
                 },
               ],
             },
@@ -750,6 +786,9 @@ export default function Index() {
 
         // BUG 1: Ao carregar um orçamento salvo, NÃO injetar placeholder fake.
         setUploadedFiles([])
+
+        // Garante que o orçamento carregado não receba módulo fantasma "(em edição)"
+        setIsUserDirty(false)
 
         toast({
           title: 'Orçamento Carregado',
@@ -942,9 +981,11 @@ export default function Index() {
     const list: BudgetItem[] = []
     ambientes.forEach((amb) => {
       ;(amb.modulos || []).forEach((mod) => {
-        ;(mod.itens || []).forEach((it) => {
+        ;(mod.itens || []).forEach((it, itIdx) => {
           list.push({
-            id: it.id,
+            id:
+              it.id ||
+              ensureUniqueBudgetItemId(undefined, 'consolidated', `${amb.id}-${mod.id}-${itIdx}`),
             description: `${amb.nome} · ${mod.nome}: ${it.description}`,
             material: it.material,
             espessura: it.espessura,
@@ -1038,6 +1079,7 @@ export default function Index() {
   }
 
   const handleModuleChange = (val: string) => {
+    setIsUserDirty(true)
     setSelectedModuleId(val)
     // Se o usuário explicitamente trocar de módulo, libera o recálculo dinâmico
     setSavedLoadedItems(null)
@@ -1458,7 +1500,7 @@ export default function Index() {
               const salePrice = Math.round(totalCost * effectiveMarkup * 100) / 100
 
               return {
-                id: `ferragem-ia-${f.catalogo_id || 'avulso'}-${Date.now()}-${idx}`,
+                id: generateUniqueBudgetItemId('ia'),
                 description: f.descricao,
                 material: matNoCatalogo?.categoria || 'Ferragem / Insumo',
                 metragem: qtd,
@@ -1479,6 +1521,7 @@ export default function Index() {
               }
             })
 
+            setIsUserDirty(true)
             setManualItems((prev) => [...prev, ...novasFerragens])
 
             const countAusentes = novasFerragens.filter((i) => i.item_nao_cadastrado).length
@@ -1604,7 +1647,8 @@ export default function Index() {
       return
     }
 
-    // Libera o recálculo automático quando o usuário clica em "Gerar Orçamento do Módulo"
+    // Marca como alterado pelo usuário e libera o recálculo automático
+    setIsUserDirty(true)
     setSavedLoadedItems(null)
 
     // Success validation -> trigger generation animation
@@ -1745,8 +1789,8 @@ export default function Index() {
       perfil_construtivo: perfilAtualModulo,
       adaptacoes: adaptacoesIA || undefined,
       subtotal: currentModuleSubtotal,
-      itens: pricingItems.map((it) => ({
-        id: it.id,
+      itens: pricingItems.map((it, itIdx) => ({
+        id: ensureUniqueBudgetItemId(it.id, 'consolidated', itIdx),
         description: it.description,
         material: it.material,
         espessura: it.espessura,
@@ -1802,6 +1846,7 @@ export default function Index() {
     })
 
     // 2. Limpa APENAS os campos do próximo módulo
+    setIsUserDirty(false)
     setSelectedModuleId('')
     setUploadedFiles([])
     setSavedLoadedItems(null)
@@ -1879,11 +1924,96 @@ export default function Index() {
     return nomeMovelSugerido
   }, [hasNomeMovelOverride, nomeMovelManual, nomeMovelSugerido])
 
+  // Handler para exclusão de item individual da tabela de precificação
+  const handleDeleteItem = (itemId: string, _itemIndex?: number) => {
+    if (!itemId) return
+
+    let removedFromManual = false
+    let removedFromAmbientes = false
+
+    // 1. Remove de manualItems (se existir lá)
+    setManualItems((prev) => {
+      const exists = prev.some((it) => it.id === itemId)
+      if (exists) {
+        removedFromManual = true
+        return prev.filter((it) => it.id !== itemId)
+      }
+      return prev
+    })
+
+    // 2. Remove de savedLoadedItems (se ativo)
+    if (savedLoadedItems !== null) {
+      setSavedLoadedItems((prev) => (prev ? prev.filter((it) => it.id !== itemId) : null))
+    } else {
+      // 3. Se savedLoadedItems for null e o item pertence à BOM calculada em tela (ex: id começa com 'bom-' ou está em bomItems)
+      const existsInBom = bomItems.some((it) => it.id === itemId)
+      if (existsInBom) {
+        // Congela a BOM calculada atual em savedLoadedItems excetuando o item deletado
+        const filtered = bomItems.filter((it) => it.id !== itemId)
+        setSavedLoadedItems(filtered)
+      }
+    }
+
+    // 4. Remove de ambientes (se o item pertencer a algum módulo já adicionado)
+    setAmbientes((prevAmbientes) => {
+      let changed = false
+      const updated = prevAmbientes.map((amb) => {
+        let modulosChanged = false
+        const novosModulos = (amb.modulos || []).map((mod) => {
+          const itemExists = (mod.itens || []).some((it) => it.id === itemId)
+          if (itemExists) {
+            changed = true
+            modulosChanged = true
+            removedFromAmbientes = true
+            const novosItens = mod.itens.filter((it) => it.id !== itemId)
+            const novoSubtotal = novosItens.reduce(
+              (acc, it) => acc + (Number(it.salePrice) || 0),
+              0,
+            )
+            return {
+              ...mod,
+              itens: novosItens,
+              subtotal: novoSubtotal,
+            }
+          }
+          return mod
+        })
+
+        if (modulosChanged) {
+          const novoSubtotalAmb = novosModulos.reduce(
+            (acc, m) => acc + (Number(m.subtotal) || 0),
+            0,
+          )
+          return {
+            ...amb,
+            modulos: novosModulos,
+            subtotal: novoSubtotalAmb,
+          }
+        }
+        return amb
+      })
+
+      return changed ? updated : prevAmbientes
+    })
+
+    // Se estiver em modo tela sem módulos consolidados ou deletando item manual, marca dirty;
+    // se estiver deletando item salvo de ambiente já existente, NÃO ativa isUserDirty para não criar réplica fantasma
+    if (removedFromManual || ambientes.length === 0) {
+      setIsUserDirty(true)
+    }
+
+    toast({
+      title: 'Item removido',
+      description: 'O item foi excluído do orçamento.',
+    })
+  }
+
   // Consolida todos os ambientes e módulos (incluindo o que está sendo editado na tela, se houver)
   const ambientesConsolidados = useMemo<AmbienteOrcamento[]>(() => {
     // Se o usuário tem itens na tabela ou módulo configurado na tela que ainda não foram adicionados
     // explicitamente via "+ Adicionar Outro Módulo", inclui esse módulo atual no ambiente selecionado
-    const hasCurrentModule = Boolean(selectedModuleObj) || pricingItems.length > 0
+    // A flag isUserDirty garante que orçamentos carregados do banco NÃO ganhem réplica fantasma "(em edição)"
+    const hasCurrentModule = isUserDirty && (Boolean(selectedModuleObj) || pricingItems.length > 0)
     const currentSubtotal = totalVenda
 
     // Se a lista de ambientes estiver totalmente vazia e houver módulo configurado na tela,
@@ -2004,6 +2134,7 @@ export default function Index() {
     padraoProjeto,
     composicaoModulo,
     adaptacoesIA,
+    isUserDirty,
   ])
 
   // Valor total geral do orçamento = soma de todos os subtotais de ambientes consolidados
@@ -2878,6 +3009,7 @@ export default function Index() {
                   id="nomeMovelInput"
                   value={hasNomeMovelOverride ? nomeMovelManual : nomeMovelSugerido}
                   onChange={(e) => {
+                    setIsUserDirty(true)
                     setHasNomeMovelOverride(true)
                     setNomeMovelManual(e.target.value)
                   }}
@@ -2906,6 +3038,7 @@ export default function Index() {
                     composicaoModulo?.perfilConstrutivo === 'Caixa Simples',
                   )}
                   onCheckedChange={(checked) => {
+                    setIsUserDirty(true)
                     setSavedLoadedItems(null)
                     setComposicaoModulo((prev) => ({
                       ...prev,
@@ -2936,6 +3069,7 @@ export default function Index() {
                     selectedModuleObj?.perfil_construtivo === 'Balcão (tampo por conta do cliente)',
                   )}
                   onCheckedChange={(checked) => {
+                    setIsUserDirty(true)
                     setSavedLoadedItems(null)
                     setComposicaoModulo((prev) => ({
                       ...prev,
@@ -3019,6 +3153,7 @@ export default function Index() {
               justificativa={matchJustificativa}
               composicao={composicaoModulo}
               onComposicaoChange={(updater) => {
+                setIsUserDirty(true)
                 setComposicaoModulo(updater)
                 setSavedLoadedItems(null)
               }}
@@ -3034,6 +3169,7 @@ export default function Index() {
                 })
               }}
               onTratarPersonalizado={() => {
+                setIsUserDirty(true)
                 setSelectedModuleId('MODULO-CUSTOM')
                 setIsCustomModuleIA(true)
                 const nomeCustom = 'Módulo Personalizado (Análise IA)'
@@ -3099,12 +3235,13 @@ export default function Index() {
                   min={0}
                   inputMode="numeric"
                   value={dimensoes.largura}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setIsUserDirty(true)
                     setDimensoes((prev) => ({
                       ...prev,
                       largura: Number(e.target.value) || 0,
                     }))
-                  }
+                  }}
                   className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 pr-12"
                 />{' '}
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
@@ -3129,12 +3266,13 @@ export default function Index() {
                   min={0}
                   inputMode="numeric"
                   value={dimensoes.altura}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setIsUserDirty(true)
                     setDimensoes((prev) => ({
                       ...prev,
                       altura: Number(e.target.value) || 0,
                     }))
-                  }
+                  }}
                   className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 pr-12"
                 />{' '}
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
@@ -3159,12 +3297,13 @@ export default function Index() {
                   min={0}
                   inputMode="numeric"
                   value={dimensoes.profundidade}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setIsUserDirty(true)
                     setDimensoes((prev) => ({
                       ...prev,
                       profundidade: Number(e.target.value) || 0,
                     }))
-                  }
+                  }}
                   className="h-11 rounded-xl text-sm font-mono font-semibold border-slate-300 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 pr-12"
                 />{' '}
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
@@ -3199,7 +3338,10 @@ export default function Index() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setPadraoProjeto('comercial')}
+                  onClick={() => {
+                    setIsUserDirty(true)
+                    setPadraoProjeto('comercial')
+                  }}
                   className={cn(
                     'flex items-start gap-3 p-3 rounded-xl border text-left transition-all',
                     padraoProjeto === 'comercial'
@@ -3224,7 +3366,10 @@ export default function Index() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPadraoProjeto('premium')}
+                  onClick={() => {
+                    setIsUserDirty(true)
+                    setPadraoProjeto('premium')
+                  }}
                   className={cn(
                     'flex items-start gap-3 p-3 rounded-xl border text-left transition-all',
                     padraoProjeto === 'premium'
@@ -3277,6 +3422,7 @@ export default function Index() {
                   <Select
                     value={mdfExterno.cor}
                     onValueChange={(v) => {
+                      setIsUserDirty(true)
                       const mat = opcoesMdfEstrutural.find((item) => item.nome_material === v)
                       const espessura: 15 | 18 = mat?.categoria === 'MDF 15mm' ? 15 : 18
                       setMdfExterno({ cor: v, espessura })
@@ -3303,9 +3449,12 @@ export default function Index() {
                   <ToggleGroup
                     type="single"
                     value={String(mdfExterno.espessura)}
-                    onValueChange={(v) =>
-                      v && setMdfExterno((prev) => ({ ...prev, espessura: Number(v) as 15 | 18 }))
-                    }
+                    onValueChange={(v) => {
+                      setIsUserDirty(true)
+                      if (v) {
+                        setMdfExterno((prev) => ({ ...prev, espessura: Number(v) as 15 | 18 }))
+                      }
+                    }}
                     className="justify-start bg-white border border-slate-300 rounded-lg p-1 h-10 w-full"
                   >
                     <ToggleGroupItem
@@ -3342,6 +3491,7 @@ export default function Index() {
                   <Select
                     value={mdfInterno.cor}
                     onValueChange={(v) => {
+                      setIsUserDirty(true)
                       const mat = opcoesMdfEstrutural.find((item) => item.nome_material === v)
                       const espessura: 15 | 18 = mat?.categoria === 'MDF 18mm' ? 18 : 15
                       setMdfInterno({ cor: v, espessura })
@@ -3368,9 +3518,12 @@ export default function Index() {
                   <ToggleGroup
                     type="single"
                     value={String(mdfInterno.espessura)}
-                    onValueChange={(v) =>
-                      v && setMdfInterno((prev) => ({ ...prev, espessura: Number(v) as 15 | 18 }))
-                    }
+                    onValueChange={(v) => {
+                      setIsUserDirty(true)
+                      if (v) {
+                        setMdfInterno((prev) => ({ ...prev, espessura: Number(v) as 15 | 18 }))
+                      }
+                    }}
                     className="justify-start bg-white border border-slate-300 rounded-lg p-1 h-10 w-full"
                   >
                     <ToggleGroupItem
@@ -3403,7 +3556,13 @@ export default function Index() {
               </div>
               <div className="space-y-1.5">
                 <span className="text-[11px] font-semibold text-slate-500">Opção</span>
-                <Select value={mdfFundo} onValueChange={setMdfFundo}>
+                <Select
+                  value={mdfFundo}
+                  onValueChange={(v) => {
+                    setIsUserDirty(true)
+                    setMdfFundo(v)
+                  }}
+                >
                   <SelectTrigger className="h-10 rounded-lg text-sm bg-white border-slate-300">
                     <SelectValue placeholder="Selecione o MDF de fundo" />
                   </SelectTrigger>
@@ -3459,12 +3618,14 @@ export default function Index() {
                 items={effectiveDisplayItems}
                 dimensoes={dimensoes}
                 moduleName={hasCurrentModuleEditing ? currentModuleName : 'Módulos Consolidados'}
+                onDeleteItem={handleDeleteItem}
               />
             ) : dimensoesValidas ? (
               <PricingTable
                 items={pricingItems}
                 dimensoes={dimensoes}
                 moduleName={currentModuleName}
+                onDeleteItem={handleDeleteItem}
               />
             ) : (
               <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center">
@@ -3744,7 +3905,12 @@ export default function Index() {
         catalogoMateriais={catalogoMateriais}
         markupEngenharia={markupEngenharia}
         onAddItem={(item) => {
-          setManualItems((prev) => [...prev, item])
+          setIsUserDirty(true)
+          const uniqueItem = {
+            ...item,
+            id: ensureUniqueBudgetItemId(item.id, 'manual'),
+          }
+          setManualItems((prev) => [...prev, uniqueItem])
           toast({
             title: 'Item adicionado',
             description: `${item.description} foi incluído no orçamento.`,
@@ -3757,7 +3923,12 @@ export default function Index() {
         onClose={() => setIsCustomItemModalOpen(false)}
         markupEngenharia={markupEngenharia}
         onAddItem={(item) => {
-          setManualItems((prev) => [...prev, item])
+          setIsUserDirty(true)
+          const uniqueItem = {
+            ...item,
+            id: ensureUniqueBudgetItemId(item.id, 'manual'),
+          }
+          setManualItems((prev) => [...prev, uniqueItem])
           toast({
             title: 'Item avulso adicionado',
             description: `${item.description} foi incluído no orçamento.`,
