@@ -177,7 +177,8 @@ Deno.serve(async (req: Request) => {
             .join('\n')
         : 'Nenhum material cadastrado no catálogo.'
 
-    const systemPrompt = `Você é um engenheiro de marcenaria especializado em móveis sob medida. Analise a foto do AMBIENTE INTEIRO e identifique TODOS os módulos de marcenaria visíveis na imagem.
+    const systemPrompt = `Você é um engenheiro de marcenaria especializado em móveis sob medida.
+IMPORTANTE: A análise visual é realizada para UM MÓDULO POR VEZ (nunca um ambiente complexo inteiro). Compare a imagem do móvel/croqui fornecida com a biblioteca de módulos cadastrada.
 
 **Lista de módulos da biblioteca:**
 ${listaModulosText}
@@ -196,35 +197,35 @@ ${listaCatalogoText}
      * 'alta' = match direto na biblioteca com escala 0.7–1.4;
      * 'media' = match aproximado ou variação acentuada;
      * 'baixa' = MODULO-CUSTOM, imagem ruim ou dúvidas nas divisões.
-   - Sugira o "perfil_construcao_sugerido" para o módulo (apenas como sugestão, especialmente para módulos customizados):
+   - Sugira o "perfil_construcao_sugerido" para o módulo:
      * "Fechado Envelopado": para armários, roupeiros, guarda-roupas, móveis fechados com caixa dupla.
-     * "Balcão (tampo por conta do cliente)": para balcões de pia, gabinetes inferiores ou bancadas de cozinha/banheiro onde o topo receberá tampo de granito/madeira avulso.
+     * "Balcão (tampo por conta do cliente)": para balcões de pia, gabinetes inferiores ou bancadas de cozinha/banheiro onde o topo receberá tampo de granito/madeira avulso. NUNCA gere tampo automaticamente.
      * "Aberto / Painel": para painel de TV, racks abertos, estantes abertas, nichos sem fechamento, sem base/teto internos nem rodateto.
      * "Caixa Simples": para aéreos simples e caixas sem tamponamento externo.
    - NUNCA invente IDs aleatórios e NUNCA force o primeiro módulo da lista se não houver correspondência exata/adequada.
 
 2. DECOMPOSIÇÃO ESTRUTURADA DE COMPONENTES E INTERIOR VISÍVEL:
-   - Analise minuciosamente a parte externa e o INTERIOR visível de cada móvel (divisórias verticais/corpos, portas, gavetas, prateleiras internas, divisões, cabideiro, sapateira, puxadores).
-   - Preencha SEMPRE e OBRIGATORIAMENTE os seguintes campos para cada módulo, mesmo que com valor 0 ou falso:
-     * "divisorias": { "qtd": <número de divisórias verticais internas que separam o vão em corpos, ex: 1 divisória para 2 corpos, 2 divisórias para 3 corpos. Se vão único sem divisória, usar 0> }
+   - Analise minuciosamente a parte externa e o INTERIOR visível do móvel (divisórias verticais/corpos, portas, gavetas, prateleiras internas, divisões, cabideiro, sapateira, puxadores).
+   - Preencha SEMPRE e OBRIGATORIAMENTE os seguintes campos para o módulo:
+     * "divisorias": { "qtd": <número de divisórias verticais internas> }
      * "portas": { "qtd": <número total de portas>, "tipo": "abrir" | "correr" | "batente" | "nenhum" }
      * "gavetas": { "qtd": <número total de gavetas externas ou internas> }
      * "prateleiras": { "qtd": <número total de prateleiras internas ou divisões horizontais> }
      * "cabideiro": <true se houver varão/cabideiro para pendurar roupas, false se não houver>
      * "sapateira": <true se houver prateleiras aramadas/corrediças para sapatos, false se não houver>
      * "puxadores": <número estimado total de puxadores necessários para portas e gavetas>
-   - Em "adaptacoes", descreva textualmente em português claro a composição e adaptações do móvel (ex: "Guarda-roupa com 1 divisória vertical (2 corpos), 2 portas de correr, 4 gavetas internas, 2 cabideiros e 3 prateleiras").
+   - Em "adaptacoes", descreva textualmente em português claro a composição e adaptações do móvel.
 
 3. FERRAGENS E INSUMOS OBRIGATÓRIOS:
-   - Se o módulo tiver PORTAS DE CORRER: inclua OBRIGATORIAMENTE Kit Sistema de Correr + Trilho Superior + Trilho Inferior.
-   - Se o módulo tiver GAVETAS: inclua OBRIGATORIAMENTE Corrediças (Telescópicas ou Invisíveis) + Puxadores (multiplicados pela quantidade de gavetas).
-   - Se o módulo for AÉREO / SUSPENSO: inclua OBRIGATORIAMENTE Suportes de Fixação / Buchas.
+   - Se o módulo tiver PORTAS DE CORRER: inclua Kit Sistema de Correr + Trilho.
+   - Se o módulo tiver GAVETAS: inclua Corrediças + Puxadores.
+   - Se o módulo for AÉREO / SUSPENSO: inclua Suportes de Fixação / Buchas.
    - TRATAMENTO DE CATÁLOGO:
      * Se o item/ferragem EXISTIR no Catálogo fornecido, retorne "catalogo_id" com o ID real do catálogo e a "descricao" correspondente.
      * Se o item/ferragem NÃO EXISTIR no Catálogo fornecido, retorne "catalogo_id": null, "item_nao_cadastrado": true, "preco_custo_estimado": 50.00, e a "descricao" clara do item ausente.
 
-4. DIMENSÕES ESTIMADAS:
-   - Estime as dimensões (largura, altura, profundidade em mm) de cada módulo com base na proporção visual e objetos de referência no ambiente.
+4. DIMENSÕES ESTIMADAS (EM MILÍMETROS):
+   - Estime as dimensões (largura, altura, profundidade em mm) do móvel com base na proporção visual e referências.
 
 Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código:
 {
@@ -256,7 +257,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
       "preco_custo_estimado": 50.0
     }
   ],
-  "justificativa": "Resumo geral da análise do ambiente"
+  "justificativa": "Resumo da análise do móvel"
 }`
 
     const openAiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -274,7 +275,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
             content: [
               {
                 type: 'text',
-                text: 'Analise este ambiente/projeto de marcenaria sob medida e identifique todos os módulos visíveis, dimensões estimadas e ferragens obrigatórias com base nas regras de engenharia.',
+                text: 'Analise este móvel/módulo sob medida individual (um módulo por vez). Compare com a biblioteca de módulos cadastrada, determine dimensões estimadas, perfil construtivo e decomposição interna.',
               },
               {
                 type: 'image_url',

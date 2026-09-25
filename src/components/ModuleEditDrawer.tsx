@@ -48,12 +48,25 @@ import {
   fetchTemplatesEngenharia,
 } from '@/services/templates'
 import { CatalogoMaterial, fetchCatalogoMateriais } from '@/services/catalogo'
-import { Dimensoes, MdfSpec, PadraoProjeto, ModuloComposicao, calcularBOM } from '@/lib/pricing'
+import {
+  Dimensoes,
+  MdfSpec,
+  PadraoProjeto,
+  ModuloComposicao,
+  calcularBOM,
+  MARKUP_PADRAO,
+} from '@/lib/pricing'
 import { CustomerDropzone, UploadedFileState } from '@/components/CustomerDropzone'
 import { Switch } from '@/components/ui/switch'
+import { supabase } from '@/lib/supabase/client'
+import { fetchConfigEngenharia, ConfigEngenharia } from '@/services/engenharia'
+import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import type { OrcamentoBOMItem } from '@/services/orcamentos'
 
 export interface ModuloSalvoData {
+  id?: string
+  moduloId?: string
   nome: string
   descricaoTipo: string
   quantidade: number
@@ -70,6 +83,7 @@ export interface ModuloSalvoData {
   prateleiras?: number
   cabideiros?: number
   iluminacaoLed?: boolean
+  itensBOM: OrcamentoBOMItem[]
 }
 
 interface ModuleEditDrawerProps {
@@ -95,9 +109,10 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     'foto-ia',
   )
 
-  // Catálogos e templates carregados do Supabase
+  // Catálogos, templates e engenharia carregados do Supabase
   const [templates, setTemplates] = useState<TemplateEngenharia[]>([])
   const [catalogoMateriais, setCatalogoMateriais] = useState<CatalogoMaterial[]>([])
+  const [configEngenharia, setConfigEngenharia] = useState<ConfigEngenharia | null>(null)
   const [loadingData, setLoadingData] = useState(false)
 
   // Estado do módulo configurado
@@ -125,7 +140,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
 
   // Aba 1 - Upload de Fotos & IA
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileState[]>([])
-  const [isSimulatingIA, setIsSimulatingIA] = useState(false)
+  const [isAnalyzingIA, setIsAnalyzingIA] = useState(false)
   const [iaDetectedNotice, setIaDetectedNotice] = useState<string | null>(null)
   const [iaIdentifiedTemplate, setIaIdentifiedTemplate] = useState<{
     template: TemplateEngenharia
@@ -143,12 +158,16 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   } | null>(null)
   const [isMatchConfirmed, setIsMatchConfirmed] = useState(false)
 
-  // Carrega catálogo e templates quando o drawer abre pela primeira vez
+  // Carrega catálogo, templates e engenharia quando o drawer abre pela primeira vez
   useEffect(() => {
     if (open && templates.length === 0) {
       setLoadingData(true)
-      Promise.all([fetchTemplatesEngenharia(), fetchCatalogoMateriais(6000)])
-        .then(([tplRes, matRes]) => {
+      Promise.all([
+        fetchTemplatesEngenharia(),
+        fetchCatalogoMateriais(6000),
+        fetchConfigEngenharia(),
+      ])
+        .then(([tplRes, matRes, engRes]) => {
           if (tplRes.data && tplRes.data.length > 0) {
             setTemplates(tplRes.data)
             if (!selectedTemplateId) {
@@ -167,6 +186,12 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
           if (matRes) {
             setCatalogoMateriais(matRes)
           }
+          if (engRes.config) {
+            setConfigEngenharia(engRes.config)
+          }
+        })
+        .catch((err) => {
+          console.error('Erro ao carregar dados do módulo:', err)
         })
         .finally(() => setLoadingData(false))
     }
@@ -209,133 +234,141 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     }
   }
 
-  // Simulação amigável de IA para o módulo enviado
-  const handleSimularAnaliseIA = () => {
-    if (uploadedFiles.length === 0) return
-    setIsSimulatingIA(true)
+  // Converte arquivo para Base64 (data URL)
+  const fileStateToBase64 = (fileState: UploadedFileState): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error('Falha ao converter imagem para Base64.'))
+
+      if (fileState.file) {
+        reader.readAsDataURL(fileState.file)
+        return
+      }
+
+      if (fileState.previewUrl) {
+        fetch(fileState.previewUrl)
+          .then((res) => {
+            if (!res.ok) throw new Error('Falha ao baixar imagem do croqui.')
+            return res.blob()
+          })
+          .then((blob) => reader.readAsDataURL(blob))
+          .catch((err) => reject(err))
+        return
+      }
+
+      reject(new Error('Arquivo inválido para análise visual.'))
+    })
+  }
+
+  // Chamada REAL da OpenAI (gpt-4o, visão) via edge function 'analisar-imagem'
+  const handleExecutarAnaliseIA = async () => {
+    if (uploadedFiles.length === 0) {
+      toast({
+        title: 'Selecione uma imagem',
+        description: 'Faça upload de uma foto ou croqui de um móvel antes de analisar.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const primeiraImagem = uploadedFiles[0]
+    setIsAnalyzingIA(true)
     setIsMatchConfirmed(false)
+    setIaDetectedNotice(null)
 
-    setTimeout(() => {
-      setIsSimulatingIA(false)
-      const fileName = uploadedFiles[0]?.name.toLowerCase() || ''
+    try {
+      const imagemBase64 = await fileStateToBase64(primeiraImagem)
 
-      // Localiza o melhor módulo da biblioteca baseado em termos ou fallback inteligente
-      let bestTemplate: TemplateEngenharia | undefined
-      let motivo = 'Correspondência visual identificada pela geometria do módulo'
-      let confianca = 94
-      let sugestoes = {
-        largura: 800,
-        altura: 700,
-        profundidade: 550,
-        portas: 2,
-        gavetas: 0,
-        prateleiras: 1,
-        cabideiros: 0,
+      // Invoca a edge function analisar-imagem (que usa gpt-4o e a biblioteca real)
+      const { data, error } = await supabase.functions.invoke('analisar-imagem', {
+        body: {
+          imagemBase64,
+          modulos: templates,
+          catalogoMateriais,
+        },
+      })
+
+      if (error) {
+        throw new Error(error.message || 'Erro ao chamar a Edge Function de análise visual.')
       }
 
-      if (
-        fileName.includes('balcao') ||
-        fileName.includes('balcão') ||
-        fileName.includes('pia') ||
-        fileName.includes('bancada') ||
-        fileName.includes('gabinete')
-      ) {
-        bestTemplate =
-          templates.find(
-            (t) =>
-              t.nome_template.toLowerCase().includes('balc') ||
-              t.perfil_construtivo === 'Balcão (tampo por conta do cliente)',
-          ) || templates[0]
-        motivo = 'Identificada estrutura de balcão inferior para pia/bancada'
-        confianca = 96
-        sugestoes = {
-          largura: 1200,
-          altura: 850,
-          profundidade: 580,
-          portas: 2,
-          gavetas: 3,
-          prateleiras: 1,
-          cabideiros: 0,
-        }
-      } else if (
-        fileName.includes('painel') ||
-        fileName.includes('tv') ||
-        fileName.includes('sala') ||
-        fileName.includes('rack')
-      ) {
-        bestTemplate =
-          templates.find(
-            (t) =>
-              t.nome_template.toLowerCase().includes('painel') ||
-              t.perfil_construtivo === 'Aberto / Painel',
-          ) || templates[0]
-        motivo = 'Identificada chapa estrutural e painel suspenso para TV'
-        confianca = 92
-        sugestoes = {
-          largura: 1800,
-          altura: 1300,
-          profundidade: 300,
-          portas: 0,
-          gavetas: 2,
-          prateleiras: 1,
-          cabideiros: 0,
-        }
-      } else if (
-        fileName.includes('guardaroupa') ||
-        fileName.includes('guarda-roupa') ||
-        fileName.includes('armario') ||
-        fileName.includes('closet') ||
-        fileName.includes('quarto')
-      ) {
-        bestTemplate =
-          templates.find(
-            (t) =>
-              t.nome_template.toLowerCase().includes('porta') ||
-              t.perfil_construtivo === 'Fechado Envelopado',
-          ) || templates[0]
-        motivo = 'Identificado roupeiro envelopado com divisões internas'
-        confianca = 95
-        sugestoes = {
-          largura: 1800,
-          altura: 2340,
-          profundidade: 580,
-          portas: 2,
-          gavetas: 4,
-          prateleiras: 3,
-          cabideiros: 2,
-        }
-      } else if (templates.length > 0) {
-        bestTemplate = templates[0]
-        motivo = 'Módulo identificado pela biblioteca de engenharia'
-        confianca = 88
+      if (data?.error) {
+        throw new Error(data.error)
       }
 
-      if (bestTemplate) {
-        // Se o template tem dimensões salvas no cadastro (ex: "831x760x600"), faz o parse
-        if (bestTemplate.dimensoes) {
-          const dims = bestTemplate.dimensoes.toLowerCase().replace(/,/g, '.').split('x')
-          if (dims.length === 3) {
-            const w = parseFloat(dims[0])
-            const h = parseFloat(dims[1])
-            const d = parseFloat(dims[2])
-            if (!isNaN(w) && w > 0) sugestoes.largura = Math.round(w)
-            if (!isNaN(h) && h > 0) sugestoes.altura = Math.round(h)
-            if (!isNaN(d) && d > 0) sugestoes.profundidade = Math.round(d)
+      const modulosDetectados = data?.modulos_detectados ?? []
+      const primeiro = modulosDetectados[0]
+
+      if (primeiro) {
+        // Encontra o template correspondente na biblioteca ou fallback para o primeiro
+        const matched = templates.find(
+          (t) =>
+            t.id === primeiro.codigo_modulo ||
+            t.nome_template.toLowerCase() === (primeiro.nome || '').toLowerCase(),
+        ) ||
+          templates[0] || {
+            id: 'mod-custom',
+            nome_template: primeiro.nome || 'Módulo Sob Medida',
+            perfil_construtivo: primeiro.perfil_construcao_sugerido || 'Fechado Envelopado',
+            categoria: 'Personalizado',
+            dimensoes: `${primeiro.dimensao_estimada?.largura || 800}x${primeiro.dimensao_estimada?.altura || 700}x${primeiro.dimensao_estimada?.profundidade || 550}`,
+            material: 'MDF',
+            descricao: 'Módulo analisado por IA',
           }
+
+        const confiancaNum =
+          primeiro.confianca === 'alta' ? 95 : primeiro.confianca === 'media' ? 80 : 65
+
+        const sugestoes = {
+          largura: primeiro.dimensao_estimada?.largura ?? 800,
+          altura: primeiro.dimensao_estimada?.altura ?? 700,
+          profundidade: primeiro.dimensao_estimada?.profundidade ?? 550,
+          portas: primeiro.portas?.qtd ?? 2,
+          gavetas: primeiro.gavetas?.qtd ?? 0,
+          prateleiras: primeiro.prateleiras?.qtd ?? 1,
+          cabideiros: primeiro.cabideiro ? 1 : 0,
         }
+
+        const motivo =
+          data.justificativa ||
+          primeiro.adaptacoes ||
+          'Correspondência visual identificada via OpenAI gpt-4o com a biblioteca.'
 
         setIaIdentifiedTemplate({
-          template: bestTemplate,
+          template: matched,
           motivo,
-          confianca,
+          confianca: confiancaNum,
           sugestoes,
         })
 
         setIaDetectedNotice(
-          `IA identificou: "${bestTemplate.nome_template}" com ${confianca}% de precisão. Clique em "Confirmar Match" para aplicar os dados à Aba 2.`,
+          `OpenAI gpt-4o identificou: "${matched.nome_template}" (${confiancaNum}% confiança). Clique em "Confirmar Match" para preencher a Aba 2.`,
         )
+
+        toast({
+          title: 'Análise de Imagem Concluída',
+          description: `Módulo detectado: ${matched.nome_template} via gpt-4o`,
+        })
+      } else {
+        toast({
+          title: 'Nenhum módulo identificado',
+          description: 'A IA não identificou um módulo com precisão suficiente.',
+          variant: 'destructive',
+        })
       }
-    }, 800)
+    } catch (err: any) {
+      console.error('Falha na chamada da OpenAI gpt-4o:', err)
+      toast({
+        title: 'Erro na Análise Visual',
+        description:
+          err.message ||
+          'Não foi possível analisar a imagem via IA. Verifique as credenciais ou selecione manualmente.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsAnalyzingIA(false)
+    }
   }
 
   // Confirmar Match do card de IA: preenche a Aba 2 (nome, perfil construtivo, dimensões e seletores sugeridos)
@@ -408,6 +441,29 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     }
   }
 
+  // Markup efetivo da engenharia financeira cadastrada no banco
+  const markupEfetivo = useMemo(() => {
+    if (
+      configEngenharia?.markup_padrao &&
+      typeof configEngenharia.markup_padrao === 'number' &&
+      configEngenharia.markup_padrao > 0
+    ) {
+      return configEngenharia.markup_padrao
+    }
+    return MARKUP_PADRAO
+  }, [configEngenharia])
+
+  // Fator de perda de material configurado (default 20%)
+  const fatorPerdaMaterial = useMemo(() => {
+    if (
+      configEngenharia?.perda_material_percent &&
+      typeof configEngenharia.perda_material_percent === 'number'
+    ) {
+      return configEngenharia.perda_material_percent
+    }
+    return 20.0
+  }, [configEngenharia])
+
   // Cálculo da lista técnica interna (Aba 3: Engenharia & Peças)
   const pecasBOM = useMemo(() => {
     if (!dimensoes.largura || !dimensoes.altura || !dimensoes.profundidade) return []
@@ -419,6 +475,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     const composicao: ModuloComposicao = {
       perfilConstrutivo,
       semTamponamento: perfilConstrutivo === 'Caixa Simples',
+      tampoPedra: perfilConstrutivo === 'Balcão (tampo por conta do cliente)',
       portas: { qtd: portasCount, tipo: portasCount > 0 ? 'abrir' : 'nenhum' },
       gavetas: { qtd: gavetasCount },
       prateleiras: { qtd: prateleirasCount },
@@ -427,6 +484,8 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       iluminacaoLed: iluminacaoLed,
     }
 
+    const catalogoEfetivo = catalogoMateriais.length > 0 ? catalogoMateriais : undefined
+
     return calcularBOM(
       moduloPayload,
       dimensoes,
@@ -434,8 +493,8 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       mdfInterno,
       mdfFundo,
       padraoProjeto,
-      catalogoMateriais,
-      1.8,
+      catalogoEfetivo,
+      markupEfetivo,
       1.0,
       composicao,
     )
@@ -449,6 +508,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     mdfFundo,
     padraoProjeto,
     catalogoMateriais,
+    markupEfetivo,
     portasCount,
     gavetasCount,
     prateleirasCount,
@@ -486,7 +546,24 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       detalhesAba2.push(`${cabideirosCount} ${cabideirosCount === 1 ? 'cabideiro' : 'cabideiros'}`)
     if (iluminacaoLed) detalhesAba2.push('LED')
 
+    // Converte pecasBOM para OrcamentoBOMItem[]
+    const itensConvertidos: OrcamentoBOMItem[] = pecasBOM.map((p) => ({
+      id: p.id,
+      description: p.description,
+      material: p.material,
+      espessura: p.espessura,
+      metragem: p.metragem,
+      unidade: p.unidade,
+      unitCost: p.unitCost,
+      totalCost: p.totalCost,
+      markup: p.markup,
+      salePrice: p.salePrice,
+      item_nao_cadastrado: p.item_nao_cadastrado,
+      catalogo_id: p.catalogo_id,
+    }))
+
     onSaveModulo({
+      moduloId: selectedTemplateId || undefined,
       nome: nomeLimpo,
       descricaoTipo: `${perfilConstrutivo} • ${detalhesAba2.join(' • ')}`,
       quantidade,
@@ -503,6 +580,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       prateleiras: prateleirasCount,
       cabideiros: cabideirosCount,
       iluminacaoLed,
+      itensBOM: itensConvertidos,
     })
 
     onOpenChange(false)
@@ -623,19 +701,19 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                     <Button
                       type="button"
                       size="sm"
-                      disabled={isSimulatingIA}
-                      onClick={handleSimularAnaliseIA}
+                      disabled={isAnalyzingIA}
+                      onClick={handleExecutarAnaliseIA}
                       className="h-9 px-4 gap-2 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 shrink-0 w-full sm:w-auto shadow-xs"
                     >
-                      {isSimulatingIA ? (
+                      {isAnalyzingIA ? (
                         <>
                           <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          <span>Analisando Croqui...</span>
+                          <span>Consultando OpenAI gpt-4o...</span>
                         </>
                       ) : (
                         <>
                           <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Executar Análise IA</span>
+                          <span>Analisar Módulo com IA (gpt-4o)</span>
                         </>
                       )}
                     </Button>
@@ -1275,11 +1353,9 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                 <div className="flex items-start gap-2.5">
                   <Settings2 className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
-                    <strong>Consulta Técnica Interna:</strong> Esta aba serve apenas para consulta
-                    técnica e conferência da decomposição de engenharia (corte e ferragens) antes de
-                    clicar em <em>Salvar Módulo no Ambiente</em>. Nenhuma peça individual é editável
-                    aqui e nada desta lista técnica vaza para a Proposta Comercial do ambiente —
-                    apenas os valores consolidados alimentarão a linha comercial.
+                    <strong>Engenharia Financeira & Decomposição:</strong> Cálculo em tempo real via
+                    motor <code>calcularBOM</code> com perda de material de {fatorPerdaMaterial}% e
+                    markup efetivo de {markupEfetivo.toFixed(2)}x (configurações do banco).
                   </div>
                 </div>
                 <Badge

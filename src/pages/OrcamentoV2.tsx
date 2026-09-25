@@ -1,5 +1,5 @@
-import { useState, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   FileDown,
@@ -16,6 +16,8 @@ import {
   Box,
   ChevronRight,
   Info,
+  Save,
+  CheckCircle2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -46,17 +48,34 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { ModuleEditDrawer, ModuloSalvoData } from '@/components/ModuleEditDrawer'
+import {
+  createOrcamento,
+  updateOrcamento,
+  fetchOrcamentoById,
+  Orcamento,
+  AmbienteOrcamento,
+  ModuloOrcamento,
+  OrcamentoBOMItem,
+} from '@/services/orcamentos'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
-// Estrutura comercial estrita de módulo: NUNCA expor ferragens, parafusos, chapas ou fitas
+// Estrutura comercial estrita de módulo: NUNCA expor ferragens, parafusos, chapas ou fitas na proposta
 export interface ModuloComercialV2 {
   id: string
+  moduloId?: string
   modulo: string
   descricaoTipo: string
   quantidade: number
   valorUnitario: number
   valorTotal: number
+  dimensoes?: {
+    largura: number
+    altura: number
+    profundidade: number
+  }
+  perfilConstrutivo?: string
+  itensBOM?: OrcamentoBOMItem[]
 }
 
 export interface AmbienteV2 {
@@ -82,11 +101,20 @@ const formatCurrency = (val: number) =>
 
 export default function OrcamentoV2() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const orcamentoIdParam = searchParams.get('id')
 
-  // Estado local para Dados do Cliente (sem persistência em banco nesta etapa)
+  // ID do orçamento persistido no Supabase
+  const [orcamentoId, setOrcamentoId] = useState<string | null>(orcamentoIdParam)
+  const [numeroSequencial, setNumeroSequencial] = useState<number | null>(null)
+  const [statusOrcamento, setStatusOrcamento] = useState<string>('Rascunho')
+  const [isSaving, setIsSaving] = useState(false)
+  const [isSavedSuccessfully, setIsSavedSuccessfully] = useState(false)
+  const [isLoadingOrcamento, setIsLoadingOrcamento] = useState(false)
+
+  // Estado para Dados do Cliente
   const [nomeCliente, setNomeCliente] = useState('')
   const [dataOrcamento, setDataOrcamento] = useState(() => {
-    // Data atual no formato YYYY-MM-DD
     const today = new Date()
     return today.toISOString().split('T')[0]
   })
@@ -109,7 +137,57 @@ export default function OrcamentoV2() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [targetAmbienteId, setTargetAmbienteId] = useState<string | null>(null)
 
-  // Subtotal por ambiente e Valor Total Geral do projeto
+  // Carregar orçamento existente se vier ID na URL
+  useEffect(() => {
+    if (orcamentoIdParam) {
+      setIsLoadingOrcamento(true)
+      fetchOrcamentoById(orcamentoIdParam)
+        .then((orc: Orcamento | null) => {
+          if (orc) {
+            setOrcamentoId(orc.id)
+            setNumeroSequencial(orc.numero_sequencial ?? null)
+            setNomeCliente(orc.cliente_nome || '')
+            if (orc.data) {
+              setDataOrcamento(orc.data.split('T')[0])
+            }
+            if (orc.status) {
+              setStatusOrcamento(orc.status)
+            }
+            // Mapeia ambientes_json salvo para AmbienteV2[]
+            if (Array.isArray(orc.ambientes_json)) {
+              const mappedAmbientes: AmbienteV2[] = orc.ambientes_json.map((a: any) => ({
+                id: a.id || `amb-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+                nome: a.nome,
+                modulos: Array.isArray(a.modulos)
+                  ? a.modulos.map((m: any) => ({
+                      id: m.id || `mod-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+                      moduloId: m.modulo_id,
+                      modulo: m.nome,
+                      descricaoTipo: m.adaptacoes || m.perfil_construtivo || 'Módulo Sob Medida',
+                      quantidade: 1,
+                      valorUnitario: m.subtotal || 0,
+                      valorTotal: m.subtotal || 0,
+                      dimensoes: m.dimensoes,
+                      perfilConstrutivo: m.perfil_construtivo,
+                      itensBOM: m.itens || [],
+                    }))
+                  : [],
+              }))
+              setAmbientes(mappedAmbientes)
+              setExpandedAmbientes(mappedAmbientes.map((a) => a.id))
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('Erro ao carregar orçamento:', err)
+        })
+        .finally(() => {
+          setIsLoadingOrcamento(false)
+        })
+    }
+  }, [orcamentoIdParam])
+
+  // Subtotal por ambiente: reflete ESTRITAMENTE módulos JÁ SALVOS nos ambientes
   const subtotalPorAmbiente = useMemo(() => {
     const map = new Map<string, number>()
     for (const amb of ambientes) {
@@ -119,6 +197,7 @@ export default function OrcamentoV2() {
     return map
   }, [ambientes])
 
+  // Valor Total Geral: SOMA apenas após salvar módulos nos ambientes
   const valorTotalGeral = useMemo(() => {
     let total = 0
     for (const sub of subtotalPorAmbiente.values()) {
@@ -240,17 +319,21 @@ export default function OrcamentoV2() {
     setIsDrawerOpen(true)
   }
 
-  // Salvar Módulo vindo do Drawer
+  // Salvar Módulo vindo do Drawer no Ambiente (Aba 3 confirmada)
   const handleSaveModuloNoAmbiente = (moduloData: ModuloSalvoData) => {
     if (!targetAmbienteId) return
 
     const novoModulo: ModuloComercialV2 = {
       id: `mod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      moduloId: moduloData.moduloId,
       modulo: moduloData.nome,
       descricaoTipo: moduloData.descricaoTipo,
       quantidade: moduloData.quantidade,
       valorUnitario: moduloData.valorUnitario,
       valorTotal: moduloData.valorTotal,
+      dimensoes: moduloData.dimensoes,
+      perfilConstrutivo: moduloData.perfilConstrutivo,
+      itensBOM: moduloData.itensBOM,
     }
 
     setAmbientes((prev) =>
@@ -259,11 +342,137 @@ export default function OrcamentoV2() {
       ),
     )
 
+    // Marca como não salvo após alteração
+    setIsSavedSuccessfully(false)
+
     const ambAlvo = ambientes.find((a) => a.id === targetAmbienteId)
     toast({
-      title: 'Módulo adicionado',
-      description: `"${moduloData.nome}" foi incluído em "${ambAlvo?.nome || 'Ambiente'}".`,
+      title: 'Módulo salvo no ambiente!',
+      description: `"${moduloData.nome}" foi salvo em "${ambAlvo?.nome || 'Ambiente'}". Valor Geral atualizado.`,
     })
+  }
+
+  // Persistência Completa no Supabase: Orcamentos, Ambientes, Módulos e Peças BOM
+  const handleSalvarOrcamento = async () => {
+    const nomeLimpo = nomeCliente.trim()
+    if (!nomeLimpo) {
+      toast({
+        title: 'Nome do cliente obrigatório',
+        description: 'Informe o nome do cliente antes de salvar o orçamento.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      // 1. Converte ambientes e módulos para o formato de persistência
+      const ambientesJsonPayload: AmbienteOrcamento[] = ambientes.map((amb) => {
+        const modulosPayload: ModuloOrcamento[] = amb.modulos.map((mod) => {
+          return {
+            id: mod.id,
+            modulo_id: mod.moduloId,
+            nome: mod.modulo,
+            dimensoes: mod.dimensoes
+              ? {
+                  largura: mod.dimensoes.largura,
+                  altura: mod.dimensoes.altura,
+                  profundidade: mod.dimensoes.profundidade,
+                }
+              : undefined,
+            perfil_construtivo: mod.perfilConstrutivo,
+            adaptacoes: mod.descricaoTipo,
+            subtotal: mod.valorTotal,
+            itens: mod.itensBOM || [],
+          }
+        })
+
+        const subtotal = amb.modulos.reduce((acc, m) => acc + (Number(m.valorTotal) || 0), 0)
+
+        return {
+          id: amb.id,
+          nome: amb.nome,
+          modulos: modulosPayload,
+          subtotal,
+        }
+      })
+
+      // 2. Consolidação de todas as peças (BOM) do orçamento para a coluna bom_json
+      const todasPecasBOM: OrcamentoBOMItem[] = []
+      ambientes.forEach((amb) => {
+        amb.modulos.forEach((mod) => {
+          if (Array.isArray(mod.itensBOM)) {
+            mod.itensBOM.forEach((peca) => {
+              todasPecasBOM.push({
+                ...peca,
+                description: `${amb.nome} · ${mod.modulo}: ${peca.description}`,
+              })
+            })
+          }
+        })
+      })
+
+      const primeiroAmbienteNome = ambientes[0]?.nome || null
+      const primeiroModuloNome = ambientes[0]?.modulos[0]?.modulo || null
+
+      if (orcamentoId) {
+        // Atualiza orçamento existente
+        const updated = await updateOrcamento(orcamentoId, {
+          cliente_nome: nomeLimpo,
+          data: `${dataOrcamento}T12:00:00.000Z`,
+          valor_total: valorTotalGeral,
+          status: statusOrcamento,
+          ambiente: primeiroAmbienteNome,
+          modulo: primeiroModuloNome,
+          ambientes_json: ambientesJsonPayload,
+          bom_json: todasPecasBOM,
+        })
+
+        if (!updated) {
+          throw new Error('Falha ao atualizar orçamento no banco de dados.')
+        }
+
+        setIsSavedSuccessfully(true)
+        toast({
+          title: 'Orçamento atualizado!',
+          description: `Orçamento nº ${updated.numero_sequencial ?? ''} salvo com sucesso.`,
+        })
+      } else {
+        // Cria novo orçamento
+        const created = await createOrcamento({
+          cliente_nome: nomeLimpo,
+          data: `${dataOrcamento}T12:00:00.000Z`,
+          valor_total: valorTotalGeral,
+          status: 'Rascunho',
+          ambiente: primeiroAmbienteNome,
+          modulo: primeiroModuloNome,
+          ambientes_json: ambientesJsonPayload,
+          bom_json: todasPecasBOM,
+        })
+
+        if (!created) {
+          throw new Error('Falha ao criar orçamento no banco de dados.')
+        }
+
+        setOrcamentoId(created.id)
+        setNumeroSequencial(created.numero_sequencial ?? null)
+        setIsSavedSuccessfully(true)
+
+        toast({
+          title: 'Orçamento criado!',
+          description: `Orçamento nº ${created.numero_sequencial ?? ''} salvo com sucesso no banco de dados.`,
+        })
+      }
+    } catch (err: any) {
+      console.error('Erro ao salvar orçamento:', err)
+      toast({
+        title: 'Erro ao salvar orçamento',
+        description: err.message || 'Verifique a conexão com o Supabase e tente novamente.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   // Nome do ambiente alvo para o título do drawer
@@ -303,6 +512,12 @@ export default function OrcamentoV2() {
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-auto">
+          {numeroSequencial && (
+            <span className="text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+              Nº {numeroSequencial}
+            </span>
+          )}
+
           <Button
             type="button"
             variant="outline"
@@ -311,6 +526,35 @@ export default function OrcamentoV2() {
           >
             <FileDown className="w-4 h-4 text-slate-500 dark:text-slate-400" />
             <span>Exportar PDF</span>
+          </Button>
+
+          <Button
+            type="button"
+            onClick={handleSalvarOrcamento}
+            disabled={isSaving}
+            className={cn(
+              'h-9 px-4 gap-2 text-xs font-bold rounded-xl transition-all shadow-sm',
+              isSavedSuccessfully
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900',
+            )}
+          >
+            {isSaving ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Salvando...</span>
+              </>
+            ) : isSavedSuccessfully ? (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Salvo no Banco</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span>Salvar Orçamento</span>
+              </>
+            )}
           </Button>
         </div>
       </header>
@@ -870,6 +1114,35 @@ export default function OrcamentoV2() {
                 {formatCurrency(valorTotalGeral)}
               </span>
             </div>
+
+            <Button
+              type="button"
+              onClick={handleSalvarOrcamento}
+              disabled={isSaving}
+              className={cn(
+                'h-9 px-4 gap-2 text-xs font-bold rounded-xl transition-all shadow-sm hidden sm:inline-flex',
+                isSavedSuccessfully
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900',
+              )}
+            >
+              {isSaving ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Salvando...</span>
+                </>
+              ) : isSavedSuccessfully ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Salvo</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Salvar Orçamento</span>
+                </>
+              )}
+            </Button>
           </div>
         </div>
       </aside>
