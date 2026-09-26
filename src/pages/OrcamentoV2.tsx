@@ -111,10 +111,54 @@ const formatCurrency = (val: number) =>
     currency: 'BRL',
   }).format(val)
 
+const ORCAV2_DRAFT_KEY = 'orcav2-draft'
+
+interface OrcaV2DraftData {
+  nomeCliente: string
+  dataOrcamento: string
+  ambientes: AmbienteV2[]
+  orcamentoId: string | null
+  numeroSequencial: number | null
+  savedAt?: number
+}
+
+const readDraftSessionStorage = (): OrcaV2DraftData | null => {
+  if (typeof window === 'undefined' || !window.sessionStorage) return null
+  try {
+    const raw = window.sessionStorage.getItem(ORCAV2_DRAFT_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as OrcaV2DraftData
+  } catch (err) {
+    console.warn('Falha ao ler rascunho de sessionStorage:', err)
+    return null
+  }
+}
+
+const writeDraftSessionStorage = (data: OrcaV2DraftData): void => {
+  if (typeof window === 'undefined' || !window.sessionStorage) return
+  try {
+    window.sessionStorage.setItem(ORCAV2_DRAFT_KEY, JSON.stringify(data))
+  } catch (err) {
+    console.warn('Falha ao salvar rascunho em sessionStorage:', err)
+  }
+}
+
+const clearDraftSessionStorage = (): void => {
+  if (typeof window === 'undefined' || !window.sessionStorage) return
+  try {
+    window.sessionStorage.removeItem(ORCAV2_DRAFT_KEY)
+  } catch (err) {
+    console.warn('Falha ao limpar rascunho de sessionStorage:', err)
+  }
+}
+
 export default function OrcamentoV2() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const orcamentoIdParam = searchParams.get('id')
+
+  // Flag indicando se a sessão inicial foi restaurada (ou dispensada por carga de banco)
+  const isDraftInitializedRef = useRef(false)
 
   // ID do orçamento persistido no Supabase
   const [orcamentoId, setOrcamentoId] = useState<string | null>(orcamentoIdParam)
@@ -201,9 +245,10 @@ export default function OrcamentoV2() {
       })
   }, [])
 
-  // Carregar orçamento existente se vier ID na URL
+  // Carregar orçamento existente se vier ID na URL (tem precedência sobre o rascunho de sessionStorage)
   useEffect(() => {
     if (orcamentoIdParam) {
+      isDraftInitializedRef.current = true
       setIsLoadingOrcamento(true)
       fetchOrcamentoById(orcamentoIdParam)
         .then((orc: Orcamento | null) => {
@@ -253,8 +298,48 @@ export default function OrcamentoV2() {
         .finally(() => {
           setIsLoadingOrcamento(false)
         })
+    } else {
+      // Quando a URL NÃO traz ?id=, restaura o rascunho anterior de sessionStorage (apenas uma vez na inicialização)
+      if (!isDraftInitializedRef.current) {
+        isDraftInitializedRef.current = true
+        const draft = readDraftSessionStorage()
+        if (draft) {
+          if (typeof draft.nomeCliente === 'string') setNomeCliente(draft.nomeCliente)
+          if (draft.dataOrcamento) setDataOrcamento(draft.dataOrcamento)
+          if (Array.isArray(draft.ambientes)) {
+            setAmbientes(draft.ambientes)
+            if (draft.ambientes.length > 0) {
+              const ultimo = draft.ambientes[draft.ambientes.length - 1]
+              setActiveAmbienteId(ultimo.id)
+              setExpandedAmbientes([ultimo.id])
+            }
+          }
+          if (draft.orcamentoId) setOrcamentoId(draft.orcamentoId)
+          if (typeof draft.numeroSequencial === 'number')
+            setNumeroSequencial(draft.numeroSequencial)
+        }
+      }
     }
   }, [orcamentoIdParam])
+
+  // Autosave do rascunho em sessionStorage (sincronização automática a cada alteração de estado)
+  useEffect(() => {
+    // Se a carga inicial via ?id= ainda estiver em andamento, não sobrescreve o rascunho com dados incompletos
+    if (isLoadingOrcamento) return
+
+    // Não salva se ainda não passou pela inicialização
+    if (!isDraftInitializedRef.current) return
+
+    const draftData: OrcaV2DraftData = {
+      nomeCliente,
+      dataOrcamento,
+      ambientes,
+      orcamentoId,
+      numeroSequencial,
+      savedAt: Date.now(),
+    }
+    writeDraftSessionStorage(draftData)
+  }, [nomeCliente, dataOrcamento, ambientes, orcamentoId, numeroSequencial, isLoadingOrcamento])
 
   // Subtotal por ambiente: reflete ESTRITAMENTE módulos JÁ SALVOS nos ambientes
   const subtotalPorAmbiente = useMemo(() => {
@@ -367,6 +452,28 @@ export default function OrcamentoV2() {
     custosFixos,
     custosVariaveis,
   ])
+
+  // Reiniciar formulário e iniciar novo orçamento de forma explícita (limpa sessionStorage)
+  const handleIniciarNovoOrcamento = () => {
+    clearDraftSessionStorage()
+    setNomeCliente('')
+    const today = new Date().toISOString().split('T')[0]
+    setDataOrcamento(today)
+    setAmbientes([])
+    setExpandedAmbientes([])
+    setActiveAmbienteId(null)
+    setOrcamentoId(null)
+    setNumeroSequencial(null)
+    setStatusOrcamento('Rascunho')
+    setIsSavedSuccessfully(false)
+    setIsOrcamentoFinalizado(false)
+    // Se a URL tinha ?id=, remove para voltar ao modo novo
+    setSearchParams({}, { replace: true })
+    toast({
+      title: 'Novo Orçamento',
+      description: 'Campos reiniciados e rascunho anterior limpo com sucesso.',
+    })
+  }
 
   const handleVoltar = () => {
     navigate('/orcamentos')
@@ -777,6 +884,9 @@ export default function OrcamentoV2() {
         setNumeroSequencial(created.numero_sequencial ?? null)
         setIsSavedSuccessfully(true)
 
+        // Item b: Sincroniza a URL com o ID do orçamento via setSearchParams({ id }, { replace: true })
+        setSearchParams({ id: created.id }, { replace: true })
+
         toast({
           title: 'Orçamento criado!',
           description: `Orçamento nº ${created.numero_sequencial ?? ''} salvo com sucesso no banco de dados.`,
@@ -1010,6 +1120,17 @@ export default function OrcamentoV2() {
                 Nº {numeroSequencial}
               </span>
             )}
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleIniciarNovoOrcamento}
+              className="h-9 px-3 gap-1.5 text-xs font-semibold border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl shadow-xs"
+              title="Iniciar novo orçamento limpo"
+            >
+              <Plus className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+              <span>Novo</span>
+            </Button>
 
             <Button
               type="button"

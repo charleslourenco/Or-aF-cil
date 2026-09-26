@@ -1340,17 +1340,9 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Dropdown MDF Externo */}
                   <div className="p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/60 space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        MDF Externo (Frentes / Envelopamento)
-                      </Label>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] font-mono border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 shrink-0"
-                      >
-                        {mdfExterno.espessura}mm
-                      </Badge>
-                    </div>
+                    <Label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                      MDF Externo (Frentes / Envelopamento)
+                    </Label>
 
                     <Select
                       value={mdfExterno.cor}
@@ -1382,17 +1374,9 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
 
                   {/* Dropdown MDF Interno */}
                   <div className="p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/60 space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        MDF Interno (Caixaria / Prateleiras)
-                      </Label>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] font-mono border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 shrink-0"
-                      >
-                        {mdfInterno.espessura}mm
-                      </Badge>
-                    </div>
+                    <Label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                      MDF Interno (Caixaria / Prateleiras)
+                    </Label>
 
                     <Select
                       value={mdfInterno.cor}
