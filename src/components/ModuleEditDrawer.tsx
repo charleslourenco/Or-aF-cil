@@ -11,6 +11,9 @@ import {
   DollarSign,
   AlertCircle,
   Package,
+  Plus,
+  PlusCircle,
+  Trash2,
 } from 'lucide-react'
 import {
   Sheet,
@@ -63,6 +66,10 @@ import { fetchConfigEngenharia, ConfigEngenharia } from '@/services/engenharia'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import type { OrcamentoBOMItem } from '@/services/orcamentos'
+import type { BudgetItem } from '@/data/mockData'
+import { AddFromCatalogModal } from '@/components/AddFromCatalogModal'
+import { AddCustomItemModal } from '@/components/AddCustomItemModal'
+import { ensureUniqueBudgetItemId } from '@/lib/budgetItemUtils'
 
 export interface ModuloSalvoData {
   id?: string
@@ -144,6 +151,11 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   const [prateleirasCount, setPrateleirasCount] = useState<number>(1)
   const [cabideirosCount, setCabideirosCount] = useState<number>(0)
   const [iluminacaoLed, setIluminacaoLed] = useState<boolean>(false)
+
+  // Itens manuais/avulsos ou do catálogo adicionados ao módulo (Ajuste 1)
+  const [manualItems, setManualItems] = useState<BudgetItem[]>([])
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false)
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false)
 
   // Aba 1 - Upload de Fotos & IA
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileState[]>([])
@@ -249,6 +261,40 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         setPrateleirasCount(initialData.prateleiras ?? 1)
         setCabideirosCount(initialData.cabideiros ?? 0)
         setIluminacaoLed(Boolean(initialData.iluminacaoLed))
+
+        // Carrega em manualItems os itens de initialData.itensBOM que sejam manuais/avulsos
+        // (ID com prefixo manual-/catalog-/avulso- ou não gerados pela BOM paramétrica que usa prefixo bom-)
+        if (initialData.itensBOM && Array.isArray(initialData.itensBOM)) {
+          const loadedManuals: BudgetItem[] = initialData.itensBOM
+            .filter((it) => {
+              if (!it.id) return false
+              const idLower = it.id.toLowerCase()
+              return (
+                idLower.startsWith('manual-') ||
+                idLower.startsWith('catalog-') ||
+                idLower.startsWith('catalogo-') ||
+                idLower.startsWith('avulso-') ||
+                !idLower.startsWith('bom-')
+              )
+            })
+            .map((it) => ({
+              id: ensureUniqueBudgetItemId(it.id, 'manual'),
+              description: it.description,
+              material: it.material,
+              espessura: it.espessura,
+              metragem: it.metragem,
+              unidade: it.unidade,
+              unitCost: it.unitCost,
+              totalCost: it.totalCost,
+              markup: it.markup,
+              salePrice: it.salePrice,
+              item_nao_cadastrado: it.item_nao_cadastrado,
+              catalogo_id: it.catalogo_id,
+            }))
+          setManualItems(loadedManuals)
+        } else {
+          setManualItems([])
+        }
       } else {
         // Modo Novo Módulo: SEMPRE vazio (decisão permanente do usuário)
         setNomeModulo('')
@@ -259,6 +305,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         setPrateleirasCount(1)
         setCabideirosCount(0)
         setIluminacaoLed(false)
+        setManualItems([])
       }
     }
   }, [open, initialData])
@@ -627,14 +674,41 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     iluminacaoLed,
   ])
 
-  // Custo técnico e valor calculado sugerido
+  // Lista consolidada de peças técnicas e itens manuais (Aba 3)
+  const listaConsolidadaBOM = useMemo(() => {
+    return [...pecasBOM, ...manualItems]
+  }, [pecasBOM, manualItems])
+
+  // Custo técnico consolidado e valor de venda consolidado somando a lista inteira
   const totalCustoTecnico = useMemo(() => {
-    return pecasBOM.reduce((acc, p) => acc + (p.totalCost || 0), 0)
-  }, [pecasBOM])
+    return listaConsolidadaBOM.reduce((acc, p) => acc + (p.totalCost || 0), 0)
+  }, [listaConsolidadaBOM])
 
   const totalVendaSugerido = useMemo(() => {
-    return pecasBOM.reduce((acc, p) => acc + (p.salePrice || 0), 0)
-  }, [pecasBOM])
+    return listaConsolidadaBOM.reduce((acc, p) => acc + (p.salePrice || 0), 0)
+  }, [listaConsolidadaBOM])
+
+  // Handlers para adicionar itens do catálogo ou avulso com ID único garantido
+  const handleAddManualItem = (item: BudgetItem) => {
+    const uniqueItem: BudgetItem = {
+      ...item,
+      id: ensureUniqueBudgetItemId(item.id, 'manual'),
+    }
+    setManualItems((prev) => [...prev, uniqueItem])
+    toast({
+      title: 'Item adicionado',
+      description: `"${uniqueItem.description}" foi incluído ao módulo.`,
+    })
+  }
+
+  const handleRemoveManualItem = (itemId: string) => {
+    setManualItems((prev) => prev.filter((it) => it.id !== itemId))
+  }
+
+  // Verifica se um item é manual (para permitir remoção via lixeira)
+  const isItemManual = (peca: BudgetItem) => {
+    return manualItems.some((m) => m.id === peca.id)
+  }
 
   // Salvar no Ambiente
   const handleSalvar = () => {
@@ -661,9 +735,13 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     if (cabideirosCount > 0)
       detalhesAba2.push(`${cabideirosCount} ${cabideirosCount === 1 ? 'cabideiro' : 'cabideiros'}`)
     if (iluminacaoLed) detalhesAba2.push('LED')
+    if (manualItems.length > 0)
+      detalhesAba2.push(
+        `${manualItems.length} ${manualItems.length === 1 ? 'acessório' : 'acessórios'}`,
+      )
 
-    // Converte pecasBOM para OrcamentoBOMItem[]
-    const itensConvertidos: OrcamentoBOMItem[] = pecasBOM.map((p) => ({
+    // Converte listaConsolidadaBOM para OrcamentoBOMItem[] repassando todos os itens
+    const todosItensConvertidos: OrcamentoBOMItem[] = listaConsolidadaBOM.map((p) => ({
       id: p.id,
       description: p.description,
       material: p.material,
@@ -696,7 +774,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       prateleiras: prateleirasCount,
       cabideiros: cabideirosCount,
       iluminacaoLed,
-      itensBOM: itensConvertidos,
+      itensBOM: todosItensConvertidos,
     })
 
     onOpenChange(false)
@@ -1300,6 +1378,45 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                     />
                   </div>
                 </div>
+
+                {/* Barra de ações para adicionar itens do catálogo ou avulso ao módulo */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                      Insumos e Acessórios Manuais
+                    </span>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {manualItems.length > 0
+                        ? `${manualItems.length} ${manualItems.length === 1 ? 'item adicionado' : 'itens adicionados'} a este móvel`
+                        : 'Adicione ferragens especiais, perfis ou itens do catálogo diretamente ao móvel'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsCatalogModalOpen(true)}
+                      className="h-9 px-3 gap-1.5 text-xs font-semibold rounded-xl border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
+                    >
+                      <Package className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                      <span>Item do Catálogo</span>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsCustomModalOpen(true)}
+                      className="h-9 px-3 gap-1.5 text-xs font-semibold rounded-xl border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                      <span>Item Avulso</span>
+                    </Button>
+                  </div>
+                </div>
               </div>
 
               {/* Card 3: Padrão de MDF (espessura derivada automaticamente do material cadastrado no catálogo) */}
@@ -1456,11 +1573,11 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                   variant="outline"
                   className="border-amber-400 text-amber-900 dark:text-amber-200 font-bold text-[10px] shrink-0"
                 >
-                  {pecasBOM.length} {pecasBOM.length === 1 ? 'item' : 'itens'}
+                  {listaConsolidadaBOM.length} {listaConsolidadaBOM.length === 1 ? 'item' : 'itens'}
                 </Badge>
               </div>
 
-              {/* Tabela Detalhada de Engenharia (Decomposição do Móvel) */}
+              {/* Tabela Detalhada de Engenharia (Decomposição do Móvel + Itens Manuais) */}
               <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
                 <div className="max-h-80 overflow-y-auto">
                   <Table>
@@ -1484,20 +1601,24 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                         <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap">
                           Valor de Venda
                         </TableHead>
+                        <TableHead className="py-2.5 px-2 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-center w-10">
+                          <span className="sr-only">Ações</span>
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {pecasBOM.length === 0 ? (
+                      {listaConsolidadaBOM.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={6}
+                            colSpan={7}
                             className="py-8 text-center text-xs text-slate-400"
                           >
                             Nenhuma peça gerada. Verifique as dimensões na Aba 2.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        pecasBOM.map((peca) => {
+                        listaConsolidadaBOM.map((peca) => {
+                          const manual = isItemManual(peca)
                           const metragemFormatada =
                             typeof peca.metragem === 'number'
                               ? peca.unidade === 'm²' || peca.unidade === 'm'
@@ -1515,7 +1636,17 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                             >
                               <TableCell className="py-2.5 px-3 text-xs font-medium text-slate-800 dark:text-slate-200">
                                 <div className="space-y-0.5">
-                                  <span>{peca.description}</span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span>{peca.description}</span>
+                                    {manual && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[9px] px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 font-semibold"
+                                      >
+                                        Manual
+                                      </Badge>
+                                    )}
+                                  </div>
                                   {peca.material && (
                                     <span className="block text-[10px] text-slate-400 font-normal">
                                       {peca.material}
@@ -1539,6 +1670,25 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                               </TableCell>
                               <TableCell className="py-2.5 px-3 text-xs text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                                 {formatCurrency(peca.salePrice || 0)}
+                              </TableCell>
+                              <TableCell className="py-2.5 px-2 text-center">
+                                {manual ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveManualItem(peca.id)}
+                                    className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg"
+                                    title="Remover item manual"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span className="sr-only">Remover</span>
+                                  </Button>
+                                ) : (
+                                  <span className="text-slate-300 dark:text-slate-700 text-xs">
+                                    —
+                                  </span>
+                                )}
                               </TableCell>
                             </TableRow>
                           )
@@ -1594,6 +1744,22 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
             </TabsContent>
           </Tabs>
         </div>
+
+        {/* Modais de inclusão: Catálogo e Avulso */}
+        <AddFromCatalogModal
+          isOpen={isCatalogModalOpen}
+          onClose={() => setIsCatalogModalOpen(false)}
+          catalogoMateriais={catalogoMateriais}
+          markupEngenharia={markupEfetivo}
+          onAddItem={handleAddManualItem}
+        />
+
+        <AddCustomItemModal
+          isOpen={isCustomModalOpen}
+          onClose={() => setIsCustomModalOpen(false)}
+          markupEngenharia={markupEfetivo}
+          onAddItem={handleAddManualItem}
+        />
 
         {/* Rodapé fixo com o botão pedido: 'Salvar Módulo no Ambiente' */}
         <SheetFooter className="px-6 py-4 border-t border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
