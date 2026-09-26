@@ -117,6 +117,23 @@ const OPCOES_PREDEFINIDAS_AMBIENTES = [
   'Área Externa',
 ] as const
 
+const OPCAO_FORMA_PAGAMENTO_OUTRA = '__outra__'
+
+const OPCOES_PREDEFINIDAS_FORMA_PAGAMENTO: string[] = [
+  'À vista',
+  'A combinar',
+  ...Array.from({ length: 20 }, (_, i) => {
+    const parcelas = i + 2
+    if (parcelas <= 5) {
+      return `No cartão de crédito em ${parcelas}x sem juros`
+    }
+    return `No cartão de crédito em ${parcelas}x com juros`
+  }),
+  'No boleto em até 10x',
+  'No cheque em até 5x',
+  'Financiamento bancário em até 36x',
+]
+
 const formatCurrency = (val: number) =>
   new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -190,6 +207,7 @@ export default function OrcamentoV2() {
   })
   // Campos Forma de Pagamento e Observações: iniciam SEMPRE VAZIOS por padrão
   const [formaPagamento, setFormaPagamento] = useState('')
+  const [isCustomFormaPagamento, setIsCustomFormaPagamento] = useState(false)
   const [observacoes, setObservacoes] = useState('')
 
   // Estado dos ambientes do projeto
@@ -495,6 +513,7 @@ export default function OrcamentoV2() {
     const today = new Date().toISOString().split('T')[0]
     setDataOrcamento(today)
     setFormaPagamento('')
+    setIsCustomFormaPagamento(false)
     setObservacoes('')
     setAmbientes([])
     setExpandedAmbientes([])
@@ -1329,21 +1348,93 @@ export default function OrcamentoV2() {
             {/* Condições Comerciais opcionais: Forma de Pagamento e Observações (iniciam sempre vazios) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/80">
               <div className="space-y-1.5">
-                <Label
-                  htmlFor="formaPagamentoV2"
-                  className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5"
+                <div className="flex items-center justify-between">
+                  <Label
+                    htmlFor="formaPagamentoV2"
+                    className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5"
+                  >
+                    <CreditCard className="w-3.5 h-3.5 text-slate-500" />
+                    Forma de Pagamento
+                  </Label>
+                  {formaPagamento && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormaPagamento('')
+                        setIsCustomFormaPagamento(false)
+                      }}
+                      className="text-[11px] text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                      title="Limpar seleção"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+
+                <Select
+                  value={
+                    formaPagamento === '' && !isCustomFormaPagamento
+                      ? undefined
+                      : isCustomFormaPagamento ||
+                          !OPCOES_PREDEFINIDAS_FORMA_PAGAMENTO.includes(formaPagamento)
+                        ? OPCAO_FORMA_PAGAMENTO_OUTRA
+                        : formaPagamento
+                  }
+                  onValueChange={(val) => {
+                    if (val === OPCAO_FORMA_PAGAMENTO_OUTRA) {
+                      setIsCustomFormaPagamento(true)
+                      // Se o valor anterior era uma das predefinidas, limpa para o usuário digitar a nova forma
+                      if (OPCOES_PREDEFINIDAS_FORMA_PAGAMENTO.includes(formaPagamento)) {
+                        setFormaPagamento('')
+                      }
+                    } else {
+                      setIsCustomFormaPagamento(false)
+                      setFormaPagamento(val)
+                    }
+                  }}
                 >
-                  <CreditCard className="w-3.5 h-3.5 text-slate-500" />
-                  Forma de Pagamento
-                </Label>
-                <Input
-                  id="formaPagamentoV2"
-                  type="text"
-                  placeholder="Ex.: 30% de entrada + 4x no cartão (opcional)"
-                  value={formaPagamento}
-                  onChange={(e) => setFormaPagamento(e.target.value)}
-                  className="h-11 rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
-                />
+                  <SelectTrigger
+                    id="formaPagamentoSelectV2"
+                    aria-label="Selecione a forma de pagamento"
+                    className="h-11 rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
+                  >
+                    <SelectValue placeholder="Selecione uma forma de pagamento (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72 rounded-xl border-slate-200 dark:border-slate-800 shadow-xl bg-white dark:bg-slate-950">
+                    {OPCOES_PREDEFINIDAS_FORMA_PAGAMENTO.map((opcao) => (
+                      <SelectItem key={opcao} value={opcao} className="text-sm cursor-pointer">
+                        {opcao}
+                      </SelectItem>
+                    ))}
+                    <SelectSeparator className="my-1 border-slate-100 dark:border-slate-800" />
+                    <SelectItem
+                      value={OPCAO_FORMA_PAGAMENTO_OUTRA}
+                      className="text-sm font-semibold cursor-pointer text-slate-900 dark:text-slate-100"
+                    >
+                      Outra (digitar...)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Linha editável revelada quando "Outra (digitar...)" está selecionada */}
+                {(isCustomFormaPagamento ||
+                  (formaPagamento !== '' &&
+                    !OPCOES_PREDEFINIDAS_FORMA_PAGAMENTO.includes(formaPagamento))) && (
+                  <div className="pt-1.5 animate-in fade-in-50 duration-200">
+                    <Input
+                      id="formaPagamentoV2"
+                      type="text"
+                      placeholder="Digite a forma de pagamento personalizada..."
+                      value={formaPagamento}
+                      onChange={(e) => setFormaPagamento(e.target.value)}
+                      autoFocus
+                      className="h-11 rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
+                    />
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                      Este texto será salvo no orçamento e exibido no PDF da Proposta Comercial.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">
