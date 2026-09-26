@@ -295,11 +295,11 @@ export default function OrcamentoV2() {
     const totalSale = valorTotalGeral
     const totalCost = custoTotalGeral
 
-    // Impostos (%)
+    // Impostos (%): usa impostos_percent real do banco (6%), default 6 se nulo
     const impostos_percent =
       typeof configEngenharia?.impostos_percent === 'number'
         ? configEngenharia.impostos_percent
-        : 10
+        : 6.0
 
     // Comissões (%): base + comissões personalizadas
     const somaComissoesPersonalizadas = comissoesPersonalizadas.reduce(
@@ -309,23 +309,33 @@ export default function OrcamentoV2() {
     const comissao_percent =
       typeof configEngenharia?.comissoes_percent === 'number'
         ? configEngenharia.comissoes_percent + somaComissoesPersonalizadas
-        : 5 + somaComissoesPersonalizadas
+        : 5.0 + somaComissoesPersonalizadas
 
-    // Custo fixo rateado (%)
-    const totalCustosEmpresa = custosFixos.reduce((acc, c) => acc + (Number(c.valor) || 0), 0)
+    // Custo financeiro / cartão (%)
+    const custo_financeiro_percent =
+      typeof configEngenharia?.custo_financeiro_percent === 'number'
+        ? configEngenharia.custo_financeiro_percent
+        : 3.0
+
+    // Rateio da Empresa: Total Custos Empresa = Custos Fixos + Custos Variáveis
+    // Fórmula oficial: Total Custos Empresa / Meta de Faturamento * 100
+    const totalCustosFixos = custosFixos.reduce((acc, c) => acc + (Number(c.valor) || 0), 0)
+    const totalCustosVariaveis = custosVariaveis.reduce((acc, c) => acc + (Number(c.valor) || 0), 0)
+    const totalCustosEmpresa = totalCustosFixos + totalCustosVariaveis
     const metaFaturamento = Number(configEngenharia?.meta_faturamento) || 0
     const custo_fixo_percent =
       metaFaturamento > 0 && totalCustosEmpresa > 0
         ? (totalCustosEmpresa / metaFaturamento) * 100
-        : 8
+        : 8.0
 
     // Valores em Reais arredondados
     const impVal = Math.round(((totalSale * impostos_percent) / 100) * 100) / 100
     const comVal = Math.round(((totalSale * comissao_percent) / 100) * 100) / 100
     const fixoVal = Math.round(((totalSale * custo_fixo_percent) / 100) * 100) / 100
+    const finVal = Math.round(((totalSale * custo_financeiro_percent) / 100) * 100) / 100
 
     const lucro_liquido =
-      Math.round((totalSale - totalCost - impVal - comVal - fixoVal) * 100) / 100
+      Math.round((totalSale - totalCost - impVal - comVal - fixoVal - finVal) * 100) / 100
     const lucro_liquido_percent =
       totalSale > 0 ? Math.round((lucro_liquido / totalSale) * 100 * 100) / 100 : 0
 
@@ -340,6 +350,8 @@ export default function OrcamentoV2() {
       impostos_percent: Math.round(impostos_percent * 100) / 100,
       comissao: comVal,
       comissao_percent: Math.round(comissao_percent * 100) / 100,
+      custo_financeiro: finVal,
+      custo_financeiro_percent: Math.round(custo_financeiro_percent * 100) / 100,
       custo_fixo_rateado: fixoVal,
       custo_fixo_percent: Math.round(custo_fixo_percent * 100) / 100,
       lucro_liquido,
@@ -347,7 +359,14 @@ export default function OrcamentoV2() {
       markup_efetivo,
       preco_final: Math.round(totalSale * 100) / 100,
     }
-  }, [valorTotalGeral, custoTotalGeral, configEngenharia, comissoesPersonalizadas, custosFixos])
+  }, [
+    valorTotalGeral,
+    custoTotalGeral,
+    configEngenharia,
+    comissoesPersonalizadas,
+    custosFixos,
+    custosVariaveis,
+  ])
 
   const handleVoltar = () => {
     navigate('/orcamentos')
@@ -1889,6 +1908,7 @@ export default function OrcamentoV2() {
           }}
           ambienteNome={targetAmbienteNome}
           initialData={editingModuloData}
+          configEngenharia={configEngenharia}
           onSaveModulo={handleSaveModuloNoAmbiente}
         />
 

@@ -91,6 +91,7 @@ interface ModuleEditDrawerProps {
   onOpenChange: (open: boolean) => void
   ambienteNome: string
   initialData?: ModuloSalvoData | null
+  configEngenharia?: ConfigEngenharia | null
   onSaveModulo: (modulo: ModuloSalvoData) => void
 }
 
@@ -105,6 +106,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   onOpenChange,
   ambienteNome,
   initialData = null,
+  configEngenharia: configEngenhariaProp,
   onSaveModulo,
 }) => {
   const [activeTab, setActiveTab] = useState<'foto-ia' | 'medidas-materiais' | 'engenharia-pecas'>(
@@ -114,8 +116,11 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   // Catálogos, templates e engenharia carregados do Supabase
   const [templates, setTemplates] = useState<TemplateEngenharia[]>([])
   const [catalogoMateriais, setCatalogoMateriais] = useState<CatalogoMaterial[]>([])
-  const [configEngenharia, setConfigEngenharia] = useState<ConfigEngenharia | null>(null)
+  const [configEngenhariaLocal, setConfigEngenhariaLocal] = useState<ConfigEngenharia | null>(null)
   const [loadingData, setLoadingData] = useState(false)
+
+  // Usa config de engenharia passada via props (centralizada no OrcamentoV2) ou fallback local
+  const configEngenharia = configEngenhariaProp ?? configEngenhariaLocal
 
   // Estado do módulo configurado
   const [nomeModulo, setNomeModulo] = useState('')
@@ -163,35 +168,35 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   } | null>(null)
   const [isMatchConfirmed, setIsMatchConfirmed] = useState(false)
 
-  // Carrega catálogo, templates e engenharia quando o drawer abre pela primeira vez
+  // Carrega catálogo e templates quando o drawer abre pela primeira vez.
+  // Engenharia vem centralizada via props (OrcamentoV2); só busca se não vier via props.
   useEffect(() => {
     if (open && templates.length === 0) {
       setLoadingData(true)
-      Promise.all([
+      const promises: [
+        ReturnType<typeof fetchTemplatesEngenharia>,
+        ReturnType<typeof fetchCatalogoMateriais>,
+        Promise<any>,
+      ] = [
         fetchTemplatesEngenharia(),
         fetchCatalogoMateriais(6000),
-        fetchConfigEngenharia(),
-      ])
+        configEngenhariaProp
+          ? Promise.resolve({ config: configEngenhariaProp })
+          : fetchConfigEngenharia(),
+      ]
+
+      Promise.all(promises)
         .then(([tplRes, matRes, engRes]) => {
           if (tplRes.data && tplRes.data.length > 0) {
             setTemplates(tplRes.data)
-            if (!selectedTemplateId && !initialData) {
-              const first = tplRes.data[0]
-              if (first) {
-                setSelectedTemplateId(first.id)
-                // Regra permanente v2: NÃO autopreencher nomeModulo com nome_template da biblioteca.
-                // Deve iniciar VAZIO para o usuário dar o nome que quer no PDF.
-                if (first.perfil_construtivo) {
-                  setPerfilConstrutivo(first.perfil_construtivo as PerfilConstrutivo)
-                }
-              }
-            }
+            // Correção 1.a: No modo de módulo novo, selectedTemplateId deve iniciar null/''
+            // NADA de selecionar o primeiro template automaticamente (evita injetar o móvel curvo).
           }
           if (matRes) {
             setCatalogoMateriais(matRes)
           }
-          if (engRes.config) {
-            setConfigEngenharia(engRes.config)
+          if (!configEngenhariaProp && engRes?.config) {
+            setConfigEngenhariaLocal(engRes.config)
           }
         })
         .catch((err) => {
@@ -199,7 +204,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         })
         .finally(() => setLoadingData(false))
     }
-  }, [open, templates.length, selectedTemplateId, initialData])
+  }, [open, templates.length, configEngenhariaProp])
 
   // Inicialização / Reset de estado quando o drawer abre:
   // - Se for NOVO módulo: campo 'Nome do Módulo' SEMPRE vazio, reseta seletores e tabs
@@ -247,6 +252,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       } else {
         // Modo Novo Módulo: SEMPRE vazio (decisão permanente do usuário)
         setNomeModulo('')
+        setSelectedTemplateId('')
         setQuantidade(1)
         setPortasCount(2)
         setGavetasCount(0)
@@ -359,11 +365,12 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       const primeiro = modulosDetectados[0]
 
       if (primeiro) {
-        // Encontra o template correspondente na biblioteca se não for customizado.
-        // NUNCA usar fallback templates[0], pois vinculava indevidamente ao primeiro template alfabético da biblioteca ("Curvo").
+        // Correção 1.b: quando a edge function retornar codigo_modulo "MODULO-CUSTOM" ou e_customizado verdadeiro,
+        // o selectedTemplateId deve ficar NULO/customizado (nunca reter o id de um template anterior)
+        // e o perfil construtivo deve vir do retorno da IA (ex.: "Aberto / Painel" para painéis e cabeceiras).
         const isCustom =
           primeiro.codigo_modulo === 'MODULO-CUSTOM' ||
-          primeiro.e_customizado ||
+          primeiro.e_customizado === true ||
           !primeiro.codigo_modulo
 
         const foundInTemplates = !isCustom
@@ -374,11 +381,28 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
             )
           : null
 
+        // Perfil sugerido pela IA ou derivado do template encontrado
+        const perfilRetornoIA: PerfilConstrutivo =
+          (primeiro.perfil_construcao_sugerido as PerfilConstrutivo) ||
+          (foundInTemplates?.perfil_construtivo as PerfilConstrutivo) ||
+          'Fechado Envelopado'
+
+        if (isCustom || !foundInTemplates) {
+          // Se for customizado ou não achou na biblioteca, limpa selectedTemplateId e adota perfil da IA
+          setSelectedTemplateId('')
+          setPerfilConstrutivo(perfilRetornoIA)
+        } else {
+          // Se achou na biblioteca legítima
+          setSelectedTemplateId(foundInTemplates.id)
+          setPerfilConstrutivo(
+            (foundInTemplates.perfil_construtivo as PerfilConstrutivo) || perfilRetornoIA,
+          )
+        }
+
         const matched: TemplateEngenharia = foundInTemplates || {
           id: 'mod-custom',
           nome_template: primeiro.nome || 'Módulo Sob Medida',
-          perfil_construtivo:
-            (primeiro.perfil_construcao_sugerido as PerfilConstrutivo) || 'Fechado Envelopado',
+          perfil_construtivo: perfilRetornoIA,
           categoria: 'Personalizado',
           dimensoes: `${primeiro.dimensao_estimada?.largura || 800}x${primeiro.dimensao_estimada?.altura || 700}x${primeiro.dimensao_estimada?.profundidade || 550}`,
           material: 'MDF',
@@ -462,10 +486,11 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   // Regra permanente v2: NUNCA autopreencher o campo 'Nome do Módulo' — deve continuar vazio
   const handleConfirmMatch = () => {
     if (!iaIdentifiedTemplate) return
-    const { template, sugestoes } = iaIdentifiedTemplate
-    setSelectedTemplateId(template.id)
+    const { template, sugestoes, isLibraryMatch } = iaIdentifiedTemplate
+    // Se for match de biblioteca usa o ID do template; se for customizado/virtual, mantém vazio
+    setSelectedTemplateId(isLibraryMatch ? template.id : '')
 
-    // Perfil construtivo do template (não toca em nomeModulo)
+    // Perfil construtivo do template ou retornado pela IA (não toca em nomeModulo)
     if (template.perfil_construtivo) {
       setPerfilConstrutivo(template.perfil_construtivo as PerfilConstrutivo)
     }
@@ -613,7 +638,12 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
 
   // Salvar no Ambiente
   const handleSalvar = () => {
-    const nomeLimpo = nomeModulo.trim() || selectedTemplate?.nome_template || 'Módulo sem nome'
+    // Correção 1.c: sem nome digitado e sem template legítimo confirmado, o nome padrão é
+    // "Módulo Sob Medida (Personalizado)", nunca o nome de um template arbitrário da biblioteca.
+    const nomeLimpo =
+      nomeModulo.trim() ||
+      (selectedTemplateId && selectedTemplate ? selectedTemplate.nome_template : '') ||
+      'Módulo Sob Medida (Personalizado)'
     const unitPrice = totalVendaSugerido > 0 ? Math.round(totalVendaSugerido * 100) / 100 : 0
     const total = Math.round(unitPrice * quantidade * 100) / 100
 

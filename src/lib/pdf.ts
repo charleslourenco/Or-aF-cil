@@ -947,41 +947,69 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
     const impPercent = dre.impostos_percent ?? calcPercent(dre.impostos)
     const comPercent = dre.comissao_percent ?? calcPercent(dre.comissao)
     const fixoPercent = dre.custo_fixo_percent ?? calcPercent(dre.custo_fixo_rateado)
+    const finPercent =
+      typeof dre.custo_financeiro_percent === 'number'
+        ? dre.custo_financeiro_percent
+        : calcPercent(typeof dre.custo_financeiro === 'number' ? dre.custo_financeiro : undefined)
     const lucroPercent = dre.lucro_liquido_percent ?? calcPercent(dre.lucro_liquido)
     const mpPercent = calcPercent(custoMp)
 
     const markupEfetivo = dre.markup_efetivo ?? (custoMp > 0 ? valorVenda / custoMp : 2.5)
 
-    const dreRows = [
+    // Valores reais da DRE persistida/calculada sem hardcoding arbitrário
+    const impostosVal =
+      typeof dre.impostos === 'number' ? dre.impostos : (valorVenda * (impPercent || 0)) / 100
+
+    const comissaoVal =
+      typeof dre.comissao === 'number' ? dre.comissao : (valorVenda * (comPercent || 0)) / 100
+
+    const fixoVal =
+      typeof dre.custo_fixo_rateado === 'number'
+        ? dre.custo_fixo_rateado
+        : (valorVenda * (fixoPercent || 0)) / 100
+
+    const custoFinVal =
+      typeof dre.custo_financeiro === 'number'
+        ? dre.custo_financeiro
+        : (valorVenda * (finPercent || 0)) / 100
+
+    const lucroLiqVal =
+      typeof dre.lucro_liquido === 'number'
+        ? dre.lucro_liquido
+        : valorVenda - custoMp - impostosVal - comissaoVal - fixoVal - custoFinVal
+
+    const dreRows: string[][] = [
       ['Custo Direto de Matéria-Prima (BOM)', formatMoeda(custoMp), formatPercentual(mpPercent)],
       [
         'Impostos Estimados (NFe / Simples / Presumido)',
-        formatMoeda(dre.impostos ?? valorVenda * 0.1),
-        formatPercentual(impPercent || 10),
+        formatMoeda(impostosVal),
+        formatPercentual(impPercent),
       ],
       [
         'Comissão de Venda / Equipe Comercial',
-        formatMoeda(dre.comissao ?? valorVenda * 0.05),
-        formatPercentual(comPercent || 5),
+        formatMoeda(comissaoVal),
+        formatPercentual(comPercent),
       ],
       [
-        'Custo Fixo Rateado de Produção',
-        formatMoeda(dre.custo_fixo_rateado ?? valorVenda * 0.08),
-        formatPercentual(fixoPercent || 8),
-      ],
-      [
-        'Lucro Líquido Operacional Previsto',
-        formatMoeda(
-          dre.lucro_liquido ??
-            valorVenda -
-              custoMp -
-              (dre.impostos ?? valorVenda * 0.1) -
-              (dre.comissao ?? valorVenda * 0.05) -
-              (dre.custo_fixo_rateado ?? valorVenda * 0.08),
-        ),
-        formatPercentual(lucroPercent || 25),
+        'Custo da Empresa Rateado (Fixos + Variáveis)',
+        formatMoeda(fixoVal),
+        formatPercentual(fixoPercent),
       ],
     ]
+
+    if (custoFinVal > 0 || finPercent > 0) {
+      dreRows.push([
+        'Custo Financeiro / Taxa Cartão',
+        formatMoeda(custoFinVal),
+        formatPercentual(finPercent),
+      ])
+    }
+
+    dreRows.push([
+      'Lucro Líquido Operacional Previsto',
+      formatMoeda(lucroLiqVal),
+      formatPercentual(lucroPercent),
+    ])
 
     invokeAutoTable(doc, {
       startY: y,
