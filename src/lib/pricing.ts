@@ -318,6 +318,42 @@ export function calcularBOM(
   const rotuloMdfInterno = formatarRotuloMaterial('MDF Interno', mdfInterno)
   const rotuloMdfFundo = mdfFundo?.trim() ? 'MDF Fundo — ' + mdfFundo.trim() : 'MDF Fundo'
 
+  // =========================================================================
+  // RESOLUÇÃO DE CUSTOS DE MDF (EXATO POR NOME COM FALLBACK POR CATEGORIA)
+  // 1. Tenta match exato pelo nome_material escolhido contra catalogoPrecos.
+  // 2. Se não encontrar (ex.: orçamentos legados), recorre ao resolverCustoUnitario.
+  // =========================================================================
+  const normalizarNome = (str?: string) => (str || '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  const buscarCustoExatoPorNome = (
+    nome?: string,
+    catalogo?: CatalogoMaterial[],
+  ): number | undefined => {
+    if (!nome || !catalogo || catalogo.length === 0) return undefined
+    const nomeNorm = normalizarNome(nome)
+    if (!nomeNorm) return undefined
+    const match = catalogo.find(
+      (m) => normalizarNome(m.nome_material) === nomeNorm && Number(m.preco_custo) > 0,
+    )
+    if (match) {
+      const preco = Number(match.preco_custo)
+      if (!Number.isNaN(preco) && preco > 0) return preco
+    }
+    return undefined
+  }
+
+  const custoMdfExterno =
+    buscarCustoExatoPorNome(mdfExterno.cor, catalogoPrecos) ??
+    resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto)
+
+  const custoMdfInterno =
+    buscarCustoExatoPorNome(mdfInterno.cor, catalogoPrecos) ??
+    resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto)
+
+  const custoMdfFundo =
+    buscarCustoExatoPorNome(mdfFundo, catalogoPrecos) ??
+    resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto)
+
   const pecas: BudgetItem[] = []
 
   // Verifica se há decomposição/composição fornecida (portas/gavetas/prateleiras/cabideiro/sapateira)
@@ -396,7 +432,7 @@ export function calcularBOM(
         espExt,
         areaPainelPrincipal,
         'm²',
-        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        custoMdfExterno,
         effectiveMarkup,
       ),
     )
@@ -413,7 +449,7 @@ export function calcularBOM(
         espExt,
         areaSarrafos,
         'm²',
-        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        custoMdfExterno,
         effectiveMarkup,
       ),
     )
@@ -436,7 +472,7 @@ export function calcularBOM(
           espExt,
           areaPratPainel * qtdPrateleirasPainel,
           'm²',
-          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+          custoMdfExterno,
           effectiveMarkup,
         ),
       )
@@ -459,7 +495,7 @@ export function calcularBOM(
           espExt,
           areaFrentes * qtdGavetasPainel,
           'm²',
-          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+          custoMdfExterno,
           effectiveMarkup,
         ),
       )
@@ -480,7 +516,7 @@ export function calcularBOM(
           espInt,
           areaCaixote * qtdGavetasPainel,
           'm²',
-          resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+          custoMdfInterno,
           effectiveMarkup,
         ),
       )
@@ -495,7 +531,7 @@ export function calcularBOM(
           6,
           areaFundoGav * qtdGavetasPainel,
           'm²',
-          resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto),
+          custoMdfFundo,
           effectiveMarkup,
         ),
       )
@@ -567,7 +603,7 @@ export function calcularBOM(
       espExt,
       areaLateralExt * 2,
       'm²',
-      resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+      custoMdfExterno,
       effectiveMarkup,
     ),
   )
@@ -592,7 +628,7 @@ export function calcularBOM(
         espExt,
         areaTravessaFrontal,
         'm²',
-        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        custoMdfExterno,
         effectiveMarkup,
       ),
     )
@@ -605,7 +641,7 @@ export function calcularBOM(
         espExt,
         areaTravessaTraseira,
         'm²',
-        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        custoMdfExterno,
         effectiveMarkup,
       ),
     )
@@ -620,7 +656,7 @@ export function calcularBOM(
         espExt,
         areaBaseBalcao,
         'm²',
-        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        custoMdfExterno,
         effectiveMarkup,
       ),
     )
@@ -636,7 +672,7 @@ export function calcularBOM(
           espExt,
           areaRodapeM2,
           'm²',
-          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+          custoMdfExterno,
           effectiveMarkup,
         ),
       )
@@ -653,7 +689,7 @@ export function calcularBOM(
         espExt,
         areaBaseTopo * 2,
         'm²',
-        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        custoMdfExterno,
         effectiveMarkup,
       ),
     )
@@ -669,7 +705,7 @@ export function calcularBOM(
         espExt,
         areaTampoExt,
         'm²',
-        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        custoMdfExterno,
         effectiveMarkup,
       ),
     )
@@ -690,7 +726,7 @@ export function calcularBOM(
         espInt,
         areaLatInt * 2,
         'm²',
-        resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+        custoMdfInterno,
         effectiveMarkup,
       ),
     )
@@ -704,7 +740,7 @@ export function calcularBOM(
         espInt,
         areaTetoInt,
         'm²',
-        resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+        custoMdfInterno,
         effectiveMarkup,
       ),
     )
@@ -718,7 +754,7 @@ export function calcularBOM(
         espInt,
         areaBaseInt,
         'm²',
-        resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+        custoMdfInterno,
         effectiveMarkup,
       ),
     )
@@ -732,7 +768,7 @@ export function calcularBOM(
         espExt,
         areaRodapeM2,
         'm²',
-        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        custoMdfExterno,
         effectiveMarkup,
       ),
     )
@@ -747,7 +783,7 @@ export function calcularBOM(
           espExt,
           areaRodatetoM2,
           'm²',
-          resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+          custoMdfExterno,
           effectiveMarkup,
         ),
       )
@@ -765,7 +801,7 @@ export function calcularBOM(
       6,
       areaFundo,
       'm²',
-      resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto),
+      custoMdfFundo,
       effectiveMarkup,
     ),
   )
@@ -793,7 +829,7 @@ export function calcularBOM(
         espInt,
         areaPrateleira * 2,
         'm²',
-        resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+        custoMdfInterno,
         effectiveMarkup,
       ),
     )
@@ -859,7 +895,7 @@ export function calcularBOM(
         espInt,
         areaUmaDivisoria * qtdDivisorias,
         'm²',
-        resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+        custoMdfInterno,
         effectiveMarkup,
       ),
     )
@@ -951,7 +987,7 @@ export function calcularBOM(
         espInt,
         areaUmaPrat * qtdPrateleiras,
         'm²',
-        resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+        custoMdfInterno,
         effectiveMarkup,
       ),
     )
@@ -973,7 +1009,7 @@ export function calcularBOM(
         espExt,
         areaUmaPorta * qtdPortas,
         'm²',
-        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        custoMdfExterno,
         effectiveMarkup,
       ),
     )
@@ -1060,7 +1096,7 @@ export function calcularBOM(
         espExt,
         areaFrentes * qtdGavetas,
         'm²',
-        resolverCustoUnitario(`MDF Externo ${espExt}`, catalogoPrecos, padraoProjeto),
+        custoMdfExterno,
         effectiveMarkup,
       ),
     )
@@ -1085,7 +1121,7 @@ export function calcularBOM(
         espInt,
         areaCaixotePorGav * qtdGavetas,
         'm²',
-        resolverCustoUnitario(`MDF Interno ${espInt}`, catalogoPrecos, padraoProjeto),
+        custoMdfInterno,
         effectiveMarkup,
       ),
     )
@@ -1100,7 +1136,7 @@ export function calcularBOM(
         6,
         areaFundoGavPorGav * qtdGavetas,
         'm²',
-        resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto),
+        custoMdfFundo,
         effectiveMarkup,
       ),
     )
