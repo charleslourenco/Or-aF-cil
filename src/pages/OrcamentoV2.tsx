@@ -225,6 +225,11 @@ export default function OrcamentoV2() {
   const [editingAmbienteNome, setEditingAmbienteNome] = useState('')
   const renameInputRef = useRef<HTMLInputElement>(null)
 
+  // Estado para edição inline da descrição do módulo na tabela do ambiente
+  const [editingDescModuloKey, setEditingDescModuloKey] = useState<string | null>(null)
+  const [editingDescTexto, setEditingDescTexto] = useState('')
+  const descInlineInputRef = useRef<HTMLTextAreaElement | null>(null)
+
   // Estado do seletor dropdown do topo de ambientes
   const [selectedAmbienteOpcao, setSelectedAmbienteOpcao] = useState<string>('')
 
@@ -717,6 +722,77 @@ export default function OrcamentoV2() {
   const handleCancelRename = () => {
     setEditingAmbienteId(null)
     setEditingAmbienteNome('')
+  }
+
+  // Iniciar edição inline da descrição do módulo na tabela
+  const handleStartInlineEditDescricao = (
+    ambienteId: string,
+    mod: ModuloComercialV2,
+    e?: React.MouseEvent,
+  ) => {
+    e?.stopPropagation()
+    const key = `${ambienteId}::${mod.id}`
+    const valorAtual =
+      mod.descricaoManual !== undefined && mod.descricaoManual !== null
+        ? mod.descricaoManual
+        : montarDescricaoNaturalModulo({
+            nome: mod.modulo,
+            dimensoes: mod.dimensoes,
+            quantidade: mod.quantidade || 1,
+            mdfExterno: mod.mdfExterno,
+            mdfInterno: mod.mdfInterno,
+            composicao: mod.composicao,
+          }) ||
+          mod.descricaoTipo ||
+          ''
+
+    setEditingDescModuloKey(key)
+    setEditingDescTexto(valorAtual)
+    setTimeout(() => {
+      if (descInlineInputRef.current) {
+        descInlineInputRef.current.focus()
+        descInlineInputRef.current.select()
+      }
+    }, 50)
+  }
+
+  // Confirmar e salvar edição inline da descrição do módulo
+  const handleConfirmInlineEditDescricao = (ambienteId: string, moduloId: string) => {
+    const textoLimpo = editingDescTexto.trim()
+    const novaDescricaoManual = textoLimpo ? textoLimpo : undefined
+
+    setAmbientes((prev) =>
+      prev.map((amb) => {
+        if (amb.id !== ambienteId) return amb
+        return {
+          ...amb,
+          modulos: amb.modulos.map((m) => {
+            if (m.id !== moduloId) return m
+            return {
+              ...m,
+              descricaoManual: novaDescricaoManual,
+            }
+          }),
+        }
+      }),
+    )
+
+    setEditingDescModuloKey(null)
+    setEditingDescTexto('')
+    setIsSavedSuccessfully(false)
+
+    toast({
+      title: 'Descrição atualizada!',
+      description: novaDescricaoManual
+        ? 'Descrição personalizada salva com sucesso.'
+        : 'Descrição restaurada para o padrão automático.',
+    })
+  }
+
+  // Cancelar edição inline da descrição do módulo (Esc ou botão fechar)
+  const handleCancelInlineEditDescricao = () => {
+    setEditingDescModuloKey(null)
+    setEditingDescTexto('')
   }
 
   // Clique em "+ Adicionar Módulo neste Ambiente" — abre o Drawer lateral para NOVO módulo (nome sempre vazio)
@@ -1877,17 +1953,140 @@ export default function OrcamentoV2() {
                                           </button>
                                         </div>
                                       </TableCell>
-                                      <TableCell className="py-3.5 px-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-                                        {mod.descricaoManual?.trim() ||
-                                          montarDescricaoNaturalModulo({
-                                            nome: mod.modulo,
-                                            dimensoes: mod.dimensoes,
-                                            quantidade: mod.quantidade || 1,
-                                            mdfExterno: mod.mdfExterno,
-                                            mdfInterno: mod.mdfInterno,
-                                            composicao: mod.composicao,
-                                          }) ||
-                                          mod.descricaoTipo}
+                                      <TableCell className="py-2.5 px-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+                                        {(() => {
+                                          const isEditingThisDesc =
+                                            editingDescModuloKey === `${amb.id}::${mod.id}`
+                                          const descAutomatica =
+                                            montarDescricaoNaturalModulo({
+                                              nome: mod.modulo,
+                                              dimensoes: mod.dimensoes,
+                                              quantidade: mod.quantidade || 1,
+                                              mdfExterno: mod.mdfExterno,
+                                              mdfInterno: mod.mdfInterno,
+                                              composicao: mod.composicao,
+                                            }) || mod.descricaoTipo
+                                          const textoExibido =
+                                            mod.descricaoManual?.trim() || descAutomatica
+                                          const temDescManual = Boolean(
+                                            mod.descricaoManual && mod.descricaoManual.trim(),
+                                          )
+
+                                          if (isEditingThisDesc) {
+                                            return (
+                                              <div
+                                                className="space-y-1.5 w-full min-w-[220px]"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                <Textarea
+                                                  ref={descInlineInputRef}
+                                                  value={editingDescTexto}
+                                                  onChange={(e) =>
+                                                    setEditingDescTexto(e.target.value)
+                                                  }
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                                      e.preventDefault()
+                                                      handleConfirmInlineEditDescricao(
+                                                        amb.id,
+                                                        mod.id,
+                                                      )
+                                                    } else if (e.key === 'Escape') {
+                                                      e.preventDefault()
+                                                      handleCancelInlineEditDescricao()
+                                                    }
+                                                  }}
+                                                  onBlur={() =>
+                                                    handleConfirmInlineEditDescricao(amb.id, mod.id)
+                                                  }
+                                                  placeholder={
+                                                    descAutomatica ||
+                                                    'Descrição do módulo (em branco restaura a automática)...'
+                                                  }
+                                                  rows={2}
+                                                  className="text-xs rounded-lg bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 focus:border-slate-800 dark:focus:border-slate-200 resize-y min-h-[50px] p-2 leading-relaxed"
+                                                />
+                                                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                                  <span>
+                                                    <kbd className="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[9px] font-mono border">
+                                                      Enter
+                                                    </kbd>{' '}
+                                                    salva ·{' '}
+                                                    <kbd className="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[9px] font-mono border">
+                                                      Esc
+                                                    </kbd>{' '}
+                                                    cancela
+                                                  </span>
+                                                  <div className="flex items-center gap-1">
+                                                    <button
+                                                      type="button"
+                                                      onMouseDown={(e) => {
+                                                        e.preventDefault()
+                                                        handleCancelInlineEditDescricao()
+                                                      }}
+                                                      className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                                                      title="Cancelar (Esc)"
+                                                      aria-label="Cancelar edição"
+                                                    >
+                                                      <X className="w-3 h-3" />
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      onMouseDown={(e) => {
+                                                        e.preventDefault()
+                                                        handleConfirmInlineEditDescricao(
+                                                          amb.id,
+                                                          mod.id,
+                                                        )
+                                                      }}
+                                                      className="p-1 rounded bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                                                      title="Salvar descrição (Enter)"
+                                                      aria-label="Salvar descrição"
+                                                    >
+                                                      <Check className="w-3 h-3" />
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            )
+                                          }
+
+                                          return (
+                                            <div
+                                              onClick={(e) =>
+                                                handleStartInlineEditDescricao(amb.id, mod, e)
+                                              }
+                                              className="group/desc relative flex items-start justify-between gap-2 p-1.5 -m-1.5 rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/60 cursor-pointer transition-colors"
+                                              title="Clique para editar a descrição do módulo inline"
+                                              role="button"
+                                              tabIndex={0}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                  e.preventDefault()
+                                                  handleStartInlineEditDescricao(amb.id, mod)
+                                                }
+                                              }}
+                                            >
+                                              <div className="flex flex-col gap-0.5 min-w-0 pr-1">
+                                                <span className="leading-relaxed">
+                                                  {textoExibido}
+                                                </span>
+                                                {temDescManual && (
+                                                  <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                                                    Manual
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <span
+                                                className="opacity-0 group-hover/desc:opacity-100 focus:opacity-100 transition-opacity p-1 rounded-md text-slate-400 group-hover/desc:text-slate-700 dark:group-hover/desc:text-slate-200 shrink-0"
+                                                title="Editar descrição inline"
+                                                aria-hidden="true"
+                                              >
+                                                <Pencil className="w-3 h-3" />
+                                              </span>
+                                            </div>
+                                          )
+                                        })()}
                                       </TableCell>
                                       <TableCell className="py-3.5 px-4 text-xs sm:text-sm text-center font-mono text-slate-700 dark:text-slate-300">
                                         {mod.quantidade}
