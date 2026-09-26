@@ -129,8 +129,12 @@ function parseMdfSpec(mdf?: string | { cor?: string; espessura?: number } | null
 } {
   if (!mdf) return { cor: '', espessura: '' }
   if (typeof mdf === 'object') {
-    const cor = (mdf.cor || '').trim()
+    const rawCor = (mdf.cor || '').trim()
     const espessura = mdf.espessura ? `${mdf.espessura}mm` : ''
+    const cor = rawCor
+      .replace(/^mdf\s*\d*\s*mm\s*/i, '')
+      .replace(/^mdf\s+/i, '')
+      .trim()
     return { cor, espessura }
   }
   const str = String(mdf).trim()
@@ -139,6 +143,8 @@ function parseMdfSpec(mdf?: string | { cor?: string; espessura?: number } | null
   const cor = str
     .replace(/\s*\(\d+\s*mm\)/gi, '')
     .replace(/\s+\d+\s*mm/gi, '')
+    .replace(/^mdf\s*\d*\s*mm\s*/i, '')
+    .replace(/^mdf\s+/i, '')
     .trim()
   return { cor, espessura }
 }
@@ -651,7 +657,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
             lineColor: [226, 232, 240],
             lineWidth: 0.3,
             font: 'helvetica',
-            overflow: 'visible',
+            overflow: 'linebreak',
           },
         })
 
@@ -733,7 +739,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
           lineColor: [226, 232, 240], // #E2E8F0
           lineWidth: 0.3,
           font: 'helvetica',
-          overflow: 'visible',
+          overflow: 'linebreak',
         },
       })
 
@@ -1201,7 +1207,7 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
             lineColor: [226, 232, 240],
             lineWidth: 0.2,
             font: 'helvetica',
-            overflow: 'visible',
+            overflow: 'linebreak',
           },
         })
       } else {
@@ -1277,7 +1283,7 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
             lineColor: [226, 232, 240],
             lineWidth: 0.2,
             font: 'helvetica',
-            overflow: 'visible',
+            overflow: 'linebreak',
           },
         })
       }
@@ -1352,7 +1358,7 @@ export async function gerarAnaliseCusto(dados: AnaliseCustoData): Promise<void> 
           lineColor: [226, 232, 240],
           lineWidth: 0.2,
           font: 'helvetica',
-          overflow: 'visible',
+          overflow: 'linebreak',
         },
       })
     }
