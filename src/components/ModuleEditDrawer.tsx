@@ -90,6 +90,14 @@ export interface ModuloSalvoData {
   prateleiras?: number
   cabideiros?: number
   iluminacaoLed?: boolean
+  composicao?: {
+    portas?: { qtd?: number | null; tipo?: string | null } | null
+    gavetas?: { qtd?: number | null } | null
+    prateleiras?: { qtd?: number | null } | null
+    cabideiro?: boolean | number | null
+    sapateira?: boolean | null
+    iluminacaoLed?: boolean | null
+  } | null
   itensBOM: OrcamentoBOMItem[]
 }
 
@@ -256,11 +264,40 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         if (initialData.mdfFundo) {
           setMdfFundo(initialData.mdfFundo)
         }
-        setPortasCount(initialData.portas ?? 2)
-        setGavetasCount(initialData.gavetas ?? 0)
-        setPrateleirasCount(initialData.prateleiras ?? 1)
-        setCabideirosCount(initialData.cabideiros ?? 0)
-        setIluminacaoLed(Boolean(initialData.iluminacaoLed))
+        const initialPortas =
+          initialData.portas ??
+          (initialData.composicao?.portas?.qtd !== undefined
+            ? initialData.composicao.portas.qtd
+            : 2) ??
+          2
+        const initialGavetas =
+          initialData.gavetas ??
+          (initialData.composicao?.gavetas?.qtd !== undefined
+            ? initialData.composicao.gavetas.qtd
+            : 0) ??
+          0
+        const initialPrat =
+          initialData.prateleiras ??
+          (initialData.composicao?.prateleiras?.qtd !== undefined
+            ? initialData.composicao.prateleiras.qtd
+            : 1) ??
+          1
+        const initialCabideiros =
+          initialData.cabideiros ??
+          (typeof initialData.composicao?.cabideiro === 'number'
+            ? initialData.composicao.cabideiro
+            : initialData.composicao?.cabideiro
+              ? 1
+              : 0)
+        const initialLed = Boolean(
+          initialData.iluminacaoLed ?? initialData.composicao?.iluminacaoLed,
+        )
+
+        setPortasCount(initialPortas)
+        setGavetasCount(initialGavetas)
+        setPrateleirasCount(initialPrat)
+        setCabideirosCount(initialCabideiros)
+        setIluminacaoLed(initialLed)
 
         // Carrega em manualItems os itens de initialData.itensBOM que sejam manuais/avulsos
         // (ID com prefixo manual-/catalog-/avulso- ou não gerados pela BOM paramétrica que usa prefixo bom-)
@@ -756,6 +793,14 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       catalogo_id: p.catalogo_id,
     }))
 
+    const composicaoSalva = {
+      portas: { qtd: portasCount, tipo: portasCount > 0 ? 'abrir' : 'nenhum' },
+      gavetas: { qtd: gavetasCount },
+      prateleiras: { qtd: prateleirasCount },
+      cabideiro: cabideirosCount > 0,
+      iluminacaoLed,
+    }
+
     onSaveModulo({
       moduloId: selectedTemplateId || undefined,
       nome: nomeLimpo,
@@ -774,6 +819,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       prateleiras: prateleirasCount,
       cabideiros: cabideirosCount,
       iluminacaoLed,
+      composicao: composicaoSalva,
       itensBOM: todosItensConvertidos,
     })
 

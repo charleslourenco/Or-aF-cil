@@ -19,11 +19,13 @@ import {
   FileText,
   Settings,
   Loader2,
+  CreditCard,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -87,6 +89,16 @@ export interface ModuloComercialV2 {
     profundidade: number
   }
   perfilConstrutivo?: string
+  mdfExterno?: { cor?: string; espessura?: number } | string | null
+  mdfInterno?: { cor?: string; espessura?: number } | string | null
+  composicao?: {
+    portas?: { qtd?: number | null; tipo?: string | null } | null
+    gavetas?: { qtd?: number | null } | null
+    prateleiras?: { qtd?: number | null } | null
+    cabideiro?: boolean | number | null
+    sapateira?: boolean | null
+    iluminacaoLed?: boolean | null
+  } | null
   itensBOM?: OrcamentoBOMItem[]
 }
 
@@ -116,6 +128,8 @@ const ORCAV2_DRAFT_KEY = 'orcav2-draft'
 interface OrcaV2DraftData {
   nomeCliente: string
   dataOrcamento: string
+  formaPagamento?: string
+  observacoes?: string
   ambientes: AmbienteV2[]
   orcamentoId: string | null
   numeroSequencial: number | null
@@ -174,6 +188,9 @@ export default function OrcamentoV2() {
     const today = new Date()
     return today.toISOString().split('T')[0]
   })
+  // Campos Forma de Pagamento e Observações: iniciam SEMPRE VAZIOS por padrão
+  const [formaPagamento, setFormaPagamento] = useState('')
+  const [observacoes, setObservacoes] = useState('')
 
   // Estado dos ambientes do projeto
   const [ambientes, setAmbientes] = useState<AmbienteV2[]>([])
@@ -262,6 +279,8 @@ export default function OrcamentoV2() {
             if (orc.status) {
               setStatusOrcamento(orc.status)
             }
+            setFormaPagamento(orc.forma_pagamento || '')
+            setObservacoes(orc.observacoes || '')
             // Mapeia ambientes_json salvo para AmbienteV2[]
             if (Array.isArray(orc.ambientes_json)) {
               const mappedAmbientes: AmbienteV2[] = orc.ambientes_json.map((a: any) => ({
@@ -278,6 +297,9 @@ export default function OrcamentoV2() {
                       valorTotal: m.subtotal || 0,
                       dimensoes: m.dimensoes,
                       perfilConstrutivo: m.perfil_construtivo,
+                      mdfExterno: m.mdf_externo || orc.mdf_externo || null,
+                      mdfInterno: m.mdf_interno || orc.mdf_interno || null,
+                      composicao: m.composicao || null,
                       itensBOM: m.itens || [],
                     }))
                   : [],
@@ -306,6 +328,8 @@ export default function OrcamentoV2() {
         if (draft) {
           if (typeof draft.nomeCliente === 'string') setNomeCliente(draft.nomeCliente)
           if (draft.dataOrcamento) setDataOrcamento(draft.dataOrcamento)
+          if (typeof draft.formaPagamento === 'string') setFormaPagamento(draft.formaPagamento)
+          if (typeof draft.observacoes === 'string') setObservacoes(draft.observacoes)
           if (Array.isArray(draft.ambientes)) {
             setAmbientes(draft.ambientes)
             if (draft.ambientes.length > 0) {
@@ -333,13 +357,24 @@ export default function OrcamentoV2() {
     const draftData: OrcaV2DraftData = {
       nomeCliente,
       dataOrcamento,
+      formaPagamento,
+      observacoes,
       ambientes,
       orcamentoId,
       numeroSequencial,
       savedAt: Date.now(),
     }
     writeDraftSessionStorage(draftData)
-  }, [nomeCliente, dataOrcamento, ambientes, orcamentoId, numeroSequencial, isLoadingOrcamento])
+  }, [
+    nomeCliente,
+    dataOrcamento,
+    formaPagamento,
+    observacoes,
+    ambientes,
+    orcamentoId,
+    numeroSequencial,
+    isLoadingOrcamento,
+  ])
 
   // Subtotal por ambiente: reflete ESTRITAMENTE módulos JÁ SALVOS nos ambientes
   const subtotalPorAmbiente = useMemo(() => {
@@ -459,6 +494,8 @@ export default function OrcamentoV2() {
     setNomeCliente('')
     const today = new Date().toISOString().split('T')[0]
     setDataOrcamento(today)
+    setFormaPagamento('')
+    setObservacoes('')
     setAmbientes([])
     setExpandedAmbientes([])
     setActiveAmbienteId(null)
@@ -679,6 +716,27 @@ export default function OrcamentoV2() {
   const handleOpenEditModuloDrawer = (ambienteId: string, mod: ModuloComercialV2) => {
     setTargetAmbienteId(ambienteId)
     setEditingModuloId(mod.id)
+    const extObj =
+      typeof mod.mdfExterno === 'object' && mod.mdfExterno !== null
+        ? {
+            cor: mod.mdfExterno.cor || 'Branco TX',
+            espessura: (mod.mdfExterno.espessura as 15 | 18) || 18,
+          }
+        : {
+            cor: typeof mod.mdfExterno === 'string' ? mod.mdfExterno : 'Branco TX',
+            espessura: 18 as const,
+          }
+    const intObj =
+      typeof mod.mdfInterno === 'object' && mod.mdfInterno !== null
+        ? {
+            cor: mod.mdfInterno.cor || 'Branco TX',
+            espessura: (mod.mdfInterno.espessura as 15 | 18) || 15,
+          }
+        : {
+            cor: typeof mod.mdfInterno === 'string' ? mod.mdfInterno : 'Branco TX',
+            espessura: 15 as const,
+          }
+
     const dataToEdit: ModuloSalvoData = {
       id: mod.id,
       moduloId: mod.moduloId,
@@ -690,9 +748,10 @@ export default function OrcamentoV2() {
       dimensoes: mod.dimensoes || { largura: 800, altura: 700, profundidade: 550 },
       perfilConstrutivo: (mod.perfilConstrutivo as any) || 'Fechado Envelopado',
       padraoProjeto: 'comercial',
-      mdfExterno: { cor: 'Branco TX', espessura: 18 },
-      mdfInterno: { cor: 'Branco TX', espessura: 15 },
+      mdfExterno: extObj,
+      mdfInterno: intObj,
       mdfFundo: 'MDF 6mm Branco TX',
+      composicao: mod.composicao || null,
       itensBOM: mod.itensBOM || [],
     }
     setEditingModuloData(dataToEdit)
@@ -734,6 +793,9 @@ export default function OrcamentoV2() {
                 valorTotal: moduloData.valorTotal,
                 dimensoes: moduloData.dimensoes,
                 perfilConstrutivo: moduloData.perfilConstrutivo,
+                mdfExterno: moduloData.mdfExterno,
+                mdfInterno: moduloData.mdfInterno,
+                composicao: moduloData.composicao || null,
                 itensBOM: moduloData.itensBOM,
               }
             }),
@@ -752,6 +814,9 @@ export default function OrcamentoV2() {
         valorTotal: moduloData.valorTotal,
         dimensoes: moduloData.dimensoes,
         perfilConstrutivo: moduloData.perfilConstrutivo,
+        mdfExterno: moduloData.mdfExterno,
+        mdfInterno: moduloData.mdfInterno,
+        composicao: moduloData.composicao || null,
         itensBOM: moduloData.itensBOM,
       }
 
@@ -806,6 +871,36 @@ export default function OrcamentoV2() {
             perfil_construtivo: mod.perfilConstrutivo,
             adaptacoes: mod.descricaoTipo,
             subtotal: mod.valorTotal,
+            mdf_externo:
+              typeof mod.mdfExterno === 'object' && mod.mdfExterno?.cor
+                ? `${mod.mdfExterno.cor} (${mod.mdfExterno.espessura || 18}mm)`
+                : typeof mod.mdfExterno === 'string'
+                  ? mod.mdfExterno
+                  : undefined,
+            mdf_interno:
+              typeof mod.mdfInterno === 'object' && mod.mdfInterno?.cor
+                ? `${mod.mdfInterno.cor} (${mod.mdfInterno.espessura || 15}mm)`
+                : typeof mod.mdfInterno === 'string'
+                  ? mod.mdfInterno
+                  : undefined,
+            composicao: mod.composicao
+              ? {
+                  portas: mod.composicao.portas
+                    ? {
+                        qtd: mod.composicao.portas.qtd || 0,
+                        tipo: (mod.composicao.portas.tipo as any) || 'abrir',
+                      }
+                    : undefined,
+                  gavetas: mod.composicao.gavetas
+                    ? { qtd: mod.composicao.gavetas.qtd || 0 }
+                    : undefined,
+                  prateleiras: mod.composicao.prateleiras
+                    ? { qtd: mod.composicao.prateleiras.qtd || 0 }
+                    : undefined,
+                  cabideiro: Boolean(mod.composicao.cabideiro),
+                  sapateira: Boolean(mod.composicao.sapateira),
+                }
+              : undefined,
             itens: mod.itensBOM || [],
           }
         })
@@ -846,6 +941,8 @@ export default function OrcamentoV2() {
           data: `${dataOrcamento}T12:00:00.000Z`,
           valor_total: valorTotalGeral,
           status: statusOrcamento,
+          forma_pagamento: formaPagamento.trim() || null,
+          observacoes: observacoes.trim() || null,
           ambiente: primeiroAmbienteNome,
           modulo: primeiroModuloNome,
           ambientes_json: ambientesJsonPayload,
@@ -869,6 +966,8 @@ export default function OrcamentoV2() {
           data: `${dataOrcamento}T12:00:00.000Z`,
           valor_total: valorTotalGeral,
           status: 'Rascunho',
+          forma_pagamento: formaPagamento.trim() || null,
+          observacoes: observacoes.trim() || null,
           ambiente: primeiroAmbienteNome,
           modulo: primeiroModuloNome,
           ambientes_json: ambientesJsonPayload,
@@ -922,12 +1021,16 @@ export default function OrcamentoV2() {
       const ambientesGrupos = ambientes.map((amb) => {
         const subtotal = amb.modulos.reduce((acc, m) => acc + (Number(m.valorTotal) || 0), 0)
         const itens = amb.modulos.map((m) => {
-          const descricao =
-            m.descricaoTipo ||
-            montarDescricaoNaturalModulo({
-              nome: m.modulo,
-              dimensoes: m.dimensoes,
-            })
+          // Primário: descrição natural; Fallback: descricaoTipo
+          const descNatural = montarDescricaoNaturalModulo({
+            nome: m.modulo,
+            dimensoes: m.dimensoes,
+            quantidade: m.quantidade || 1,
+            mdfExterno: m.mdfExterno,
+            mdfInterno: m.mdfInterno,
+            composicao: m.composicao,
+          })
+          const descricao = descNatural || m.descricaoTipo || 'Móvel sob medida'
           return {
             nome: m.modulo,
             descricao,
@@ -960,6 +1063,8 @@ export default function OrcamentoV2() {
         ambientes: [],
         ambientesGrupos,
         valorTotal: valorTotalGeral,
+        formaPagamento: formaPagamento.trim() || null,
+        observacoes: observacoes.trim() || null,
       })
 
       toast({
@@ -1180,10 +1285,10 @@ export default function OrcamentoV2() {
               <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-xs">
                 1
               </div>
-              <span>Dados do Cliente</span>
+              <span>Dados do Cliente & Condições</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-4">
+          <CardContent className="pt-4 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="sm:col-span-2 space-y-1.5">
                 <Label
@@ -1217,6 +1322,45 @@ export default function OrcamentoV2() {
                   value={dataOrcamento}
                   onChange={(e) => setDataOrcamento(e.target.value)}
                   className="h-11 rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
+                />
+              </div>
+            </div>
+
+            {/* Condições Comerciais opcionais: Forma de Pagamento e Observações (iniciam sempre vazios) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="formaPagamentoV2"
+                  className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5"
+                >
+                  <CreditCard className="w-3.5 h-3.5 text-slate-500" />
+                  Forma de Pagamento
+                </Label>
+                <Input
+                  id="formaPagamentoV2"
+                  type="text"
+                  placeholder="Ex.: 30% de entrada + 4x no cartão (opcional)"
+                  value={formaPagamento}
+                  onChange={(e) => setFormaPagamento(e.target.value)}
+                  className="h-11 rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="observacoesV2"
+                  className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5 text-slate-500" />
+                  Observações / Termos
+                </Label>
+                <Textarea
+                  id="observacoesV2"
+                  placeholder="Observações ou termos específicos para a proposta (opcional)"
+                  value={observacoes}
+                  onChange={(e) => setObservacoes(e.target.value)}
+                  rows={2}
+                  className="rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20 resize-y min-h-[44px]"
                 />
               </div>
             </div>
@@ -1694,7 +1838,14 @@ export default function OrcamentoV2() {
                                         </div>
                                       </TableCell>
                                       <TableCell className="py-3.5 px-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-                                        {mod.descricaoTipo}
+                                        {montarDescricaoNaturalModulo({
+                                          nome: mod.modulo,
+                                          dimensoes: mod.dimensoes,
+                                          quantidade: mod.quantidade || 1,
+                                          mdfExterno: mod.mdfExterno,
+                                          mdfInterno: mod.mdfInterno,
+                                          composicao: mod.composicao,
+                                        }) || mod.descricaoTipo}
                                       </TableCell>
                                       <TableCell className="py-3.5 px-4 text-xs sm:text-sm text-center font-mono text-slate-700 dark:text-slate-300">
                                         {mod.quantidade}

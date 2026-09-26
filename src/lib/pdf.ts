@@ -110,25 +110,54 @@ export interface MontarDescricaoNaturalParams {
     altura?: number | null
     profundidade?: number | null
   } | null
-  mdfExterno?: string | null
+  quantidade?: number | null
+  mdfExterno?: string | { cor?: string; espessura?: number } | null
+  mdfInterno?: string | { cor?: string; espessura?: number } | null
   composicao?: {
     portas?: { qtd?: number | null; tipo?: string | null } | null
     gavetas?: { qtd?: number | null } | null
     prateleiras?: { qtd?: number | null } | null
-    cabideiro?: boolean | null
+    cabideiro?: boolean | number | null
     sapateira?: boolean | null
+    iluminacaoLed?: boolean | null
   } | null
 }
 
+function parseMdfSpec(mdf?: string | { cor?: string; espessura?: number } | null): {
+  cor: string
+  espessura: string
+} {
+  if (!mdf) return { cor: '', espessura: '' }
+  if (typeof mdf === 'object') {
+    const cor = (mdf.cor || '').trim()
+    const espessura = mdf.espessura ? `${mdf.espessura}mm` : ''
+    return { cor, espessura }
+  }
+  const str = String(mdf).trim()
+  const espMatch = str.match(/\(?(\d+)\s*mm\)?/i)
+  const espessura = espMatch ? `${espMatch[1]}mm` : ''
+  const cor = str
+    .replace(/\s*\(\d+\s*mm\)/gi, '')
+    .replace(/\s+\d+\s*mm/gi, '')
+    .trim()
+  return { cor, espessura }
+}
+
 /**
- * Monta descrição natural determinística para o módulo na Proposta Comercial do PDF.
- * Exemplo: "Guarda-roupa em MDF cor Amadeirado, com 2 portas de correr, 4 gavetas internas, cabideiro e prateleiras internas — 1550×2500×650mm".
- * Fallback: "Móvel Sob Medida (L×A×Pmm)" ou "Móvel Sob Medida".
+ * Monta descrição natural determinística para o módulo na Proposta Comercial do PDF e cards de ambiente.
+ * Regras:
+ * - Se quantidade > 1: prefixo com "${quantidade} unidades — "
+ * - MDF externo: "em MDF cor X (Ymm)"
+ * - Se mdfInterno presente e diferente do externo: "(interno em MDF cor Z (Wmm))"
+ * - Composição: "X portas de abrir" / "X portas de correr" / "X portas basculantes", "X gavetas", "X prateleiras internas", "cabideiro", "sapateira", "iluminação LED integrada"
+ * - Fim: dimensões " — 1800×2400×600mm"
  */
 export function montarDescricaoNaturalModulo({
   nome,
   dimensoes,
+  quantidade,
   mdfExterno,
+  mdfInterno,
   composicao,
 }: MontarDescricaoNaturalParams): string {
   const dimStr =
@@ -150,22 +179,25 @@ export function montarDescricaoNaturalModulo({
 
   const tipoMovel = isCustomOuIA ? 'Móvel sob medida' : nomeRaw
 
-  // MDF cor limpa (ex: "Amadeirado (18mm)" -> "Amadeirado")
-  let corLimpa = ''
-  if (mdfExterno && typeof mdfExterno === 'string' && mdfExterno.trim()) {
-    corLimpa = mdfExterno.replace(/\s*\(\d+mm\)/gi, '').trim()
-  }
+  // Prefixo de quantidade se > 1
+  const qtdNum = Number(quantidade) || 0
+  const prefixoQtd = qtdNum > 1 ? `${qtdNum} unidades — ` : ''
+
+  // MDF externo
+  const ext = parseMdfSpec(mdfExterno)
+  // MDF interno
+  const int = parseMdfSpec(mdfInterno)
 
   // Composição
   const itensComposicao: string[] = []
   const portasQtd = Number(composicao?.portas?.qtd) || 0
-  const portasTipo = composicao?.portas?.tipo || 'abrir'
+  const portasTipo = (composicao?.portas?.tipo || 'abrir').toLowerCase()
   if (portasQtd > 0) {
     if (portasTipo === 'correr') {
       itensComposicao.push(
         `${portasQtd} ${portasQtd === 1 ? 'porta de correr' : 'portas de correr'}`,
       )
-    } else if (portasTipo === 'batente') {
+    } else if (portasTipo === 'batente' || portasTipo === 'basculante') {
       itensComposicao.push(
         `${portasQtd} ${portasQtd === 1 ? 'porta basculante' : 'portas basculantes'}`,
       )
@@ -176,36 +208,56 @@ export function montarDescricaoNaturalModulo({
 
   const gavetasQtd = Number(composicao?.gavetas?.qtd) || 0
   if (gavetasQtd > 0) {
-    itensComposicao.push(
-      `${gavetasQtd} ${gavetasQtd === 1 ? 'gaveta interna' : 'gavetas internas'}`,
-    )
+    itensComposicao.push(`${gavetasQtd} ${gavetasQtd === 1 ? 'gaveta' : 'gavetas'}`)
+  }
+
+  const prateleirasQtd = Number(composicao?.prateleiras?.qtd) || 0
+  if (prateleirasQtd > 0 || (composicao?.prateleiras as unknown) === true) {
+    if (prateleirasQtd > 0) {
+      itensComposicao.push(
+        `${prateleirasQtd} ${prateleirasQtd === 1 ? 'prateleira interna' : 'prateleiras internas'}`,
+      )
+    } else {
+      itensComposicao.push('prateleiras internas')
+    }
   }
 
   if (composicao?.cabideiro) {
     itensComposicao.push('cabideiro')
   }
 
-  const prateleirasQtd = Number(composicao?.prateleiras?.qtd) || 0
-  if (prateleirasQtd > 0) {
-    itensComposicao.push('prateleiras internas')
-  }
-
   if (composicao?.sapateira) {
     itensComposicao.push('sapateira')
   }
 
+  if (composicao?.iluminacaoLed) {
+    itensComposicao.push('iluminação LED integrada')
+  }
+
   // Fallback quando não há composição nem material
-  if (itensComposicao.length === 0 && !corLimpa) {
+  if (itensComposicao.length === 0 && !ext.cor) {
     if (isCustomOuIA) {
-      return dimStr ? `Móvel Sob Medida (${dimStr})` : 'Móvel Sob Medida'
+      const fallbackDesc = dimStr ? `Móvel Sob Medida (${dimStr})` : 'Móvel Sob Medida'
+      return `${prefixoQtd}${fallbackDesc}`
     }
-    return dimStr ? `${tipoMovel} — ${dimStr}` : tipoMovel
+    const fallbackDesc = dimStr ? `${tipoMovel} — ${dimStr}` : tipoMovel
+    return `${prefixoQtd}${fallbackDesc}`
   }
 
   // Montagem natural
   let desc = tipoMovel
-  if (corLimpa) {
-    desc += ` em MDF cor ${corLimpa}`
+  if (ext.cor) {
+    desc += ` em MDF cor ${ext.cor}${ext.espessura ? ` (${ext.espessura})` : ''}`
+  }
+
+  // Se mdfInterno presente e diferente, append
+  const isInternalDifferent =
+    int.cor &&
+    (int.cor.toLowerCase() !== ext.cor.toLowerCase() ||
+      (int.espessura && ext.espessura && int.espessura !== ext.espessura))
+
+  if (int.cor && isInternalDifferent) {
+    desc += ` (interno em MDF cor ${int.cor}${int.espessura ? ` (${int.espessura})` : ''})`
   }
 
   if (itensComposicao.length > 0) {
@@ -224,7 +276,7 @@ export function montarDescricaoNaturalModulo({
     desc += ` — ${dimStr}`
   }
 
-  return desc
+  return `${prefixoQtd}${desc}`
 }
 
 function getNomeModuloAmigavel(
@@ -717,66 +769,73 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
 
     y += boxTotalHeight + 8
 
-    // 7. FORMA DE PAGAMENTO E OBSERVAÇÕES
-    const formaPagamentoTexto =
-      dados.formaPagamento?.trim() || 'A combinar com o consultor de vendas.'
-    const observacoesTexto =
-      dados.observacoes?.trim() ||
-      'Proposta válida por 15 dias corridos. Montagem inclusa no local indicado. Garantia de 5 anos para caixaria de MDF e ferragens conforme manual de uso.'
+    // 7. FORMA DE PAGAMENTO E OBSERVAÇÕES (sem textos automáticos; se ambos vazios omite; se um só renderiza só esse)
+    const formaPagamentoTexto = dados.formaPagamento?.trim() || ''
+    const observacoesTexto = dados.observacoes?.trim() || ''
+    const hasForma = Boolean(formaPagamentoTexto)
+    const hasObs = Boolean(observacoesTexto)
 
-    // Medição e quebra de linhas para altura dinâmica do card
-    const cardContentW = contentWidth - 10
-    const labelW = 44
-    const valueW = cardContentW - labelW
+    if (hasForma || hasObs) {
+      // Medição e quebra de linhas para altura dinâmica do card
+      const cardContentW = contentWidth - 10
+      const labelW = 44
+      const valueW = cardContentW - labelW
 
-    const splitForma = doc.splitTextToSize(formaPagamentoTexto, valueW)
-    const splitObs = doc.splitTextToSize(observacoesTexto, valueW)
+      const splitForma = hasForma ? doc.splitTextToSize(formaPagamentoTexto, valueW) : []
+      const splitObs = hasObs ? doc.splitTextToSize(observacoesTexto, valueW) : []
 
-    const formaH = (Array.isArray(splitForma) ? splitForma.length : 1) * 4
-    const obsH = (Array.isArray(splitObs) ? splitObs.length : 1) * 4
-    const condCardHeight = Math.max(22, 10 + formaH + obsH + 4)
+      const formaH = hasForma ? (Array.isArray(splitForma) ? splitForma.length : 1) * 4 : 0
+      const obsH = hasObs ? (Array.isArray(splitObs) ? splitObs.length : 1) * 4 : 0
+      const spacingBetween = hasForma && hasObs ? 2.5 : 0
+      const condCardHeight = Math.max(16, 7 + formaH + obsH + spacingBetween + 3)
 
-    if (y + condCardHeight + 10 > pageHeight - 35) {
-      doc.addPage()
-      y = margin
+      if (y + condCardHeight + 10 > pageHeight - 35) {
+        doc.addPage()
+        y = margin
+      }
+
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9)
+      doc.setTextColor(15, 23, 42) // #0F172A
+      doc.text('CONDIÇÕES COMERCIAIS', margin, y)
+      y += 4
+
+      doc.setFillColor(248, 250, 252) // #F8FAFC
+      doc.roundedRect(margin, y, contentWidth, condCardHeight, 2, 2, 'F')
+      doc.setDrawColor(226, 232, 240) // #E2E8F0
+      doc.setLineWidth(0.3)
+      doc.roundedRect(margin, y, contentWidth, condCardHeight, 2, 2, 'S')
+
+      let condTextY = y + 6.5
+
+      if (hasForma) {
+        // Forma de Pagamento
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(8)
+        doc.setTextColor(51, 65, 85) // #334155
+        doc.text('Forma de Pagamento:', margin + 5, condTextY)
+
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(51, 65, 85)
+        doc.text(splitForma, margin + 5 + labelW, condTextY)
+
+        condTextY += formaH + 2.5
+      }
+
+      if (hasObs) {
+        // Observações e Prazos
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(8)
+        doc.setTextColor(51, 65, 85)
+        doc.text('Observações e Prazos:', margin + 5, condTextY)
+
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(51, 65, 85)
+        doc.text(splitObs, margin + 5 + labelW, condTextY)
+      }
+
+      y += condCardHeight + 10
     }
-
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9)
-    doc.setTextColor(15, 23, 42) // #0F172A
-    doc.text('CONDIÇÕES COMERCIAIS', margin, y)
-    y += 4
-
-    doc.setFillColor(248, 250, 252) // #F8FAFC
-    doc.roundedRect(margin, y, contentWidth, condCardHeight, 2, 2, 'F')
-    doc.setDrawColor(226, 232, 240) // #E2E8F0
-    doc.setLineWidth(0.3)
-    doc.roundedRect(margin, y, contentWidth, condCardHeight, 2, 2, 'S')
-
-    let condTextY = y + 6.5
-    // Forma de Pagamento
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
-    doc.setTextColor(51, 65, 85) // #334155
-    doc.text('Forma de Pagamento:', margin + 5, condTextY)
-
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(51, 65, 85)
-    doc.text(splitForma, margin + 5 + labelW, condTextY)
-
-    condTextY += formaH + 2.5
-
-    // Observações e Prazos
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
-    doc.setTextColor(51, 65, 85)
-    doc.text('Observações e Prazos:', margin + 5, condTextY)
-
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(51, 65, 85)
-    doc.text(splitObs, margin + 5 + labelW, condTextY)
-
-    y += condCardHeight + 10
 
     // 8. ASSINATURAS (LADO A LADO)
     // Se espaço restante for < 45mm, pula para nova página
@@ -1402,6 +1461,7 @@ export async function downloadPropostaComercialFromOrcamento(
           nome: mod.nome,
           dimensoes: mod.dimensoes,
           mdfExterno: mod.mdf_externo || orcamento.mdf_externo,
+          mdfInterno: mod.mdf_interno || orcamento.mdf_interno,
           composicao: mod.composicao,
         })
         return {
@@ -1434,6 +1494,7 @@ export async function downloadPropostaComercialFromOrcamento(
       nome: orcamento.modulo,
       dimensoes: orcamento.dimensoes_json,
       mdfExterno: orcamento.mdf_externo,
+      mdfInterno: orcamento.mdf_interno,
       composicao: null,
     })
     await gerarPropostaComercial({
