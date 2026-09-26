@@ -1092,7 +1092,6 @@ export default function LibraryPage() {
                       <p className="text-xs text-slate-500 line-clamp-2 pt-1">{mod.descricao}</p>
                     )}
                   </div>
-
                   {/* Ações no rodapé do card */}
                   <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
                     <Button
@@ -1100,12 +1099,12 @@ export default function LibraryPage() {
                       onClick={(e) => e.stopPropagation()}
                       className="w-full bg-slate-900 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl transition-colors"
                     >
-                      <Link to={`/novo-orcamento?modulo=${mod.id}`}>
+                      <Link to={`/orcamento-v2?modulo=${mod.id}`}>
                         Usar no Orçamento
                         <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
                       </Link>
                     </Button>
-                  </div>
+                  </div>{' '}
                 </div>
               </div>
             )

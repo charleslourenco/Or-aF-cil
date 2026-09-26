@@ -473,7 +473,7 @@ export default function QuotesListPage() {
                                 size="sm"
                                 className="text-xs h-8 border-slate-200 hover:bg-slate-100 hover:text-slate-800 hover:border-slate-400 rounded-lg"
                               >
-                                <Link to={`/novo-orcamento?id=${q.id}`}>
+                                <Link to={`/orcamento-v2?id=${q.id}`}>
                                   Abrir
                                   <ArrowRight className="w-3.5 h-3.5 ml-1" />
                                 </Link>

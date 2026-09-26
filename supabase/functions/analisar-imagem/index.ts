@@ -63,6 +63,9 @@ interface ModuloDetectado {
   dimensoes_originais?: Dimensoes3D
   fator_escala?: number
   adaptacoes?: string
+  match_justificativa?: string
+  tags_visuais_identificadas?: string[]
+  forma_geometrica?: string
   divisorias?: {
     qtd: number
   }
@@ -177,7 +180,7 @@ Deno.serve(async (req: Request) => {
             .join('\n')
         : 'Nenhum material cadastrado no catálogo.'
 
-    const systemPrompt = `Você é um engenheiro de marcenaria especializado em móveis sob medida.
+    const systemPrompt = `Você é um engenheiro de marcenaria especializado em móveis sob medida e visão computacional de mobiliário.
 IMPORTANTE: A análise visual é realizada para UM MÓDULO POR VEZ (nunca um ambiente complexo inteiro). Compare a imagem do móvel/croqui fornecida com a biblioteca de módulos cadastrada.
 
 **Lista de módulos da biblioteca:**
@@ -186,26 +189,45 @@ ${listaModulosText}
 **Catálogo de materiais e ferragens disponíveis:**
 ${listaCatalogoText}
 
-**REGRAS RÍGIDAS DE ENGENHARIA:**
-1. CORRESPONDÊNCIA DE MÓDULOS:
-   - Se o móvel identificado na imagem tiver correspondência técnica e visual com algum módulo da biblioteca acima, use EXATAMENTE o "ID" daquele módulo em "codigo_modulo" e o nome do módulo em "nome".
-   - Se o móvel identificado NÃO possuir correspondente idêntico ou muito próximo na biblioteca, retorne OBRIGATORIAMENTE:
+**REGRAS RÍGIDAS DE ENGENHARIA E CORRESPONDÊNCIA GEOMÉTRICA (CRÍTICO):**
+
+1. CORRESPONDÊNCIA GEOMÉTRICA FUNDAMENTAL (REGRA INEGOCIÁVEL):
+   - O match com um módulo da biblioteca SÓ PODE ACONTECER se a FORMA GEOMÉTRICA FUNDAMENTAL da foto bater exatamente com a forma do módulo da biblioteca.
+   - MÓVEIS RETOS / ORTOGONAIS NUNCA CASAM COM MÓVEIS CURVOS / ONDULADOS / ORGÂNICOS. Se a foto for de um móvel retilíneo (ex.: painel ripado reto, cabeceira reta, armário reto) e o módulo da biblioteca for curvo ou semi-curvo, O MATCH É PROIBIDO.
+   - PAINÉIS VERTICAIS / CABECEIRAS RASAS NUNCA CASAM COM CAIXARIAS PROFUNDAS (armários, balcões, caixas de 500-600mm).
+   - MÓVEIS SUSPENSOS/AÉREOS NÃO CASAM COM MÓVEIS DE CHÃO COM RODAPÉ/SAPATAS.
+   - BALCÕES COM TAMPO NÃO CASAM COM TORRES OU ROUPEIROS ALTOS.
+   - Se a forma geométrica fundamental não for idêntica ou houver a MENOR dúvida sobre a compatibilidade formal, você DEVE OBRIGATORIAMENTE retornar "codigo_modulo": "MODULO-CUSTOM" e "confianca": "baixa".
+
+2. CITAÇÃO OBRIGATÓRIA DE TAGS VISUAIS E JUSTIFICATIVA:
+   - Para qualquer correspondência com a biblioteca (onde codigo_modulo != 'MODULO-CUSTOM'), você DEVE OBRIGATORIAMENTE preencher o campo "match_justificativa" citando explicitamente quais TAGS VISUAIS do módulo da biblioteca (campo Tags listado acima) justificam a correspondência e confirmam a compatibilidade geométrica.
+   - Preencha também "tags_visuais_identificadas" como um array de strings com as tags que foram validadas na imagem.
+   - Se o módulo da biblioteca não possuir tags que expliquem o móvel da foto, NÃO FAÇA O MATCH — retorne "MODULO-CUSTOM".
+
+3. CASOS DE RETORNO MODULO-CUSTOM:
+   - Se o móvel identificado NÃO possuir correspondente idêntico na biblioteca, OU
+   - Se houver divergência geométrica (ex.: reto vs curvo, painel vs armário profundo), OU
+   - Em caso de dúvida:
+     Retorne OBRIGATORIAMENTE:
      "codigo_modulo": "MODULO-CUSTOM",
      "nome": "Módulo Personalizado (Análise IA)",
-     "e_customizado": true
-   - Preencha o campo "confianca" com 'alta' | 'media' | 'baixa':
-     * 'alta' = match direto na biblioteca com escala 0.7–1.4;
-     * 'media' = match aproximado ou variação acentuada;
-     * 'baixa' = MODULO-CUSTOM, imagem ruim ou dúvidas nas divisões.
-   - Sugira o "perfil_construcao_sugerido" para o módulo:
-     * "Fechado Envelopado": para armários, roupeiros, guarda-roupas, móveis fechados com caixa dupla.
-     * "Balcão (tampo por conta do cliente)": para balcões de pia, gabinetes inferiores ou bancadas de cozinha/banheiro onde o topo receberá tampo de granito/madeira avulso. NUNCA gere tampo automaticamente.
-     * "Aberto / Painel": para painel de TV, racks abertos, estantes abertas, nichos sem fechamento, sem base/teto internos nem rodateto.
-     * "Caixa Simples": para aéreos simples e caixas sem tamponamento externo.
-   - NUNCA invente IDs aleatórios e NUNCA force o primeiro módulo da lista se não houver correspondência exata/adequada.
+     "e_customizado": true,
+     "confianca": "baixa",
+     "match_justificativa": "Sem correspondente com geometria compatível na biblioteca; classificado como módulo sob medida personalizado."
 
-2. DECOMPOSIÇÃO ESTRUTURADA DE COMPONENTES E INTERIOR VISÍVEL:
-   - Analise minuciosamente a parte externa e o INTERIOR visível do móvel (divisórias verticais/corpos, portas, gavetas, prateleiras internas, divisões, cabideiro, sapateira, puxadores).
+4. NÍVEIS DE CONFIANÇA:
+   - 'alta' = match direto na biblioteca com forma geométrica idêntica comprovada, tags visuais correspondentes e escala volumétrica compatível (0.7–1.4);
+   - 'media' = match na biblioteca onde a forma geométrica é a mesma, mas com variações de divisões internas ou escala;
+   - 'baixa' = MODULO-CUSTOM, imagem com baixa nitidez, dúvida nas divisões ou qualquer divergência formal.
+
+5. PERFIL CONSTRUTIVO SUGERIDO:
+   - "Fechado Envelopado": armários, roupeiros, guarda-roupas fechados com caixaria dupla/tamponamento.
+   - "Balcão (tampo por conta do cliente)": balcões de pia, gabinetes inferiores de cozinha/banheiro onde o topo receberá tampo avulso (granito/madeira). NUNCA gere tampo automaticamente.
+   - "Aberto / Painel": painéis de TV, painéis de cabeceira, racks abertos, estantes abertas, nichos sem tamponamento, sem base/teto internos nem rodateto.
+   - "Caixa Simples": aéreos e caixas sem tamponamento externo.
+
+6. DECOMPOSIÇÃO ESTRUTURADA DE COMPONENTES E INTERIOR VISÍVEL:
+   - Analise minuciosamente a parte externa e o INTERIOR visível do móvel.
    - Preencha SEMPRE e OBRIGATORIAMENTE os seguintes campos para o módulo:
      * "divisorias": { "qtd": <número de divisórias verticais internas> }
      * "portas": { "qtd": <número total de portas>, "tipo": "abrir" | "correr" | "batente" | "nenhum" }
@@ -214,18 +236,13 @@ ${listaCatalogoText}
      * "cabideiro": <true se houver varão/cabideiro para pendurar roupas, false se não houver>
      * "sapateira": <true se houver prateleiras aramadas/corrediças para sapatos, false se não houver>
      * "puxadores": <número estimado total de puxadores necessários para portas e gavetas>
-   - Em "adaptacoes", descreva textualmente em português claro a composição e adaptações do móvel.
+   - Em "adaptacoes", descreva textualmente em português claro a composição do móvel.
 
-3. FERRAGENS E INSUMOS OBRIGATÓRIOS:
-   - Se o módulo tiver PORTAS DE CORRER: inclua Kit Sistema de Correr + Trilho.
-   - Se o módulo tiver GAVETAS: inclua Corrediças + Puxadores.
-   - Se o módulo for AÉREO / SUSPENSO: inclua Suportes de Fixação / Buchas.
-   - TRATAMENTO DE CATÁLOGO:
-     * Se o item/ferragem EXISTIR no Catálogo fornecido, retorne "catalogo_id" com o ID real do catálogo e a "descricao" correspondente.
-     * Se o item/ferragem NÃO EXISTIR no Catálogo fornecido, retorne "catalogo_id": null, "item_nao_cadastrado": true, "preco_custo_estimado": 50.00, e a "descricao" clara do item ausente.
-
-4. DIMENSÕES ESTIMADAS (EM MILÍMETROS):
-   - Estime as dimensões (largura, altura, profundidade em mm) do móvel com base na proporção visual e referências.
+7. FERRAGENS E INSUMOS OBRIGATÓRIOS:
+   - Portas de correr: Kit Sistema de Correr + Trilho.
+   - Gavetas: Corrediças + Puxadores.
+   - Suspenso/Aéreo: Suportes de Fixação / Buchas.
+   - Itens ausentes do catálogo: "catalogo_id": null, "item_nao_cadastrado": true, "preco_custo_estimado": 50.00.
 
 Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código:
 {
@@ -237,6 +254,9 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
       "confianca": "alta",
       "perfil_construcao_sugerido": "Fechado Envelopado",
       "dimensao_estimada": { "largura": 1800, "altura": 2200, "profundidade": 600 },
+      "match_justificativa": "Forma ortogonal reta compatível; tags validadas: portas de abrir, gavetas inferiores, caixaria fechada",
+      "tags_visuais_identificadas": ["portas de abrir", "gavetas", "reto"],
+      "forma_geometrica": "ortogonal retilíneo",
       "divisorias": { "qtd": 1 },
       "portas": { "qtd": 2, "tipo": "abrir" },
       "gavetas": { "qtd": 4 },
@@ -410,6 +430,11 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         }
       }
 
+      // Se virou MODULO-CUSTOM por falta de correspondente ou forma não-batendo, confiança é baixa
+      if (eCustomizado || codigo === 'MODULO-CUSTOM') {
+        confianca = 'baixa'
+      }
+
       // Validação do perfil sugerido
       let perfilSugerido: PerfilConstrucaoSugerido = 'Fechado Envelopado'
       const perfilRaw = String(m.perfil_construcao_sugerido || '').trim()
@@ -441,6 +466,12 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         }
       }
 
+      const matchJustificativa = m.match_justificativa ? String(m.match_justificativa) : undefined
+      const tagsVisuaisIdentificadas = Array.isArray(m.tags_visuais_identificadas)
+        ? m.tags_visuais_identificadas.map(String)
+        : undefined
+      const formaGeometrica = m.forma_geometrica ? String(m.forma_geometrica) : undefined
+
       return {
         codigo_modulo: codigo,
         nome,
@@ -451,6 +482,9 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         dimensoes_originais: dimensoesOriginais,
         fator_escala: fatorEscala,
         adaptacoes: m.adaptacoes ? String(m.adaptacoes) : undefined,
+        match_justificativa: matchJustificativa,
+        tags_visuais_identificadas: tagsVisuaisIdentificadas,
+        forma_geometrica: formaGeometrica,
         divisorias: {
           qtd: qtdDivisorias,
         },

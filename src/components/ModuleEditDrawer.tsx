@@ -146,6 +146,9 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     template: TemplateEngenharia
     motivo: string
     confianca: number
+    confiancaNivel?: 'alta' | 'media' | 'baixa'
+    isLibraryMatch?: boolean
+    matchJustificativa?: string
     sugestoes?: {
       largura?: number
       altura?: number
@@ -317,8 +320,14 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
             descricao: 'Módulo analisado por IA',
           }
 
-        const confiancaNum =
-          primeiro.confianca === 'alta' ? 95 : primeiro.confianca === 'media' ? 80 : 65
+        const confiancaNivel: 'alta' | 'media' | 'baixa' =
+          primeiro.confianca === 'alta'
+            ? 'alta'
+            : primeiro.confianca === 'media'
+              ? 'media'
+              : 'baixa'
+
+        const confiancaNum = confiancaNivel === 'alta' ? 95 : confiancaNivel === 'media' ? 80 : 65
 
         const sugestoes = {
           largura: primeiro.dimensao_estimada?.largura ?? 800,
@@ -330,7 +339,14 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
           cabideiros: primeiro.cabideiro ? 1 : 0,
         }
 
+        const isLibraryMatch =
+          Boolean(primeiro.codigo_modulo) &&
+          primeiro.codigo_modulo !== 'MODULO-CUSTOM' &&
+          !primeiro.e_customizado &&
+          templates.some((t) => t.id === primeiro.codigo_modulo)
+
         const motivo =
+          primeiro.match_justificativa ||
           data.justificativa ||
           primeiro.adaptacoes ||
           'Correspondência visual identificada via OpenAI gpt-4o com a biblioteca.'
@@ -339,6 +355,9 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
           template: matched,
           motivo,
           confianca: confiancaNum,
+          confiancaNivel,
+          isLibraryMatch,
+          matchJustificativa: primeiro.match_justificativa,
           sugestoes,
         })
 
@@ -437,6 +456,8 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         template: tpl,
         motivo: 'Módulo selecionado manualmente pelo projetista',
         confianca: 100,
+        confiancaNivel: 'alta',
+        isLibraryMatch: true,
       })
     }
   }
@@ -787,6 +808,28 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                       Motivo: {iaIdentifiedTemplate.motivo}
                     </p>
                   </div>
+
+                  {/* Aviso de destaque quando a confiança for média/baixa com match de biblioteca */}
+                  {iaIdentifiedTemplate.isLibraryMatch &&
+                    (iaIdentifiedTemplate.confiancaNivel === 'media' ||
+                      iaIdentifiedTemplate.confiancaNivel === 'baixa' ||
+                      iaIdentifiedTemplate.confianca <= 80) && (
+                      <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 animate-fade-in">
+                        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-semibold">
+                            Atenção: Confiança{' '}
+                            {iaIdentifiedTemplate.confiancaNivel === 'baixa' ? 'baixa' : 'média'} no
+                            match de biblioteca.
+                          </p>
+                          <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                            Confira com atenção se a forma geométrica deste módulo realmente
+                            corresponde à foto. Caso discorde, utilize o seletor "Trocar módulo
+                            manualmente" abaixo antes de confirmar o match.
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                   {/* Ações: Confirmar Match ou Dropdown Trocar Módulo Manualmente */}
                   <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
