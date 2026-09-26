@@ -90,6 +90,7 @@ export interface ModuloOrcamento {
   subtotal: number
   composicao?: ComposicaoModuloPersistida
   adaptacoes?: string
+  descricao_manual?: string
   perfil_construtivo?: string
 }
 

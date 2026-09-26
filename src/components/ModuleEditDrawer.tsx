@@ -26,6 +26,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -59,6 +60,7 @@ import {
   calcularBOM,
   MARKUP_PADRAO,
 } from '@/lib/pricing'
+import { montarDescricaoNaturalModulo } from '@/lib/pdf'
 import { CustomerDropzone, UploadedFileState } from '@/components/CustomerDropzone'
 import { Switch } from '@/components/ui/switch'
 import { supabase } from '@/lib/supabase/client'
@@ -76,6 +78,7 @@ export interface ModuloSalvoData {
   moduloId?: string
   nome: string
   descricaoTipo: string
+  descricaoManual?: string
   quantidade: number
   valorUnitario: number
   valorTotal: number
@@ -139,6 +142,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
 
   // Estado do módulo configurado
   const [nomeModulo, setNomeModulo] = useState('')
+  const [descricaoManual, setDescricaoManual] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
   const [dimensoes, setDimensoes] = useState<Dimensoes>({
     largura: 800,
@@ -240,6 +244,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       if (initialData) {
         // Modo Edição: preserva o nome salvo e demais atributos
         setNomeModulo(initialData.nome || '')
+        setDescricaoManual(initialData.descricaoManual || '')
         setSelectedTemplateId(initialData.moduloId || '')
         setDimensoes(
           initialData.dimensoes || {
@@ -335,6 +340,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       } else {
         // Modo Novo Módulo: SEMPRE vazio (decisão permanente do usuário)
         setNomeModulo('')
+        setDescricaoManual('')
         setSelectedTemplateId('')
         setQuantidade(1)
         setPortasCount(2)
@@ -636,6 +642,58 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     }
   }
 
+  // Descrição automática gerada (natural como primária; fallback no perfil/composição)
+  const descricaoAutomaticaGerada = useMemo(() => {
+    const nomeLimpoParaDesc =
+      nomeModulo.trim() ||
+      (selectedTemplateId && selectedTemplate ? selectedTemplate.nome_template : '') ||
+      'Módulo'
+
+    const natural = montarDescricaoNaturalModulo({
+      nome: nomeLimpoParaDesc,
+      dimensoes,
+      quantidade,
+      mdfExterno,
+      mdfInterno,
+      composicao: {
+        portas: { qtd: portasCount, tipo: portasCount > 0 ? 'abrir' : 'nenhum' },
+        gavetas: { qtd: gavetasCount },
+        prateleiras: { qtd: prateleirasCount },
+        cabideiro: cabideirosCount > 0,
+        iluminacaoLed,
+      },
+    })
+
+    if (natural) return natural
+
+    const detalhes: string[] = []
+    detalhes.push(`${dimensoes.largura}×${dimensoes.altura}×${dimensoes.profundidade}mm`)
+    if (portasCount > 0) detalhes.push(`${portasCount} ${portasCount === 1 ? 'porta' : 'portas'}`)
+    if (gavetasCount > 0)
+      detalhes.push(`${gavetasCount} ${gavetasCount === 1 ? 'gaveta' : 'gavetas'}`)
+    if (prateleirasCount > 0)
+      detalhes.push(`${prateleirasCount} ${prateleirasCount === 1 ? 'prateleira' : 'prateleiras'}`)
+    if (cabideirosCount > 0)
+      detalhes.push(`${cabideirosCount} ${cabideirosCount === 1 ? 'cabideiro' : 'cabideiros'}`)
+    if (iluminacaoLed) detalhes.push('LED')
+
+    return `${perfilConstrutivo} • ${detalhes.join(' • ')}`
+  }, [
+    nomeModulo,
+    selectedTemplateId,
+    selectedTemplate,
+    dimensoes,
+    quantidade,
+    mdfExterno,
+    mdfInterno,
+    portasCount,
+    gavetasCount,
+    prateleirasCount,
+    cabideirosCount,
+    iluminacaoLed,
+    perfilConstrutivo,
+  ])
+
   // Markup efetivo da engenharia financeira cadastrada no banco
   const markupEfetivo = useMemo(() => {
     if (
@@ -801,10 +859,13 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       iluminacaoLed,
     }
 
+    const descManualLimpa = descricaoManual.trim()
+
     onSaveModulo({
       moduloId: selectedTemplateId || undefined,
       nome: nomeLimpo,
       descricaoTipo: `${perfilConstrutivo} • ${detalhesAba2.join(' • ')}`,
+      descricaoManual: descManualLimpa || undefined,
       quantidade,
       valorUnitario: unitPrice,
       valorTotal: total,
@@ -1117,6 +1178,51 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
               value="medidas-materiais"
               className="mt-0 space-y-4 focus-visible:outline-none"
             >
+              {/* Card 0: Campo de Descrição Editável (vence a descrição automática no card e no PDF) */}
+              <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
+                  <Label
+                    htmlFor="descricaoManualInput"
+                    className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 flex items-center gap-1.5"
+                  >
+                    <span>Descrição do Módulo</span>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-normal border-slate-300 dark:border-slate-700 text-slate-500"
+                    >
+                      {descricaoManual.trim() ? 'Manual (personalizada)' : 'Automática'}
+                    </Badge>
+                  </Label>
+                  {descricaoManual.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => setDescricaoManual('')}
+                      className="text-[11px] text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                      title="Restaurar descrição automática gerada"
+                    >
+                      Restaurar automática
+                    </button>
+                  )}
+                </div>
+
+                <Textarea
+                  id="descricaoManualInput"
+                  value={descricaoManual}
+                  onChange={(e) => setDescricaoManual(e.target.value)}
+                  placeholder={
+                    descricaoAutomaticaGerada ||
+                    'Ex.: Balcão 2 portas e 3 gavetas em MDF Louro Freijó...'
+                  }
+                  rows={2}
+                  className="text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 focus:border-slate-600 resize-y min-h-[56px]"
+                />
+
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Texto que aparece no card do ambiente e no PDF da Proposta Comercial. Se deixar em
+                  branco, o sistema usa a descrição gerada automaticamente acima como padrão.
+                </p>
+              </div>
+
               {/* Card 1: Três campos numéricos lado a lado: Largura, Altura, Profundidade (mm) */}
               <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">

@@ -1464,9 +1464,11 @@ export async function downloadPropostaComercialFromOrcamento(
           mdfInterno: mod.mdf_interno || orcamento.mdf_interno,
           composicao: mod.composicao,
         })
+        const descFinal =
+          mod.descricao_manual?.trim() || descNatural || mod.adaptacoes || 'Móvel sob medida'
         return {
           nome: nomeApresentavel,
-          descricao: descNatural,
+          descricao: descFinal,
           quantidade: 1,
           valorUnitario: mod.subtotal ?? 0,
           valorTotal: mod.subtotal ?? 0,

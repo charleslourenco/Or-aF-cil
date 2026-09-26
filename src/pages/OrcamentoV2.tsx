@@ -80,6 +80,7 @@ export interface ModuloComercialV2 {
   moduloId?: string
   modulo: string
   descricaoTipo: string
+  descricaoManual?: string
   quantidade: number
   valorUnitario: number
   valorTotal: number
@@ -304,6 +305,7 @@ export default function OrcamentoV2() {
                       moduloId: m.modulo_id,
                       modulo: m.nome,
                       descricaoTipo: m.adaptacoes || m.perfil_construtivo || 'Módulo Sob Medida',
+                      descricaoManual: m.descricao_manual || undefined,
                       quantidade: 1,
                       valorUnitario: m.subtotal || 0,
                       valorTotal: m.subtotal || 0,
@@ -755,6 +757,7 @@ export default function OrcamentoV2() {
       moduloId: mod.moduloId,
       nome: mod.modulo,
       descricaoTipo: mod.descricaoTipo,
+      descricaoManual: mod.descricaoManual,
       quantidade: mod.quantidade || 1,
       valorUnitario: mod.valorUnitario || 0,
       valorTotal: mod.valorTotal || 0,
@@ -801,6 +804,7 @@ export default function OrcamentoV2() {
                 moduloId: moduloData.moduloId,
                 modulo: moduloData.nome,
                 descricaoTipo: moduloData.descricaoTipo,
+                descricaoManual: moduloData.descricaoManual,
                 quantidade: moduloData.quantidade,
                 valorUnitario: moduloData.valorUnitario,
                 valorTotal: moduloData.valorTotal,
@@ -822,6 +826,7 @@ export default function OrcamentoV2() {
         moduloId: moduloData.moduloId,
         modulo: moduloData.nome,
         descricaoTipo: moduloData.descricaoTipo,
+        descricaoManual: moduloData.descricaoManual,
         quantidade: moduloData.quantidade,
         valorUnitario: moduloData.valorUnitario,
         valorTotal: moduloData.valorTotal,
@@ -883,6 +888,7 @@ export default function OrcamentoV2() {
               : undefined,
             perfil_construtivo: mod.perfilConstrutivo,
             adaptacoes: mod.descricaoTipo,
+            descricao_manual: mod.descricaoManual || undefined,
             subtotal: mod.valorTotal,
             mdf_externo:
               typeof mod.mdfExterno === 'object' && mod.mdfExterno?.cor
@@ -1034,7 +1040,7 @@ export default function OrcamentoV2() {
       const ambientesGrupos = ambientes.map((amb) => {
         const subtotal = amb.modulos.reduce((acc, m) => acc + (Number(m.valorTotal) || 0), 0)
         const itens = amb.modulos.map((m) => {
-          // Primário: descrição natural; Fallback: descricaoTipo
+          // Prioridade: manual > gerada natural > descricaoTipo > fallback
           const descNatural = montarDescricaoNaturalModulo({
             nome: m.modulo,
             dimensoes: m.dimensoes,
@@ -1043,7 +1049,8 @@ export default function OrcamentoV2() {
             mdfInterno: m.mdfInterno,
             composicao: m.composicao,
           })
-          const descricao = descNatural || m.descricaoTipo || 'Móvel sob medida'
+          const descricao =
+            m.descricaoManual?.trim() || descNatural || m.descricaoTipo || 'Móvel sob medida'
           return {
             nome: m.modulo,
             descricao,
@@ -1147,6 +1154,7 @@ export default function OrcamentoV2() {
           dimensoes: m.dimensoes,
           perfil_construtivo: m.perfilConstrutivo,
           adaptacoes: m.descricaoTipo,
+          descricao_manual: m.descricaoManual || undefined,
           itens: m.itensBOM || [],
         })),
       }))
@@ -1870,14 +1878,16 @@ export default function OrcamentoV2() {
                                         </div>
                                       </TableCell>
                                       <TableCell className="py-3.5 px-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-                                        {montarDescricaoNaturalModulo({
-                                          nome: mod.modulo,
-                                          dimensoes: mod.dimensoes,
-                                          quantidade: mod.quantidade || 1,
-                                          mdfExterno: mod.mdfExterno,
-                                          mdfInterno: mod.mdfInterno,
-                                          composicao: mod.composicao,
-                                        }) || mod.descricaoTipo}
+                                        {mod.descricaoManual?.trim() ||
+                                          montarDescricaoNaturalModulo({
+                                            nome: mod.modulo,
+                                            dimensoes: mod.dimensoes,
+                                            quantidade: mod.quantidade || 1,
+                                            mdfExterno: mod.mdfExterno,
+                                            mdfInterno: mod.mdfInterno,
+                                            composicao: mod.composicao,
+                                          }) ||
+                                          mod.descricaoTipo}
                                       </TableCell>
                                       <TableCell className="py-3.5 px-4 text-xs sm:text-sm text-center font-mono text-slate-700 dark:text-slate-300">
                                         {mod.quantidade}
