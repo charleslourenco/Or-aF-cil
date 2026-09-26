@@ -257,6 +257,13 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     }
   }, [open, initialData])
 
+  // Função auxiliar para derivar espessura (15 ou 18 mm) do material selecionado
+  const extrairEspessuraMdf = (nomeOuCategoria: string, fallback: 15 | 18 = 15): 15 | 18 => {
+    if (/18\s*mm|mdf\s*18/i.test(nomeOuCategoria)) return 18
+    if (/15\s*mm|mdf\s*15/i.test(nomeOuCategoria)) return 15
+    return fallback
+  }
+
   // Lista de materiais do catálogo para os selects
   const opcoesMdf = useMemo(() => {
     return catalogoMateriais.filter(
@@ -352,21 +359,36 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       const primeiro = modulosDetectados[0]
 
       if (primeiro) {
-        // Encontra o template correspondente na biblioteca ou fallback para o primeiro
-        const matched = templates.find(
-          (t) =>
-            t.id === primeiro.codigo_modulo ||
-            t.nome_template.toLowerCase() === (primeiro.nome || '').toLowerCase(),
-        ) ||
-          templates[0] || {
-            id: 'mod-custom',
-            nome_template: primeiro.nome || 'Módulo Sob Medida',
-            perfil_construtivo: primeiro.perfil_construcao_sugerido || 'Fechado Envelopado',
-            categoria: 'Personalizado',
-            dimensoes: `${primeiro.dimensao_estimada?.largura || 800}x${primeiro.dimensao_estimada?.altura || 700}x${primeiro.dimensao_estimada?.profundidade || 550}`,
-            material: 'MDF',
-            descricao: 'Módulo analisado por IA',
-          }
+        // Encontra o template correspondente na biblioteca se não for customizado.
+        // NUNCA usar fallback templates[0], pois vinculava indevidamente ao primeiro template alfabético da biblioteca ("Curvo").
+        const isCustom =
+          primeiro.codigo_modulo === 'MODULO-CUSTOM' ||
+          primeiro.e_customizado ||
+          !primeiro.codigo_modulo
+
+        const foundInTemplates = !isCustom
+          ? templates.find(
+              (t) =>
+                t.id === primeiro.codigo_modulo ||
+                t.nome_template.toLowerCase() === (primeiro.nome || '').toLowerCase(),
+            )
+          : null
+
+        const matched: TemplateEngenharia = foundInTemplates || {
+          id: 'mod-custom',
+          nome_template: primeiro.nome || 'Módulo Sob Medida',
+          perfil_construtivo:
+            (primeiro.perfil_construcao_sugerido as PerfilConstrutivo) || 'Fechado Envelopado',
+          categoria: 'Personalizado',
+          dimensoes: `${primeiro.dimensao_estimada?.largura || 800}x${primeiro.dimensao_estimada?.altura || 700}x${primeiro.dimensao_estimada?.profundidade || 550}`,
+          material: 'MDF',
+          descricao: 'Módulo analisado por IA',
+          codigo: 'CUSTOM',
+          pecas_mdf: null,
+          ferragens: null,
+          imagem_url: null,
+          assinatura_visual: null,
+        }
 
         const confiancaNivel: 'alta' | 'media' | 'baixa' =
           primeiro.confianca === 'alta'
@@ -387,17 +409,15 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
           cabideiros: primeiro.cabideiro ? 1 : 0,
         }
 
-        const isLibraryMatch =
-          Boolean(primeiro.codigo_modulo) &&
-          primeiro.codigo_modulo !== 'MODULO-CUSTOM' &&
-          !primeiro.e_customizado &&
-          templates.some((t) => t.id === primeiro.codigo_modulo)
+        const isLibraryMatch = Boolean(foundInTemplates)
 
         const motivo =
           primeiro.match_justificativa ||
           data.justificativa ||
           primeiro.adaptacoes ||
-          'Correspondência visual identificada via OpenAI gpt-4o com a biblioteca.'
+          (isLibraryMatch
+            ? 'Correspondência visual identificada via OpenAI gpt-4o com a biblioteca.'
+            : 'Módulo sob medida detectado pela IA.')
 
         setIaIdentifiedTemplate({
           template: matched,
@@ -1252,13 +1272,13 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Card 3: Dropdowns MDF Externo e MDF Interno com seletores de espessura (15mm / 18mm) */}
+              {/* Card 3: Padrão de MDF (espessura derivada automaticamente do material cadastrado no catálogo) */}
               <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-2">
                     <Layers className="w-4 h-4 text-slate-700 dark:text-slate-300" />
                     <h4 className="text-xs font-bold uppercase tracking-wide text-slate-900 dark:text-slate-100">
-                      Padrão de MDF e Espessuras
+                      Padrão de MDF
                     </h4>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1288,44 +1308,30 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Dropdown MDF Externo + Seletor de Espessura (15mm / 18mm) */}
+                  {/* Dropdown MDF Externo */}
                   <div className="p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/60 space-y-3">
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-xs font-bold text-slate-800 dark:text-slate-200">
                         MDF Externo (Frentes / Envelopamento)
                       </Label>
-                      {/* Seletor de Espessura 15mm / 18mm */}
-                      <ToggleGroup
-                        type="single"
-                        value={String(mdfExterno.espessura)}
-                        onValueChange={(val) => {
-                          if (val === '15' || val === '18') {
-                            setMdfExterno((prev) => ({
-                              ...prev,
-                              espessura: Number(val) as 15 | 18,
-                            }))
-                          }
-                        }}
-                        className="h-7 border border-slate-300 dark:border-slate-700 rounded-lg p-0.5 bg-white dark:bg-slate-950 shrink-0"
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-mono border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 shrink-0"
                       >
-                        <ToggleGroupItem
-                          value="15"
-                          className="h-6 px-2 text-[11px] font-bold rounded data-[state=on]:bg-slate-900 data-[state=on]:text-white dark:data-[state=on]:bg-slate-100 dark:data-[state=on]:text-slate-900"
-                        >
-                          15mm
-                        </ToggleGroupItem>
-                        <ToggleGroupItem
-                          value="18"
-                          className="h-6 px-2 text-[11px] font-bold rounded data-[state=on]:bg-slate-900 data-[state=on]:text-white dark:data-[state=on]:bg-slate-100 dark:data-[state=on]:text-slate-900"
-                        >
-                          18mm
-                        </ToggleGroupItem>
-                      </ToggleGroup>
+                        {mdfExterno.espessura}mm
+                      </Badge>
                     </div>
 
                     <Select
                       value={mdfExterno.cor}
-                      onValueChange={(v) => setMdfExterno((prev) => ({ ...prev, cor: v }))}
+                      onValueChange={(v) => {
+                        const mat = opcoesMdf.find((m) => m.nome_material === v)
+                        const novaEspessura = extrairEspessuraMdf(
+                          `${v} ${mat?.categoria || ''}`,
+                          mdfExterno.espessura,
+                        )
+                        setMdfExterno({ cor: v, espessura: novaEspessura })
+                      }}
                     >
                       <SelectTrigger className="h-10 rounded-xl text-xs bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700">
                         <SelectValue placeholder="Selecione o padrão de MDF Externo..." />
@@ -1344,44 +1350,30 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                     </Select>
                   </div>
 
-                  {/* Dropdown MDF Interno + Seletor de Espessura (15mm / 18mm) */}
+                  {/* Dropdown MDF Interno */}
                   <div className="p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/60 space-y-3">
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-xs font-bold text-slate-800 dark:text-slate-200">
                         MDF Interno (Caixaria / Prateleiras)
                       </Label>
-                      {/* Seletor de Espessura 15mm / 18mm */}
-                      <ToggleGroup
-                        type="single"
-                        value={String(mdfInterno.espessura)}
-                        onValueChange={(val) => {
-                          if (val === '15' || val === '18') {
-                            setMdfInterno((prev) => ({
-                              ...prev,
-                              espessura: Number(val) as 15 | 18,
-                            }))
-                          }
-                        }}
-                        className="h-7 border border-slate-300 dark:border-slate-700 rounded-lg p-0.5 bg-white dark:bg-slate-950 shrink-0"
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-mono border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 shrink-0"
                       >
-                        <ToggleGroupItem
-                          value="15"
-                          className="h-6 px-2 text-[11px] font-bold rounded data-[state=on]:bg-slate-900 data-[state=on]:text-white dark:data-[state=on]:bg-slate-100 dark:data-[state=on]:text-slate-900"
-                        >
-                          15mm
-                        </ToggleGroupItem>
-                        <ToggleGroupItem
-                          value="18"
-                          className="h-6 px-2 text-[11px] font-bold rounded data-[state=on]:bg-slate-900 data-[state=on]:text-white dark:data-[state=on]:bg-slate-100 dark:data-[state=on]:text-slate-900"
-                        >
-                          18mm
-                        </ToggleGroupItem>
-                      </ToggleGroup>
+                        {mdfInterno.espessura}mm
+                      </Badge>
                     </div>
 
                     <Select
                       value={mdfInterno.cor}
-                      onValueChange={(v) => setMdfInterno((prev) => ({ ...prev, cor: v }))}
+                      onValueChange={(v) => {
+                        const mat = opcoesMdf.find((m) => m.nome_material === v)
+                        const novaEspessura = extrairEspessuraMdf(
+                          `${v} ${mat?.categoria || ''}`,
+                          mdfInterno.espessura,
+                        )
+                        setMdfInterno({ cor: v, espessura: novaEspessura })
+                      }}
                     >
                       <SelectTrigger className="h-10 rounded-xl text-xs bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700">
                         <SelectValue placeholder="Selecione o padrão de MDF Interno..." />

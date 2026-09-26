@@ -19,6 +19,7 @@ import {
   Wrench,
   Layers,
   Compass,
+  Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -162,6 +163,11 @@ export default function LibraryPage() {
   const [detailModalId, setDetailModalId] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Edição inline de nome no card
+  const [editingCardId, setEditingCardId] = useState<string | null>(null)
+  const [editingCardName, setEditingCardName] = useState<string>('')
+  const [savingCardName, setSavingCardName] = useState(false)
 
   // Estado do modal de criação/edição padrão
   const [modalOpen, setModalOpen] = useState(false)
@@ -331,6 +337,55 @@ export default function LibraryPage() {
       description: `${payload.nome_template} foi salvo com sucesso.`,
     })
     setModalOpen(false)
+  }
+
+  // Handler de renomear inline no card
+  const handleStartRename = (e: React.MouseEvent, mod: TemplateEngenharia) => {
+    e.stopPropagation()
+    setEditingCardId(mod.id)
+    setEditingCardName(mod.nome_template)
+  }
+
+  const handleCancelRename = (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    setEditingCardId(null)
+    setEditingCardName('')
+  }
+
+  const handleSaveRename = async (e: React.MouseEvent | React.KeyboardEvent, id: string) => {
+    e.stopPropagation()
+    const trimmed = editingCardName.trim()
+    if (!trimmed) {
+      toast({
+        title: 'Nome inválido',
+        description: 'O nome do módulo não pode ficar vazio.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setSavingCardName(true)
+    const { error } = await updateTemplateEngenharia(id, { nome_template: trimmed })
+    setSavingCardName(false)
+
+    if (error) {
+      toast({
+        title: 'Erro ao renomear',
+        description: error,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Atualiza estado local imediatamente
+    setModulos((prev) => prev.map((m) => (m.id === id ? { ...m, nome_template: trimmed } : m)))
+    setEditingCardId(null)
+    setEditingCardName('')
+
+    toast({
+      title: 'Nome atualizado',
+      description: 'O nome do módulo foi atualizado com sucesso na biblioteca.',
+    })
   }
 
   // Converte todas as páginas de um PDF em um array de strings Base64 PNG (data URL) com resolução aprimorada (scale 2.5)
@@ -1027,10 +1082,71 @@ export default function LibraryPage() {
                 {/* Corpo do card */}
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                   <div className="space-y-3">
-                    {/* Título do módulo */}
-                    <h3 className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug group-hover:text-slate-800 transition-colors">
-                      {mod.nome_template}
-                    </h3>
+                    {/* Título do módulo com edição inline */}
+                    {editingCardId === mod.id ? (
+                      <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                        <Input
+                          value={editingCardName}
+                          onChange={(e) => setEditingCardName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleSaveRename(e, mod.id)
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault()
+                              handleCancelRename()
+                            }
+                          }}
+                          autoFocus
+                          disabled={savingCardName}
+                          className="h-8 text-xs font-semibold bg-white border-slate-300 focus:border-slate-600 rounded-lg"
+                          placeholder="Nome do módulo"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={savingCardName}
+                            onClick={(e) => handleSaveRename(e, mod.id)}
+                            className="h-7 px-2.5 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                          >
+                            {savingCardName ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Check className="w-3 h-3" />
+                            )}
+                            Salvar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={savingCardName}
+                            onClick={handleCancelRename}
+                            className="h-7 px-2 text-[11px] rounded-lg text-slate-500 hover:text-slate-800"
+                          >
+                            <X className="w-3 h-3 mr-0.5" />
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-1.5 group/title">
+                        <h3 className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug group-hover:text-slate-800 transition-colors flex-1">
+                          {mod.nome_template}
+                        </h3>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => handleStartRename(e, mod)}
+                          title="Renomear módulo"
+                          className="h-7 w-7 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg shrink-0 opacity-80 group-hover:opacity-100"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    )}
 
                     {/* Tags em linha */}
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
