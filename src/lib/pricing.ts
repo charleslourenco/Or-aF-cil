@@ -227,6 +227,35 @@ function criarPeca(
  * Busca item de ferragem ou acessório no catálogo por termos-chave.
  * Retorna o item do catálogo encontrado ou undefined.
  */
+/**
+ * Formata o rótulo descritivo do material na lista técnica (BOM),
+ * combinando a classificação técnica ("MDF Externo", "MDF Interno", etc.)
+ * com a especificação de padrão do MDF (cor e/ou espessura) escolhida pelo usuário.
+ */
+export function formatarRotuloMaterial(tipo: string, spec?: MdfSpec | string): string {
+  if (!spec) return tipo
+
+  if (typeof spec === 'string') {
+    const trimmed = spec.trim()
+    return trimmed ? `${tipo} — ${trimmed}` : tipo
+  }
+
+  const cor = (spec.cor || '').trim()
+  const esp = spec.espessura
+
+  if (cor && esp) {
+    return `${tipo} — ${cor} ${esp}mm`
+  }
+  if (cor) {
+    return `${tipo} — ${cor}`
+  }
+  if (esp) {
+    return `${tipo} — ${esp}mm`
+  }
+
+  return tipo
+}
+
 function findItemCatalogo(
   catalogo: CatalogoMaterial[] | undefined,
   keywords: string[],
@@ -284,6 +313,10 @@ export function calcularBOM(
 
   // Fator de escala proporcional (default 1.0 se não fornecido ou inválido)
   const escala = typeof fatorEscala === 'number' && fatorEscala > 0 ? fatorEscala : 1.0
+
+  const rotuloMdfExterno = formatarRotuloMaterial('MDF Externo', mdfExterno)
+  const rotuloMdfInterno = formatarRotuloMaterial('MDF Interno', mdfInterno)
+  const rotuloMdfFundo = mdfFundo?.trim() ? 'MDF Fundo — ' + mdfFundo.trim() : 'MDF Fundo'
 
   const pecas: BudgetItem[] = []
 
@@ -359,7 +392,7 @@ export function calcularBOM(
       criarPeca(
         'bom-painel-traseiro-estrutural',
         `Chapa Traseira Estrutural de Painel (1x) — ${L}×${A}mm`,
-        'MDF Externo',
+        rotuloMdfExterno,
         espExt,
         areaPainelPrincipal,
         'm²',
@@ -376,7 +409,7 @@ export function calcularBOM(
       criarPeca(
         'bom-sarrafos-fixacao-painel',
         `Sarrafos Estruturais de Fixação / Mão-Amiga (2x) — ${largSarrafo}×${altSarrafoMm}mm`,
-        'MDF Externo',
+        rotuloMdfExterno,
         espExt,
         areaSarrafos,
         'm²',
@@ -399,7 +432,7 @@ export function calcularBOM(
         criarPeca(
           'bom-prateleiras-painel',
           `Prateleira Suspensa de Apoio (${qtdPrateleirasPainel}x) — ${largPratPainel}×${profPratPainel}mm`,
-          'MDF Externo',
+          rotuloMdfExterno,
           espExt,
           areaPratPainel * qtdPrateleirasPainel,
           'm²',
@@ -422,7 +455,7 @@ export function calcularBOM(
         criarPeca(
           'bom-gavetas-frentes-painel',
           `Frentes de Gaveta (${qtdGavetasPainel}x) — ${largFrentePainel}×${altFrentePainel}mm`,
-          'MDF Externo',
+          rotuloMdfExterno,
           espExt,
           areaFrentes * qtdGavetasPainel,
           'm²',
@@ -443,7 +476,7 @@ export function calcularBOM(
         criarPeca(
           'bom-gavetas-caixotes-painel',
           `Caixotes de Gaveta (${qtdGavetasPainel}x internos) — MDF 15mm`,
-          'MDF Interno',
+          rotuloMdfInterno,
           espInt,
           areaCaixote * qtdGavetasPainel,
           'm²',
@@ -458,7 +491,7 @@ export function calcularBOM(
         criarPeca(
           'bom-gavetas-fundos-painel',
           `Fundos de Gaveta (${qtdGavetasPainel}x) — ${largCaixote}×${profGavPainel}mm MDF 6mm`,
-          'MDF Fundo',
+          rotuloMdfFundo,
           6,
           areaFundoGav * qtdGavetasPainel,
           'm²',
@@ -530,7 +563,7 @@ export function calcularBOM(
     criarPeca(
       'bom-laterais-externas',
       `Laterais Externas (2x) — ${A}×${P}mm`,
-      'MDF Externo',
+      rotuloMdfExterno,
       espExt,
       areaLateralExt * 2,
       'm²',
@@ -555,7 +588,7 @@ export function calcularBOM(
       criarPeca(
         'bom-travessa-frontal',
         `Travessa Frontal de Apoio (1x) — ${L}×${altura_travessa_mm}mm`,
-        'MDF Externo',
+        rotuloMdfExterno,
         espExt,
         areaTravessaFrontal,
         'm²',
@@ -568,7 +601,7 @@ export function calcularBOM(
       criarPeca(
         'bom-travessa-traseira',
         `Travessa Traseira de Apoio (1x) — ${larguraEntreLateraisExt}×${altura_travessa_mm}mm`,
-        'MDF Externo',
+        rotuloMdfExterno,
         espExt,
         areaTravessaTraseira,
         'm²',
@@ -583,7 +616,7 @@ export function calcularBOM(
       criarPeca(
         'bom-base-simples',
         `Base Inferior (1x) — ${larguraEntreLateraisExt}×${P}mm`,
-        'MDF Externo',
+        rotuloMdfExterno,
         espExt,
         areaBaseBalcao,
         'm²',
@@ -599,7 +632,7 @@ export function calcularBOM(
         criarPeca(
           'bom-rodape',
           `Rodapé Inferior (1 jogo: frente + 2 lat.) — h=${altura_rodape_mm}mm`,
-          'MDF Externo',
+          rotuloMdfExterno,
           espExt,
           areaRodapeM2,
           'm²',
@@ -616,7 +649,7 @@ export function calcularBOM(
       criarPeca(
         'bom-base-topo',
         `Base e Topo (2x) — ${larguraEntreLateraisExt}×${P}mm`,
-        'MDF Externo',
+        rotuloMdfExterno,
         espExt,
         areaBaseTopo * 2,
         'm²',
@@ -632,7 +665,7 @@ export function calcularBOM(
       criarPeca(
         'bom-tampo-externo',
         `Tampo/Teto Externo (1x) — ${larguraEntreLateraisExt}×${P}mm`,
-        'MDF Externo',
+        rotuloMdfExterno,
         espExt,
         areaTampoExt,
         'm²',
@@ -653,7 +686,7 @@ export function calcularBOM(
       criarPeca(
         'bom-laterais-internas',
         `Laterais Internas Estruturais (2x) — ${altLateralInt}×${profInterna}mm`,
-        'MDF Interno',
+        rotuloMdfInterno,
         espInt,
         areaLatInt * 2,
         'm²',
@@ -667,7 +700,7 @@ export function calcularBOM(
       criarPeca(
         'bom-teto-interno',
         `Teto Interno Estrutural (1x) — ${largCaixariaInt}×${profInterna}mm`,
-        'MDF Interno',
+        rotuloMdfInterno,
         espInt,
         areaTetoInt,
         'm²',
@@ -681,7 +714,7 @@ export function calcularBOM(
       criarPeca(
         'bom-base-interna',
         `Base Interna Estrutural (1x) — ${largCaixariaInt}×${profInterna}mm`,
-        'MDF Interno',
+        rotuloMdfInterno,
         espInt,
         areaBaseInt,
         'm²',
@@ -695,7 +728,7 @@ export function calcularBOM(
       criarPeca(
         'bom-rodape',
         `Rodapé Inferior (1 jogo: frente + 2 lat.) — h=${altura_rodape_mm}mm`,
-        'MDF Externo',
+        rotuloMdfExterno,
         espExt,
         areaRodapeM2,
         'm²',
@@ -710,7 +743,7 @@ export function calcularBOM(
         criarPeca(
           'bom-rodateto',
           `Rodateto Superior (1 jogo: frente + 2 lat.) — h=${altura_rodateto_mm}mm`,
-          'MDF Externo',
+          rotuloMdfExterno,
           espExt,
           areaRodatetoM2,
           'm²',
@@ -728,7 +761,7 @@ export function calcularBOM(
     criarPeca(
       'bom-fundo',
       `Fundo (1x) — ${L}×${A}mm`,
-      'MDF Fundo',
+      rotuloMdfFundo,
       6,
       areaFundo,
       'm²',
@@ -756,7 +789,7 @@ export function calcularBOM(
       criarPeca(
         'bom-prateleiras',
         `Prateleiras Internas (2x) — ${larguraVaoUtil}×${profPrateleira}mm`,
-        'MDF Interno',
+        rotuloMdfInterno,
         espInt,
         areaPrateleira * 2,
         'm²',
@@ -822,7 +855,7 @@ export function calcularBOM(
       criarPeca(
         'bom-divisorias-verticais',
         `Divisória Vertical Interna (${qtdDivisorias}x) — ${altDivisoria}×${profDivisoria}mm`,
-        'MDF Interno',
+        rotuloMdfInterno,
         espInt,
         areaUmaDivisoria * qtdDivisorias,
         'm²',
@@ -914,7 +947,7 @@ export function calcularBOM(
       criarPeca(
         'bom-prateleiras',
         `Prateleiras Internas (${qtdPrateleiras}x) — ${larguraCorpo}×${profPrat}mm`,
-        'MDF Interno',
+        rotuloMdfInterno,
         espInt,
         areaUmaPrat * qtdPrateleiras,
         'm²',
@@ -936,7 +969,7 @@ export function calcularBOM(
       criarPeca(
         'bom-portas-folhas',
         `Folhas de Porta (${qtdPortas}x ${tipoPorta}) — ${largPorta}×${altPorta}mm`,
-        'MDF Externo',
+        rotuloMdfExterno,
         espExt,
         areaUmaPorta * qtdPortas,
         'm²',
@@ -1023,7 +1056,7 @@ export function calcularBOM(
       criarPeca(
         'bom-gavetas-frentes',
         `Frentes de Gaveta (${qtdGavetas}x) — ${largFrenteGav}×${altFrenteGav}mm`,
-        'MDF Externo',
+        rotuloMdfExterno,
         espExt,
         areaFrentes * qtdGavetas,
         'm²',
@@ -1048,7 +1081,7 @@ export function calcularBOM(
       criarPeca(
         'bom-gavetas-caixotes',
         `Caixotes de Gaveta (${qtdGavetas}x internos) — MDF 15mm`,
-        'MDF Interno',
+        rotuloMdfInterno,
         espInt,
         areaCaixotePorGav * qtdGavetas,
         'm²',
@@ -1063,7 +1096,7 @@ export function calcularBOM(
       criarPeca(
         'bom-gavetas-fundos',
         `Fundos de Gaveta (${qtdGavetas}x) — ${largCaixoteGav}×${profGaveta}mm MDF 6mm`,
-        'MDF Fundo',
+        rotuloMdfFundo,
         6,
         areaFundoGavPorGav * qtdGavetas,
         'm²',
