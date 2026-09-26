@@ -90,6 +90,7 @@ interface ModuleEditDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   ambienteNome: string
+  initialData?: ModuloSalvoData | null
   onSaveModulo: (modulo: ModuloSalvoData) => void
 }
 
@@ -103,6 +104,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   open,
   onOpenChange,
   ambienteNome,
+  initialData = null,
   onSaveModulo,
 }) => {
   const [activeTab, setActiveTab] = useState<'foto-ia' | 'medidas-materiais' | 'engenharia-pecas'>(
@@ -173,13 +175,12 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         .then(([tplRes, matRes, engRes]) => {
           if (tplRes.data && tplRes.data.length > 0) {
             setTemplates(tplRes.data)
-            if (!selectedTemplateId) {
+            if (!selectedTemplateId && !initialData) {
               const first = tplRes.data[0]
               if (first) {
                 setSelectedTemplateId(first.id)
-                if (!nomeModulo) {
-                  setNomeModulo(first.nome_template)
-                }
+                // Regra permanente v2: NÃO autopreencher nomeModulo com nome_template da biblioteca.
+                // Deve iniciar VAZIO para o usuário dar o nome que quer no PDF.
                 if (first.perfil_construtivo) {
                   setPerfilConstrutivo(first.perfil_construtivo as PerfilConstrutivo)
                 }
@@ -198,16 +199,63 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         })
         .finally(() => setLoadingData(false))
     }
-  }, [open, templates.length, selectedTemplateId, nomeModulo])
+  }, [open, templates.length, selectedTemplateId, initialData])
 
-  // Reset de estado quando abre para um novo módulo
+  // Inicialização / Reset de estado quando o drawer abre:
+  // - Se for NOVO módulo: campo 'Nome do Módulo' SEMPRE vazio, reseta seletores e tabs
+  // - Se for EDIÇÃO (initialData): preenche com os dados salvos sem zerar o nome existente
   useEffect(() => {
     if (open) {
       setActiveTab('foto-ia')
       setIaDetectedNotice(null)
+      setIaIdentifiedTemplate(null)
       setIsMatchConfirmed(false)
+      setUploadedFiles([])
+
+      if (initialData) {
+        // Modo Edição: preserva o nome salvo e demais atributos
+        setNomeModulo(initialData.nome || '')
+        setSelectedTemplateId(initialData.moduloId || '')
+        setDimensoes(
+          initialData.dimensoes || {
+            largura: 800,
+            altura: 700,
+            profundidade: 550,
+          },
+        )
+        setQuantidade(initialData.quantidade || 1)
+        if (initialData.perfilConstrutivo) {
+          setPerfilConstrutivo(initialData.perfilConstrutivo)
+        }
+        if (initialData.padraoProjeto) {
+          setPadraoProjeto(initialData.padraoProjeto)
+        }
+        if (initialData.mdfExterno) {
+          setMdfExterno(initialData.mdfExterno)
+        }
+        if (initialData.mdfInterno) {
+          setMdfInterno(initialData.mdfInterno)
+        }
+        if (initialData.mdfFundo) {
+          setMdfFundo(initialData.mdfFundo)
+        }
+        setPortasCount(initialData.portas ?? 2)
+        setGavetasCount(initialData.gavetas ?? 0)
+        setPrateleirasCount(initialData.prateleiras ?? 1)
+        setCabideirosCount(initialData.cabideiros ?? 0)
+        setIluminacaoLed(Boolean(initialData.iluminacaoLed))
+      } else {
+        // Modo Novo Módulo: SEMPRE vazio (decisão permanente do usuário)
+        setNomeModulo('')
+        setQuantidade(1)
+        setPortasCount(2)
+        setGavetasCount(0)
+        setPrateleirasCount(1)
+        setCabideirosCount(0)
+        setIluminacaoLed(false)
+      }
     }
-  }, [open])
+  }, [open, initialData])
 
   // Lista de materiais do catálogo para os selects
   const opcoesMdf = useMemo(() => {
@@ -230,7 +278,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     setSelectedTemplateId(tplId)
     const tpl = templates.find((t) => t.id === tplId)
     if (tpl) {
-      setNomeModulo(tpl.nome_template)
+      // Regra permanente v2: NÃO autopreencher nomeModulo com nome_template
       if (tpl.perfil_construtivo) {
         setPerfilConstrutivo(tpl.perfil_construtivo as PerfilConstrutivo)
       }
@@ -390,18 +438,14 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     }
   }
 
-  // Confirmar Match do card de IA: preenche a Aba 2 (nome, perfil construtivo, dimensões e seletores sugeridos)
+  // Confirmar Match do card de IA: preenche a Aba 2 (perfil construtivo, dimensões e seletores sugeridos)
+  // Regra permanente v2: NUNCA autopreencher o campo 'Nome do Módulo' — deve continuar vazio
   const handleConfirmMatch = () => {
     if (!iaIdentifiedTemplate) return
     const { template, sugestoes } = iaIdentifiedTemplate
     setSelectedTemplateId(template.id)
 
-    // Atualiza nome comercial
-    if (template.nome_template) {
-      setNomeModulo(template.nome_template)
-    }
-
-    // Perfil construtivo do template
+    // Perfil construtivo do template (não toca em nomeModulo)
     if (template.perfil_construtivo) {
       setPerfilConstrutivo(template.perfil_construtivo as PerfilConstrutivo)
     }
@@ -426,11 +470,12 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   }
 
   // Trocar módulo manualmente a partir do card de IA
+  // Regra permanente v2: NUNCA autopreencher o campo 'Nome do Módulo' — deve continuar vazio
   const handleTrocarModuloManual = (tplId: string) => {
     const tpl = templates.find((t) => t.id === tplId)
     if (!tpl) return
     setSelectedTemplateId(tpl.id)
-    setNomeModulo(tpl.nome_template)
+    // Não altera nomeModulo (mantém o que o usuário digitou ou vazio)
     if (tpl.perfil_construtivo) {
       setPerfilConstrutivo(tpl.perfil_construtivo as PerfilConstrutivo)
     }

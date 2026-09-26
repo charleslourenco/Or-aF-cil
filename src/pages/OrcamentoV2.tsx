@@ -147,6 +147,8 @@ export default function OrcamentoV2() {
   // Estado do Drawer de Adicionar/Configurar Módulo
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [targetAmbienteId, setTargetAmbienteId] = useState<string | null>(null)
+  const [editingModuloData, setEditingModuloData] = useState<ModuloSalvoData | null>(null)
+  const [editingModuloId, setEditingModuloId] = useState<string | null>(null)
 
   // Carregar orçamento existente se vier ID na URL
   useEffect(() => {
@@ -414,43 +416,112 @@ export default function OrcamentoV2() {
     setEditingAmbienteNome('')
   }
 
-  // Clique em "+ Adicionar Módulo neste Ambiente" — abre o Drawer lateral
+  // Clique em "+ Adicionar Módulo neste Ambiente" — abre o Drawer lateral para NOVO módulo (nome sempre vazio)
   const handleOpenAddModuloDrawer = (ambienteId: string) => {
     setTargetAmbienteId(ambienteId)
+    setEditingModuloId(null)
+    setEditingModuloData(null)
     setIsDrawerOpen(true)
+  }
+
+  // Clique em editar módulo existente na tabela comercial — abre o Drawer mantendo o nome e dados salvos
+  const handleOpenEditModuloDrawer = (ambienteId: string, mod: ModuloComercialV2) => {
+    setTargetAmbienteId(ambienteId)
+    setEditingModuloId(mod.id)
+    const dataToEdit: ModuloSalvoData = {
+      id: mod.id,
+      moduloId: mod.moduloId,
+      nome: mod.modulo,
+      descricaoTipo: mod.descricaoTipo,
+      quantidade: mod.quantidade || 1,
+      valorUnitario: mod.valorUnitario || 0,
+      valorTotal: mod.valorTotal || 0,
+      dimensoes: mod.dimensoes || { largura: 800, altura: 700, profundidade: 550 },
+      perfilConstrutivo: (mod.perfilConstrutivo as any) || 'Fechado Envelopado',
+      padraoProjeto: 'comercial',
+      mdfExterno: { cor: 'Branco TX', espessura: 18 },
+      mdfInterno: { cor: 'Branco TX', espessura: 15 },
+      mdfFundo: 'MDF 6mm Branco TX',
+      itensBOM: mod.itensBOM || [],
+    }
+    setEditingModuloData(dataToEdit)
+    setIsDrawerOpen(true)
+  }
+
+  // Exclusão rápida de módulo
+  const handleRemoveModulo = (ambienteId: string, moduloId: string) => {
+    setAmbientes((prev) =>
+      prev.map((amb) =>
+        amb.id === ambienteId
+          ? { ...amb, modulos: amb.modulos.filter((m) => m.id !== moduloId) }
+          : amb,
+      ),
+    )
+    setIsSavedSuccessfully(false)
   }
 
   // Salvar Módulo vindo do Drawer no Ambiente (Aba 3 confirmada)
   const handleSaveModuloNoAmbiente = (moduloData: ModuloSalvoData) => {
     if (!targetAmbienteId) return
 
-    const novoModulo: ModuloComercialV2 = {
-      id: `mod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      moduloId: moduloData.moduloId,
-      modulo: moduloData.nome,
-      descricaoTipo: moduloData.descricaoTipo,
-      quantidade: moduloData.quantidade,
-      valorUnitario: moduloData.valorUnitario,
-      valorTotal: moduloData.valorTotal,
-      dimensoes: moduloData.dimensoes,
-      perfilConstrutivo: moduloData.perfilConstrutivo,
-      itensBOM: moduloData.itensBOM,
-    }
+    if (editingModuloId) {
+      // Modo Edição: atualiza o módulo existente preservando seu id
+      setAmbientes((prev) =>
+        prev.map((amb) => {
+          if (amb.id !== targetAmbienteId) return amb
+          return {
+            ...amb,
+            modulos: amb.modulos.map((m) => {
+              if (m.id !== editingModuloId) return m
+              return {
+                ...m,
+                moduloId: moduloData.moduloId,
+                modulo: moduloData.nome,
+                descricaoTipo: moduloData.descricaoTipo,
+                quantidade: moduloData.quantidade,
+                valorUnitario: moduloData.valorUnitario,
+                valorTotal: moduloData.valorTotal,
+                dimensoes: moduloData.dimensoes,
+                perfilConstrutivo: moduloData.perfilConstrutivo,
+                itensBOM: moduloData.itensBOM,
+              }
+            }),
+          }
+        }),
+      )
+    } else {
+      // Modo Novo Módulo
+      const novoModulo: ModuloComercialV2 = {
+        id: `mod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        moduloId: moduloData.moduloId,
+        modulo: moduloData.nome,
+        descricaoTipo: moduloData.descricaoTipo,
+        quantidade: moduloData.quantidade,
+        valorUnitario: moduloData.valorUnitario,
+        valorTotal: moduloData.valorTotal,
+        dimensoes: moduloData.dimensoes,
+        perfilConstrutivo: moduloData.perfilConstrutivo,
+        itensBOM: moduloData.itensBOM,
+      }
 
-    setAmbientes((prev) =>
-      prev.map((amb) =>
-        amb.id === targetAmbienteId ? { ...amb, modulos: [...amb.modulos, novoModulo] } : amb,
-      ),
-    )
+      setAmbientes((prev) =>
+        prev.map((amb) =>
+          amb.id === targetAmbienteId ? { ...amb, modulos: [...amb.modulos, novoModulo] } : amb,
+        ),
+      )
+    }
 
     // Marca como não salvo após alteração
     setIsSavedSuccessfully(false)
 
     const ambAlvo = ambientes.find((a) => a.id === targetAmbienteId)
     toast({
-      title: 'Módulo salvo no ambiente!',
+      title: editingModuloId ? 'Módulo atualizado!' : 'Módulo salvo no ambiente!',
       description: `"${moduloData.nome}" foi salvo em "${ambAlvo?.nome || 'Ambiente'}". Valor Geral atualizado.`,
     })
+
+    setEditingModuloId(null)
+    setEditingModuloData(null)
   }
 
   // Persistência Completa no Supabase: Orcamentos, Ambientes, Módulos e Peças BOM
@@ -1107,12 +1178,21 @@ export default function OrcamentoV2() {
                                 amb.modulos.map((mod) => (
                                   <TableRow
                                     key={mod.id}
-                                    className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-slate-50/60 dark:hover:bg-slate-800/40"
+                                    className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 group"
                                   >
                                     <TableCell className="py-3.5 px-4 font-semibold text-xs sm:text-sm text-slate-900 dark:text-slate-100">
                                       <div className="flex items-center gap-2">
                                         <Box className="w-4 h-4 text-slate-500 shrink-0" />
                                         <span>{mod.modulo}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditModuloDrawer(amb.id, mod)}
+                                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                          title={`Editar módulo "${mod.modulo}"`}
+                                          aria-label={`Editar módulo ${mod.modulo}`}
+                                        >
+                                          <Pencil className="w-3.5 h-3.5" />
+                                        </button>
                                       </div>
                                     </TableCell>
                                     <TableCell className="py-3.5 px-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
@@ -1125,7 +1205,18 @@ export default function OrcamentoV2() {
                                       {formatCurrency(mod.valorUnitario)}
                                     </TableCell>
                                     <TableCell className="py-3.5 px-4 text-xs sm:text-sm text-right font-mono font-bold text-slate-900 dark:text-slate-100">
-                                      {formatCurrency(mod.valorTotal)}
+                                      <div className="flex items-center justify-end gap-2">
+                                        <span>{formatCurrency(mod.valorTotal)}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveModulo(amb.id, mod.id)}
+                                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                                          title={`Remover módulo "${mod.modulo}"`}
+                                          aria-label={`Remover módulo ${mod.modulo}`}
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
                                     </TableCell>
                                   </TableRow>
                                 ))
@@ -1431,8 +1522,15 @@ export default function OrcamentoV2() {
       {/* Drawer Lateral (Sheet) para Configuração do Módulo */}
       <ModuleEditDrawer
         open={isDrawerOpen}
-        onOpenChange={setIsDrawerOpen}
+        onOpenChange={(open) => {
+          setIsDrawerOpen(open)
+          if (!open) {
+            setEditingModuloId(null)
+            setEditingModuloData(null)
+          }
+        }}
         ambienteNome={targetAmbienteNome}
+        initialData={editingModuloData}
         onSaveModulo={handleSaveModuloNoAmbiente}
       />
 
