@@ -1,12 +1,20 @@
 import { supabase } from '@/lib/supabase/client'
 
-/** Categorias de material aceitas pelo catálogo. */
+/** Categorias de material aceitas pelo catálogo e itens avulsos (taxonomia única). */
 export const CATEGORIAS_MATERIAL = [
   'MDF 15mm',
   'MDF 18mm',
   'MDF 6mm',
   'Fita de Borda',
   'Ferragem',
+  'Iluminação',
+  'Componentes Elétricos',
+  'Parafusos e Sistemas de Fixação',
+  'Acessórios',
+  'Serralheria Terceirizada',
+  'Estofaria Terceirizada',
+  'Instalação',
+  'Outro',
 ] as const
 
 export type CategoriaMaterial = (typeof CATEGORIAS_MATERIAL)[number]

@@ -259,13 +259,19 @@ export function formatarRotuloMaterial(tipo: string, spec?: MdfSpec | string): s
 function findItemCatalogo(
   catalogo: CatalogoMaterial[] | undefined,
   keywords: string[],
-  categoria: string = 'Ferragem',
+  categoria: string | string[] = 'Ferragem',
 ): CatalogoMaterial | undefined {
   if (!catalogo || catalogo.length === 0) return undefined
-  const daCategoria = catalogo.filter((c) => c.categoria.toLowerCase() === categoria.toLowerCase())
-  if (daCategoria.length === 0) return undefined
+  const categoriasFiltro = Array.isArray(categoria)
+    ? categoria.map((c) => c.toLowerCase())
+    : [categoria.toLowerCase()]
 
-  for (const item of daCategoria) {
+  const doFiltro = catalogo.filter((c) =>
+    categoriasFiltro.includes((c.categoria || '').toLowerCase()),
+  )
+  if (doFiltro.length === 0) return undefined
+
+  for (const item of doFiltro) {
     const nome = (item.nome_material || '').toLowerCase()
     if (keywords.every((kw) => nome.includes(kw.toLowerCase()))) {
       return item
@@ -273,7 +279,7 @@ function findItemCatalogo(
   }
 
   // Tenta pelo menos uma das palavras-chave
-  for (const item of daCategoria) {
+  for (const item of doFiltro) {
     const nome = (item.nome_material || '').toLowerCase()
     if (keywords.some((kw) => nome.includes(kw.toLowerCase()))) {
       return item
@@ -1230,7 +1236,12 @@ export function calcularBOM(
 
   // 10. Iluminação / Perfil LED (se ativado na composição)
   if (composicao.iluminacaoLed) {
-    const perfilLedMat = findItemCatalogo(catalogoPrecos, ['led', 'perfil'])
+    // Busca por perfil/led nas categorias 'Iluminação' ou 'Ferragem'
+    const perfilLedMat = findItemCatalogo(
+      catalogoPrecos,
+      ['led', 'perfil'],
+      ['Iluminação', 'Ferragem'],
+    )
     const unitCostLed = perfilLedMat ? Number(perfilLedMat.preco_custo) || 85.0 : 85.0
     // Metragem estimada de LED baseada na largura do módulo (em metros lineares, mínimo 1m)
     const metrosLed = Math.max(1, Math.round((L / 1000) * 10) / 10)
@@ -1240,7 +1251,7 @@ export function calcularBOM(
       description: perfilLedMat
         ? `Kit Iluminação LED de Embutir + Fonte Slim (${metrosLed}m)`
         : `Kit Iluminação / Fita LED de Embutir + Fonte Slim (${metrosLed}m) — Estimado`,
-      material: 'Ferragem',
+      material: perfilLedMat?.categoria || 'Iluminação',
       metragem: metrosLed,
       unidade: 'm',
       unitCost: unitCostLed,

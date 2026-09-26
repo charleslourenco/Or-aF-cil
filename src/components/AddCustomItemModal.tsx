@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import { PlusCircle, AlertCircle } from 'lucide-react'
 import type { BudgetItem } from '@/data/mockData'
+import { CATEGORIAS_MATERIAL } from '@/services/catalogo'
 
 interface AddCustomItemModalProps {
   isOpen: boolean
@@ -26,17 +27,6 @@ interface AddCustomItemModalProps {
   markupEngenharia: number
   onAddItem: (item: BudgetItem) => void
 }
-
-const CATEGORIAS_AVULSO = [
-  'Ferragem',
-  'Fita de Borda',
-  'MDF',
-  'Serralheria',
-  'Iluminação',
-  'Pedra',
-  'Instalação',
-  'Outro',
-] as const
 
 const UNIDADES_AVULSO = ['m²', 'm', 'jogo', 'un'] as const
 
@@ -174,12 +164,12 @@ export const AddCustomItemModal: React.FC<AddCustomItemModalProps> = ({
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl">
-                  {CATEGORIAS_AVULSO.map((cat) => (
+                  {CATEGORIAS_MATERIAL.map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
                     </SelectItem>
                   ))}
-                </SelectContent>
+                </SelectContent>{' '}
               </Select>
             </div>
 

@@ -67,6 +67,14 @@ const CATEGORIA_BADGE: Record<string, string> = {
   'MDF 6mm': 'bg-purple-100 text-purple-700 border-purple-200',
   'Fita de Borda': 'bg-orange-100 text-orange-700 border-orange-200',
   Ferragem: 'bg-slate-700 text-white border-slate-700',
+  Iluminação: 'bg-amber-100 text-amber-800 border-amber-300',
+  'Componentes Elétricos': 'bg-sky-100 text-sky-800 border-sky-300',
+  'Parafusos e Sistemas de Fixação': 'bg-slate-100 text-slate-700 border-slate-300',
+  Acessórios: 'bg-purple-100 text-purple-800 border-purple-300',
+  'Serralheria Terceirizada': 'bg-teal-100 text-teal-800 border-teal-300',
+  'Estofaria Terceirizada': 'bg-rose-100 text-rose-800 border-rose-300',
+  Instalação: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  Outro: 'bg-zinc-100 text-zinc-700 border-zinc-300',
 }
 
 const formatCurrency = (val: number) =>
