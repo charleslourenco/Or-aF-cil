@@ -122,13 +122,7 @@ const OPCAO_FORMA_PAGAMENTO_OUTRA = '__outra__'
 const OPCOES_PREDEFINIDAS_FORMA_PAGAMENTO: string[] = [
   'À vista',
   'A combinar',
-  ...Array.from({ length: 20 }, (_, i) => {
-    const parcelas = i + 2
-    if (parcelas <= 5) {
-      return `No cartão de crédito em ${parcelas}x sem juros`
-    }
-    return `No cartão de crédito em ${parcelas}x com juros`
-  }),
+  'No cartão de crédito em até 21x com juros',
   'No boleto em até 10x',
   'No cheque em até 5x',
   'Financiamento bancário em até 36x',
