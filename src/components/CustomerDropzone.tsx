@@ -89,21 +89,16 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
     const incoming = Array.from(fileList)
     const valid: UploadedFileState[] = []
 
-    // Libera blobs antigos antes de substituir
-    uploadedFiles.forEach((f) => {
-      if (f.previewUrl && f.previewUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(f.previewUrl)
-      }
-    })
-
     for (const file of incoming) {
       const state = buildFileState(file)
       if (state) valid.push(state)
     }
 
     if (valid.length > 0) {
-      onFilesSelect(valid)
-      setActiveIndex(0)
+      // Acumula os novos arquivos mantendo os existentes, respeitando o limite máximo de 5 imagens
+      const combined = [...uploadedFiles, ...valid].slice(0, 5)
+      onFilesSelect(combined)
+      setActiveIndex(Math.max(0, combined.length - 1))
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }

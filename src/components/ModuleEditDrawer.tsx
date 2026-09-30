@@ -420,24 +420,27 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     if (uploadedFiles.length === 0) {
       toast({
         title: 'Selecione uma imagem',
-        description: 'Faça upload de uma foto ou croqui de um móvel antes de analisar.',
+        description: 'Faça upload de uma ou mais fotos do móvel antes de analisar.',
         variant: 'destructive',
       })
       return
     }
 
-    const primeiraImagem = uploadedFiles[0]
     setIsAnalyzingIA(true)
     setIsMatchConfirmed(false)
     setIaDetectedNotice(null)
 
     try {
-      const imagemBase64 = await fileStateToBase64(primeiraImagem)
+      // Converte todas as imagens para Base64 (máx ~5)
+      const imagensBase64 = await Promise.all(
+        uploadedFiles.slice(0, 5).map((fileState) => fileStateToBase64(fileState)),
+      )
 
       // Invoca a edge function analisar-imagem (que usa gpt-4o e a biblioteca real)
       const { data, error } = await supabase.functions.invoke('analisar-imagem', {
         body: {
-          imagemBase64,
+          imagensBase64,
+          imagemBase64: imagensBase64[0],
           modulos: templates,
           catalogoMateriais,
         },
@@ -977,10 +980,10 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
               {/* 2. Área de Upload de Imagem (Drag & Drop) */}
               <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
                 <CustomerDropzone
-                  uploadedFiles={uploadedFiles}
+                  uploadedFiles={uploadedFiles.slice(0, 5)}
                   onFilesSelect={(files) => {
-                    const singleOrEmpty = files && files.length > 0 ? [files[files.length - 1]] : []
-                    setUploadedFiles(singleOrEmpty)
+                    const limited = files ? files.slice(0, 5) : []
+                    setUploadedFiles(limited)
                     setIaDetectedNotice(null)
                     setIaIdentifiedTemplate(null)
                     setIsMatchConfirmed(false)

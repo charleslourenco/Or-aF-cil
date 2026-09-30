@@ -135,17 +135,34 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    const { imagemBase64, modulos, catalogoMateriais } = (await req.json()) as {
+    const { imagemBase64, imagensBase64, modulos, catalogoMateriais } = (await req.json()) as {
       imagemBase64?: string
+      imagensBase64?: string[]
       modulos?: ModuloInfo[]
       catalogoMateriais?: CatalogoMaterialInfo[]
     }
 
-    if (!imagemBase64) {
-      return new Response(JSON.stringify({ error: 'Parâmetro imagemBase64 é obrigatório.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    // Suporta tanto o array `imagensBase64` quanto o campo único `imagemBase64` (compatibilidade retroativa)
+    const listaImagens: string[] = []
+    if (Array.isArray(imagensBase64) && imagensBase64.length > 0) {
+      for (const img of imagensBase64) {
+        if (typeof img === 'string' && img.trim().length > 0) {
+          listaImagens.push(img)
+        }
+      }
+    }
+    if (listaImagens.length === 0 && imagemBase64 && typeof imagemBase64 === 'string') {
+      listaImagens.push(imagemBase64)
+    }
+
+    if (listaImagens.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'Parâmetro imagemBase64 ou imagensBase64 é obrigatório.' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const listaModulos = Array.isArray(modulos) ? modulos : []
@@ -197,6 +214,9 @@ ${listaCatalogoText}
    - PAINÉIS VERTICAIS / CABECEIRAS RASAS NUNCA CASAM COM CAIXARIAS PROFUNDAS (armários, balcões, caixas de 500-600mm).
    - MÓVEIS SUSPENSOS/AÉREOS NÃO CASAM COM MÓVEIS DE CHÃO COM RODAPÉ/SAPATAS.
    - BALCÕES COM TAMPO NÃO CASAM COM TORRES OU ROUPEIROS ALTOS.
+   - ILHA DE COZINHA / BANCADA CENTRAL / COOKTOP NUNCA CASA COM ROUPEIRO, ARMÁRIO ALTO OU MÓVEL DE CHÃO COM PORTAS ALTAS:
+     * Toda ilha de cozinha, bancada central de cozinha ou balcão de cooktop deve ser classificada com perfil_construcao_sugerido 'Balcão (tampo por conta do cliente)' ou 'MODULO-CUSTOM' com esse perfil.
+     * É TERMINANTEMENTE PROIBIDO associar uma ilha de cozinha a roupeiro, closet, armário de quarto ou armário alto.
    - Se a forma geométrica fundamental não for idêntica ou houver a MENOR dúvida sobre a compatibilidade formal, você DEVE OBRIGATORIAMENTE retornar "codigo_modulo": "MODULO-CUSTOM" e "confianca": "baixa".
 
 2. CITAÇÃO OBRIGATÓRIA DE TAGS VISUAIS E JUSTIFICATIVA:
@@ -222,7 +242,7 @@ ${listaCatalogoText}
 
 5. PERFIL CONSTRUTIVO SUGERIDO:
    - "Fechado Envelopado": armários, roupeiros, guarda-roupas fechados com caixaria dupla/tamponamento.
-   - "Balcão (tampo por conta do cliente)": balcões de pia, gabinetes inferiores de cozinha/banheiro onde o topo receberá tampo avulso (granito/madeira). NUNCA gere tampo automaticamente.
+   - "Balcão (tampo por conta do cliente)": ilha de cozinha, bancada central, balcão cooktop, balcões de pia, gabinetes inferiores de cozinha/banheiro onde o topo receberá tampo avulso (granito/madeira). NUNCA gere tampo automaticamente.
    - "Aberto / Painel": painéis de TV, painéis de cabeceira, racks abertos, estantes abertas, nichos sem tamponamento, sem base/teto internos nem rodateto.
    - "Caixa Simples": aéreos e caixas sem tamponamento externo.
 
@@ -280,6 +300,22 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
   "justificativa": "Resumo da análise do móvel"
 }`
 
+    const userContent: Array<
+      { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+    > = [
+      {
+        type: 'text',
+        text:
+          listaImagens.length > 1
+            ? 'Analise este móvel/módulo sob medida individual (um módulo por vez). As imagens mostram o mesmo módulo sob ângulos/detalhes diferentes — use todas como referência. Compare com a biblioteca de módulos cadastrada, determine dimensões estimadas, perfil construtivo e decomposição interna.'
+            : 'Analise este móvel/módulo sob medida individual (um módulo por vez). Compare com a biblioteca de módulos cadastrada, determine dimensões estimadas, perfil construtivo e decomposição interna.',
+      },
+      ...listaImagens.map((url) => ({
+        type: 'image_url' as const,
+        image_url: { url },
+      })),
+    ]
+
     const openAiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -292,16 +328,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
           { role: 'system', content: systemPrompt },
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Analise este móvel/módulo sob medida individual (um módulo por vez). Compare com a biblioteca de módulos cadastrada, determine dimensões estimadas, perfil construtivo e decomposição interna.',
-              },
-              {
-                type: 'image_url',
-                image_url: { url: imagemBase64 },
-              },
-            ],
+            content: userContent,
           },
         ],
         max_tokens: 1500,
@@ -435,10 +462,51 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         confianca = 'baixa'
       }
 
-      // Validação do perfil sugerido
+      // Dedução e validação do perfil sugerido
+      const textoDescricao =
+        `${nome} ${String(m.descricao || '')} ${String(m.adaptacoes || '')}`.toLowerCase()
+      const deduzirPerfilPorTexto = (txt: string): PerfilConstrucaoSugerido => {
+        if (
+          txt.includes('ilha') ||
+          txt.includes('bancada') ||
+          txt.includes('balcão') ||
+          txt.includes('balcao') ||
+          txt.includes('cooktop') ||
+          txt.includes('pia') ||
+          txt.includes('gabinete')
+        ) {
+          return 'Balcão (tampo por conta do cliente)'
+        }
+        if (
+          txt.includes('painel') ||
+          txt.includes('tv') ||
+          txt.includes('rack') ||
+          txt.includes('estante') ||
+          txt.includes('nicho') ||
+          txt.includes('cabeceira')
+        ) {
+          return 'Aberto / Painel'
+        }
+        if (txt.includes('aereo') || txt.includes('aéreo') || txt.includes('suspenso')) {
+          return 'Caixa Simples'
+        }
+        return 'Fechado Envelopado'
+      }
+
       let perfilSugerido: PerfilConstrucaoSugerido = 'Fechado Envelopado'
       const perfilRaw = String(m.perfil_construcao_sugerido || '').trim()
-      if (
+
+      // Regra de segurança: se o nome ou descrição indicar ilha/bancada/cooktop, nunca permitir roupeiro / fechado envelopado
+      const ehIlhaOuBalcao =
+        textoDescricao.includes('ilha') ||
+        textoDescricao.includes('cooktop') ||
+        textoDescricao.includes('bancada') ||
+        textoDescricao.includes('balcão') ||
+        textoDescricao.includes('balcao')
+
+      if (ehIlhaOuBalcao) {
+        perfilSugerido = 'Balcão (tampo por conta do cliente)'
+      } else if (
         perfilRaw === 'Fechado Envelopado' ||
         perfilRaw === 'Balcão (tampo por conta do cliente)' ||
         perfilRaw === 'Aberto / Painel' ||
@@ -446,24 +514,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
       ) {
         perfilSugerido = perfilRaw as PerfilConstrucaoSugerido
       } else {
-        const nomeLower = nome.toLowerCase()
-        if (
-          nomeLower.includes('painel') ||
-          nomeLower.includes('tv') ||
-          nomeLower.includes('rack') ||
-          nomeLower.includes('estante')
-        ) {
-          perfilSugerido = 'Aberto / Painel'
-        } else if (
-          nomeLower.includes('balcão') ||
-          nomeLower.includes('balcao') ||
-          nomeLower.includes('pia') ||
-          nomeLower.includes('bancada')
-        ) {
-          perfilSugerido = 'Balcão (tampo por conta do cliente)'
-        } else if (nomeLower.includes('aereo') || nomeLower.includes('aéreo')) {
-          perfilSugerido = 'Caixa Simples'
-        }
+        perfilSugerido = deduzirPerfilPorTexto(textoDescricao)
       }
 
       const matchJustificativa = m.match_justificativa ? String(m.match_justificativa) : undefined
@@ -515,15 +566,53 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         }),
       ]
     } else {
-      // Fallback sem módulos identificados: cria módulo personalizado, NUNCA força o primeiro da biblioteca
+      // Fallback sem módulos identificados: cria módulo personalizado, deduzindo o perfil do nome/descrição
+      const nomeFallback = String(
+        parsed?.nome_modulo || parsed?.nome || 'Módulo Personalizado (Análise IA)',
+      ).trim()
+      const descFallback = String(parsed?.justificativa || parsed?.descricao || '').toLowerCase()
+      const textoFallback = `${nomeFallback} ${descFallback}`.toLowerCase()
+
+      let perfilFallback: PerfilConstrucaoSugerido = 'Fechado Envelopado'
+      if (
+        textoFallback.includes('ilha') ||
+        textoFallback.includes('bancada') ||
+        textoFallback.includes('balcão') ||
+        textoFallback.includes('balcao') ||
+        textoFallback.includes('cooktop') ||
+        textoFallback.includes('pia') ||
+        textoFallback.includes('gabinete')
+      ) {
+        perfilFallback = 'Balcão (tampo por conta do cliente)'
+      } else if (
+        textoFallback.includes('painel') ||
+        textoFallback.includes('tv') ||
+        textoFallback.includes('rack') ||
+        textoFallback.includes('estante') ||
+        textoFallback.includes('nicho') ||
+        textoFallback.includes('cabeceira')
+      ) {
+        perfilFallback = 'Aberto / Painel'
+      } else if (
+        textoFallback.includes('aereo') ||
+        textoFallback.includes('aéreo') ||
+        textoFallback.includes('suspenso')
+      ) {
+        perfilFallback = 'Caixa Simples'
+      }
+
       modulosDetectados = [
         {
           codigo_modulo: 'MODULO-CUSTOM',
-          nome: 'Módulo Personalizado (Análise IA)',
+          nome: nomeFallback,
           e_customizado: true,
           confianca: 'baixa',
-          perfil_construcao_sugerido: 'Fechado Envelopado',
-          dimensao_estimada: { largura: 1800, altura: 2200, profundidade: 600 },
+          perfil_construcao_sugerido: perfilFallback,
+          dimensao_estimada: {
+            largura: perfilFallback === 'Balcão (tampo por conta do cliente)' ? 1200 : 1800,
+            altura: perfilFallback === 'Balcão (tampo por conta do cliente)' ? 850 : 2200,
+            profundidade: perfilFallback === 'Balcão (tampo por conta do cliente)' ? 600 : 600,
+          },
           fator_escala: 1.0,
           divisorias: { qtd: 0 },
           portas: { qtd: 0, tipo: 'nenhum' },
