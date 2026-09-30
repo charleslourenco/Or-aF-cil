@@ -14,6 +14,7 @@ import {
   Plus,
   PlusCircle,
   Trash2,
+  RotateCcw,
 } from 'lucide-react'
 import {
   Sheet,
@@ -73,6 +74,19 @@ import { AddFromCatalogModal } from '@/components/AddFromCatalogModal'
 import { AddCustomItemModal } from '@/components/AddCustomItemModal'
 import { ensureUniqueBudgetItemId } from '@/lib/budgetItemUtils'
 
+export interface ItemBOMOverride {
+  description?: string
+  metragem?: number
+  unitCost?: number
+  markup?: number
+}
+
+export interface AjustesBOMModulo {
+  markupModulo?: number
+  overrides?: Record<string, ItemBOMOverride>
+  removedIds?: string[]
+}
+
 export interface ModuloSalvoData {
   id?: string
   moduloId?: string
@@ -102,6 +116,7 @@ export interface ModuloSalvoData {
     iluminacaoLed?: boolean | null
   } | null
   itensBOM: OrcamentoBOMItem[]
+  ajustesBOM?: AjustesBOMModulo
 }
 
 interface ModuleEditDrawerProps {
@@ -163,6 +178,12 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   const [prateleirasCount, setPrateleirasCount] = useState<number>(1)
   const [cabideirosCount, setCabideirosCount] = useState<number>(0)
   const [iluminacaoLed, setIluminacaoLed] = useState<boolean>(false)
+
+  // Markup do módulo (permite sobrescrever o padrão da engenharia)
+  const [markupModuloInput, setMarkupModuloInput] = useState<string>('')
+  // Camada de ajustes sobre a BOM (overrides por id e ids removidos)
+  const [bomOverrides, setBomOverrides] = useState<Record<string, ItemBOMOverride>>({})
+  const [removedBomIds, setRemovedBomIds] = useState<string[]>([])
 
   // Itens manuais/avulsos ou do catálogo adicionados ao módulo (Ajuste 1)
   const [manualItems, setManualItems] = useState<BudgetItem[]>([])
@@ -304,6 +325,31 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         setCabideirosCount(initialCabideiros)
         setIluminacaoLed(initialLed)
 
+        // Restaura markup do módulo e camada de ajustes da BOM
+        const savedMarkupModulo = initialData.ajustesBOM?.markupModulo
+        if (typeof savedMarkupModulo === 'number' && savedMarkupModulo > 0) {
+          setMarkupModuloInput(savedMarkupModulo.toFixed(2))
+        } else {
+          // Fallback para o markup padrão da engenharia
+          const padrao =
+            configEngenharia?.markup_padrao && typeof configEngenharia.markup_padrao === 'number'
+              ? configEngenharia.markup_padrao
+              : MARKUP_PADRAO
+          setMarkupModuloInput(padrao.toFixed(2))
+        }
+
+        if (initialData.ajustesBOM?.overrides) {
+          setBomOverrides(initialData.ajustesBOM.overrides)
+        } else {
+          setBomOverrides({})
+        }
+
+        if (Array.isArray(initialData.ajustesBOM?.removedIds)) {
+          setRemovedBomIds(initialData.ajustesBOM.removedIds)
+        } else {
+          setRemovedBomIds([])
+        }
+
         // Carrega em manualItems os itens de initialData.itensBOM que sejam manuais/avulsos
         // (ID com prefixo manual-/catalog-/avulso- ou não gerados pela BOM paramétrica que usa prefixo bom-)
         if (initialData.itensBOM && Array.isArray(initialData.itensBOM)) {
@@ -349,6 +395,15 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         setCabideirosCount(0)
         setIluminacaoLed(false)
         setManualItems([])
+        setBomOverrides({})
+        setRemovedBomIds([])
+
+        // Inicia markup com o padrão da engenharia do banco (fallback MARKUP_PADRAO)
+        const padrao =
+          configEngenharia?.markup_padrao && typeof configEngenharia.markup_padrao === 'number'
+            ? configEngenharia.markup_padrao
+            : MARKUP_PADRAO
+        setMarkupModuloInput(padrao.toFixed(2))
       }
     }
   }, [open, initialData])
@@ -697,8 +752,8 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     perfilConstrutivo,
   ])
 
-  // Markup efetivo da engenharia financeira cadastrada no banco
-  const markupEfetivo = useMemo(() => {
+  // Markup padrão da engenharia financeira cadastrada no banco
+  const markupEngenhariaPadrao = useMemo(() => {
     if (
       configEngenharia?.markup_padrao &&
       typeof configEngenharia.markup_padrao === 'number' &&
@@ -708,6 +763,18 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     }
     return MARKUP_PADRAO
   }, [configEngenharia])
+
+  // Markup efetivo do módulo (sobrescrevível pelo marceneiro)
+  const markupModuloEfetivo = useMemo(() => {
+    const parsed = parseFloat(markupModuloInput.replace(',', '.'))
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      return parsed
+    }
+    return markupEngenhariaPadrao
+  }, [markupModuloInput, markupEngenhariaPadrao])
+
+  // Alias para manter compatibilidade com modais de inclusão manual
+  const markupEfetivo = markupModuloEfetivo
 
   // Fator de perda de material configurado (default 20%)
   const fatorPerdaMaterial = useMemo(() => {
@@ -720,7 +787,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     return 20.0
   }, [configEngenharia])
 
-  // Cálculo da lista técnica interna (Aba 3: Engenharia & Peças)
+  // Cálculo da lista técnica interna (Aba 3: Engenharia & Peças) - Base geométrica do motor
   const pecasBOM = useMemo(() => {
     if (!dimensoes.largura || !dimensoes.altura || !dimensoes.profundidade) return []
     const moduloPayload = {
@@ -750,7 +817,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       mdfFundo,
       padraoProjeto,
       catalogoEfetivo,
-      markupEfetivo,
+      markupModuloEfetivo,
       1.0,
       composicao,
     )
@@ -764,7 +831,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     mdfFundo,
     padraoProjeto,
     catalogoMateriais,
-    markupEfetivo,
+    markupModuloEfetivo,
     portasCount,
     gavetasCount,
     prateleirasCount,
@@ -772,10 +839,39 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     iluminacaoLed,
   ])
 
-  // Lista consolidada de peças técnicas e itens manuais (Aba 3)
+  // Lista consolidada de peças técnicas e itens manuais com aplicação da camada de ajustes (Aba 3)
   const listaConsolidadaBOM = useMemo(() => {
-    return [...pecasBOM, ...manualItems]
-  }, [pecasBOM, manualItems])
+    const rawList = [...pecasBOM, ...manualItems]
+    const removedSet = new Set(removedBomIds)
+
+    return rawList
+      .filter((item) => !removedSet.has(item.id))
+      .map((item) => {
+        const override = bomOverrides[item.id]
+        const description =
+          override?.description !== undefined ? override.description : item.description
+        const metragem = override?.metragem !== undefined ? override.metragem : (item.metragem ?? 1)
+        const unitCost = override?.unitCost !== undefined ? override.unitCost : (item.unitCost ?? 0)
+        const markup =
+          override?.markup !== undefined
+            ? override.markup
+            : typeof item.markup === 'number' && item.markup > 0
+              ? item.markup
+              : markupModuloEfetivo
+        const totalCost = Math.round(metragem * unitCost * 100) / 100
+        const salePrice = Math.round(totalCost * markup * 100) / 100
+
+        return {
+          ...item,
+          description,
+          metragem,
+          unitCost,
+          totalCost,
+          markup,
+          salePrice,
+        }
+      })
+  }, [pecasBOM, manualItems, removedBomIds, bomOverrides, markupModuloEfetivo])
 
   // Custo técnico consolidado e valor de venda consolidado somando a lista inteira
   const totalCustoTecnico = useMemo(() => {
@@ -799,13 +895,146 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     })
   }
 
-  const handleRemoveManualItem = (itemId: string) => {
-    setManualItems((prev) => prev.filter((it) => it.id !== itemId))
+  // Remoção de qualquer linha da lista consolidada (gerada pelo motor ou manual)
+  const handleRemoveItemBOM = (item: BudgetItem) => {
+    const isManual = manualItems.some((m) => m.id === item.id)
+    if (isManual) {
+      setManualItems((prev) => prev.filter((it) => it.id !== item.id))
+    } else {
+      setRemovedBomIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]))
+    }
+    // Remove também override se existir
+    setBomOverrides((prev) => {
+      if (!prev[item.id]) return prev
+      const next = { ...prev }
+      delete next[item.id]
+      return next
+    })
+    toast({
+      title: 'Item removido',
+      description: `"${item.description}" foi removido do cálculo do módulo.`,
+    })
   }
 
-  // Verifica se um item é manual (para permitir remoção via lixeira)
-  const isItemManual = (peca: BudgetItem) => {
-    return manualItems.some((m) => m.id === peca.id)
+  // Restaura todas as peças geradas pelo motor que foram removidas ou editadas
+  const handleResetAjustesBOM = () => {
+    setRemovedBomIds([])
+    setBomOverrides({})
+    const padrao =
+      configEngenharia?.markup_padrao && typeof configEngenharia.markup_padrao === 'number'
+        ? configEngenharia.markup_padrao
+        : MARKUP_PADRAO
+    setMarkupModuloInput(padrao.toFixed(2))
+    toast({
+      title: 'Engenharia redefinida',
+      description: 'Peças do motor e markup foram restaurados para a configuração padrão.',
+    })
+  }
+
+  // Edição inline de descrição de uma linha
+  const handleUpdateItemDescription = (itemId: string, newDesc: string) => {
+    if (manualItems.some((m) => m.id === itemId)) {
+      setManualItems((prev) =>
+        prev.map((it) => (it.id === itemId ? { ...it, description: newDesc } : it)),
+      )
+    } else {
+      setBomOverrides((prev) => ({
+        ...prev,
+        [itemId]: {
+          ...prev[itemId],
+          description: newDesc,
+        },
+      }))
+    }
+  }
+
+  // Edição inline de metragem / quantidade de uma linha
+  const handleUpdateItemMetragem = (itemId: string, newMetragemVal: number) => {
+    const metragem = Math.max(0, Number.isNaN(newMetragemVal) ? 0 : newMetragemVal)
+    if (manualItems.some((m) => m.id === itemId)) {
+      setManualItems((prev) =>
+        prev.map((it) => {
+          if (it.id !== itemId) return it
+          const unitCost = it.unitCost || 0
+          const markup =
+            typeof it.markup === 'number' && it.markup > 0 ? it.markup : markupModuloEfetivo
+          const totalCost = Math.round(metragem * unitCost * 100) / 100
+          const salePrice = Math.round(totalCost * markup * 100) / 100
+          return {
+            ...it,
+            metragem,
+            totalCost,
+            salePrice,
+          }
+        }),
+      )
+    } else {
+      setBomOverrides((prev) => ({
+        ...prev,
+        [itemId]: {
+          ...prev[itemId],
+          metragem,
+        },
+      }))
+    }
+  }
+
+  // Edição inline de custo unitário de uma linha
+  const handleUpdateItemUnitCost = (itemId: string, newUnitCostVal: number) => {
+    const unitCost = Math.max(0, Number.isNaN(newUnitCostVal) ? 0 : newUnitCostVal)
+    if (manualItems.some((m) => m.id === itemId)) {
+      setManualItems((prev) =>
+        prev.map((it) => {
+          if (it.id !== itemId) return it
+          const metragem = it.metragem || 1
+          const markup =
+            typeof it.markup === 'number' && it.markup > 0 ? it.markup : markupModuloEfetivo
+          const totalCost = Math.round(metragem * unitCost * 100) / 100
+          const salePrice = Math.round(totalCost * markup * 100) / 100
+          return {
+            ...it,
+            unitCost,
+            totalCost,
+            salePrice,
+          }
+        }),
+      )
+    } else {
+      setBomOverrides((prev) => ({
+        ...prev,
+        [itemId]: {
+          ...prev[itemId],
+          unitCost,
+        },
+      }))
+    }
+  }
+
+  // Edição inline de markup de uma linha
+  const handleUpdateItemMarkup = (itemId: string, newMarkupVal: number) => {
+    const markup = Math.max(0.01, Number.isNaN(newMarkupVal) ? markupModuloEfetivo : newMarkupVal)
+    if (manualItems.some((m) => m.id === itemId)) {
+      setManualItems((prev) =>
+        prev.map((it) => {
+          if (it.id !== itemId) return it
+          const totalCost = it.totalCost || 0
+          const salePrice = Math.round(totalCost * markup * 100) / 100
+          return {
+            ...it,
+            markup,
+            salePrice,
+          }
+        }),
+      )
+    } else {
+      setBomOverrides((prev) => ({
+        ...prev,
+        [itemId]: {
+          ...prev[itemId],
+          markup,
+        },
+      }))
+    }
   }
 
   // Salvar no Ambiente
@@ -864,6 +1093,13 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
 
     const descManualLimpa = descricaoManual.trim()
 
+    // Ajustes persistidos junto ao módulo (payload jsonb e draft)
+    const ajustesBOMPayload: AjustesBOMModulo = {
+      markupModulo: markupModuloEfetivo,
+      overrides: Object.keys(bomOverrides).length > 0 ? bomOverrides : undefined,
+      removedIds: removedBomIds.length > 0 ? removedBomIds : undefined,
+    }
+
     onSaveModulo({
       moduloId: selectedTemplateId || undefined,
       nome: nomeLimpo,
@@ -885,6 +1121,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       iluminacaoLed,
       composicao: composicaoSalva,
       itensBOM: todosItensConvertidos,
+      ajustesBOM: ajustesBOMPayload,
     })
 
     onOpenChange(false)
@@ -1714,46 +1951,141 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
               value="engenharia-pecas"
               className="mt-0 space-y-4 focus-visible:outline-none"
             >
-              {/* Banner informativo de uso exclusivamente técnico/interno */}
-              <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs text-amber-900 dark:text-amber-200 flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5">
-                  <Settings2 className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                  <div className="leading-relaxed">
-                    <strong>Engenharia Financeira & Decomposição:</strong> Cálculo em tempo real via
-                    motor <code>calcularBOM</code> com perda de material de {fatorPerdaMaterial}% e
-                    markup efetivo de {markupEfetivo.toFixed(2)}x (configurações do banco).
+              {/* Banner informativo de uso técnico com controle do Markup do Módulo */}
+              <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <Settings2 className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <span>Engenharia & Decomposição de Peças</span>
+                        <Badge
+                          variant="outline"
+                          className="border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold text-[10px]"
+                        >
+                          Perda: {fatorPerdaMaterial}%
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Edição total linha por linha. O motor <code>calcularBOM</code> gera a base e
+                        suas alterações manuais são salvas junto ao módulo.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Campo editável: Markup do Módulo */}
+                  <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 shrink-0">
+                    <Label
+                      htmlFor="markupModuloGeralInput"
+                      className="text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap"
+                    >
+                      Markup do Módulo:
+                    </Label>
+                    <div className="relative flex items-center">
+                      <Input
+                        id="markupModuloGeralInput"
+                        type="number"
+                        step="0.05"
+                        min="0.1"
+                        max="20"
+                        value={markupModuloInput}
+                        onChange={(e) => setMarkupModuloInput(e.target.value)}
+                        placeholder={markupEngenhariaPadrao.toFixed(2)}
+                        className="h-8 w-24 text-xs font-bold font-mono pr-6 text-center rounded-lg bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                      />
+                      <span className="absolute right-2 text-xs font-bold text-slate-400 pointer-events-none">
+                        ×
+                      </span>
+                    </div>
+                    {(removedBomIds.length > 0 ||
+                      Object.keys(bomOverrides).length > 0 ||
+                      markupModuloInput !== markupEngenhariaPadrao.toFixed(2)) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleResetAjustesBOM}
+                        className="h-8 px-2 text-[11px] text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 rounded-lg gap-1"
+                        title="Restaurar peças originais do motor e markup padrão da engenharia"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Restaurar</span>
+                      </Button>
+                    )}
                   </div>
                 </div>
-                <Badge
-                  variant="outline"
-                  className="border-amber-400 text-amber-900 dark:text-amber-200 font-bold text-[10px] shrink-0"
-                >
-                  {listaConsolidadaBOM.length} {listaConsolidadaBOM.length === 1 ? 'item' : 'itens'}
-                </Badge>
+
+                {/* Status da lista com contador de itens ativos e modificações */}
+                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      {listaConsolidadaBOM.length}{' '}
+                      {listaConsolidadaBOM.length === 1 ? 'item ativo' : 'itens ativos'}
+                    </span>
+                    {removedBomIds.length > 0 && (
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] px-1.5 py-0 border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                      >
+                        {removedBomIds.length} excluído(s)
+                      </Badge>
+                    )}
+                    {Object.keys(bomOverrides).length > 0 && (
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] px-1.5 py-0 border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                      >
+                        {Object.keys(bomOverrides).length} editado(s)
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsCatalogModalOpen(true)}
+                      className="h-7 px-2.5 text-[11px] font-semibold rounded-lg border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 gap-1"
+                    >
+                      <Package className="w-3 h-3 text-slate-600 dark:text-slate-400" />
+                      <span>+ Item Catálogo</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsCustomModalOpen(true)}
+                      className="h-7 px-2.5 text-[11px] font-semibold rounded-lg border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 gap-1"
+                    >
+                      <PlusCircle className="w-3 h-3 text-slate-600 dark:text-slate-400" />
+                      <span>+ Item Avulso</span>
+                    </Button>
+                  </div>
+                </div>
               </div>
 
-              {/* Tabela Detalhada de Engenharia (Decomposição do Móvel + Itens Manuais) */}
+              {/* Tabela Detalhada de Engenharia com Edição Total Linha por Linha */}
               <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
-                <div className="max-h-80 overflow-y-auto">
+                <div className="max-h-96 overflow-y-auto">
                   <Table>
                     <TableHeader className="sticky top-0 bg-slate-50 dark:bg-slate-950 z-10">
                       <TableRow className="border-b border-slate-200 dark:border-slate-800 hover:bg-transparent">
-                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                          Descrição da Peça
+                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 min-w-[220px]">
+                          Descrição da Peça / Insumo
                         </TableHead>
-                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-center whitespace-nowrap">
-                          Metragem/Qtd
+                        <TableHead className="py-2.5 px-2 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-center min-w-[110px]">
+                          Metragem / Qtd
                         </TableHead>
-                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap">
-                          Custo Unitário
+                        <TableHead className="py-2.5 px-2 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-center min-w-[110px]">
+                          Custo Unit. (R$)
                         </TableHead>
-                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap">
+                        <TableHead className="py-2.5 px-2 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap min-w-[90px]">
                           Custo Total
                         </TableHead>
-                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-center whitespace-nowrap">
+                        <TableHead className="py-2.5 px-2 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-center min-w-[95px]">
                           Markup
                         </TableHead>
-                        <TableHead className="py-2.5 px-3 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap">
+                        <TableHead className="py-2.5 px-2 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-right whitespace-nowrap min-w-[100px]">
                           Valor de Venda
                         </TableHead>
                         <TableHead className="py-2.5 px-2 text-[11px] font-bold text-slate-700 dark:text-slate-300 text-center w-10">
@@ -1768,82 +2100,148 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                             colSpan={7}
                             className="py-8 text-center text-xs text-slate-400"
                           >
-                            Nenhuma peça gerada. Verifique as dimensões na Aba 2.
+                            Nenhuma peça na lista. Adicione itens acima ou redefina a engenharia.
                           </TableCell>
                         </TableRow>
                       ) : (
                         listaConsolidadaBOM.map((peca) => {
-                          const manual = isItemManual(peca)
-                          const metragemFormatada =
-                            typeof peca.metragem === 'number'
-                              ? peca.unidade === 'm²' || peca.unidade === 'm'
-                                ? `${peca.metragem.toLocaleString('pt-BR', {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })} ${peca.unidade}`
-                                : `${peca.metragem} ${peca.unidade || 'un'}`
-                              : '-'
+                          const manual = manualItems.some((m) => m.id === peca.id)
+                          const hasOverride = !manual && !!bomOverrides[peca.id]
+                          const unidade = peca.unidade || 'un'
+                          const stepMetragem =
+                            unidade === 'm²' || unidade === 'm' || unidade === 'kg' ? '0.01' : '1'
 
                           return (
                             <TableRow
                               key={peca.id}
                               className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
                             >
-                              <TableCell className="py-2.5 px-3 text-xs font-medium text-slate-800 dark:text-slate-200">
-                                <div className="space-y-0.5">
+                              {/* Descrição da Peça (Editável inline) */}
+                              <TableCell className="py-2 px-3 text-xs font-medium text-slate-800 dark:text-slate-200">
+                                <div className="space-y-1">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span>{peca.description}</span>
+                                    <Input
+                                      value={peca.description}
+                                      onChange={(e) =>
+                                        handleUpdateItemDescription(peca.id, e.target.value)
+                                      }
+                                      className="h-7 text-xs font-medium rounded-md bg-transparent hover:bg-white dark:hover:bg-slate-950 focus:bg-white dark:focus:bg-slate-950 border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-slate-500 px-1.5"
+                                    />
                                     {manual && (
                                       <Badge
                                         variant="outline"
-                                        className="text-[9px] px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 font-semibold"
+                                        className="text-[9px] px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 font-semibold shrink-0"
                                       >
                                         Manual
                                       </Badge>
                                     )}
+                                    {hasOverride && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[9px] px-1.5 py-0 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 font-semibold shrink-0"
+                                      >
+                                        Ajustado
+                                      </Badge>
+                                    )}
                                   </div>
                                   {peca.material && (
-                                    <span className="block text-[10px] text-slate-400 font-normal">
+                                    <span className="block text-[10px] text-slate-400 font-normal px-1.5">
                                       {peca.material}
                                     </span>
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell className="py-2.5 px-3 text-xs text-center font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                                {metragemFormatada}
+
+                              {/* Metragem / Quantidade (Editável inline) */}
+                              <TableCell className="py-2 px-2 text-xs text-center font-mono">
+                                <div className="inline-flex items-center gap-1">
+                                  <Input
+                                    type="number"
+                                    step={stepMetragem}
+                                    min="0"
+                                    value={peca.metragem ?? 0}
+                                    onChange={(e) =>
+                                      handleUpdateItemMetragem(
+                                        peca.id,
+                                        parseFloat(e.target.value.replace(',', '.')),
+                                      )
+                                    }
+                                    className="h-7 w-20 text-xs font-mono text-center rounded-md bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 px-1"
+                                  />
+                                  <span className="text-[11px] text-slate-400 font-sans whitespace-nowrap">
+                                    {unidade}
+                                  </span>
+                                </div>
                               </TableCell>
-                              <TableCell className="py-2.5 px-3 text-xs text-right font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                                {formatCurrency(peca.unitCost || 0)}
+
+                              {/* Custo Unitário (Editável inline) */}
+                              <TableCell className="py-2 px-2 text-xs text-center font-mono">
+                                <div className="inline-flex items-center gap-1">
+                                  <span className="text-[11px] text-slate-400 font-sans">R$</span>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={peca.unitCost ?? 0}
+                                    onChange={(e) =>
+                                      handleUpdateItemUnitCost(
+                                        peca.id,
+                                        parseFloat(e.target.value.replace(',', '.')),
+                                      )
+                                    }
+                                    className="h-7 w-20 text-xs font-mono text-right rounded-md bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 px-1"
+                                  />
+                                </div>
                               </TableCell>
-                              <TableCell className="py-2.5 px-3 text-xs text-right font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+
+                              {/* Custo Total (Recalculado = qtd × custo unitário) */}
+                              <TableCell className="py-2 px-2 text-xs text-right font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
                                 {formatCurrency(peca.totalCost || 0)}
                               </TableCell>
-                              <TableCell className="py-2.5 px-3 text-xs text-center font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                                {typeof peca.markup === 'number'
-                                  ? `${peca.markup.toFixed(2)}x`
-                                  : '-'}
+
+                              {/* Markup (Editável inline linha por linha) */}
+                              <TableCell className="py-2 px-2 text-xs text-center font-mono">
+                                <div className="inline-flex items-center gap-0.5 justify-center">
+                                  <Input
+                                    type="number"
+                                    step="0.05"
+                                    min="0.1"
+                                    max="20"
+                                    value={
+                                      typeof peca.markup === 'number'
+                                        ? peca.markup
+                                        : markupModuloEfetivo
+                                    }
+                                    onChange={(e) =>
+                                      handleUpdateItemMarkup(
+                                        peca.id,
+                                        parseFloat(e.target.value.replace(',', '.')),
+                                      )
+                                    }
+                                    className="h-7 w-16 text-xs font-mono text-center rounded-md bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 px-1"
+                                  />
+                                  <span className="text-[11px] text-slate-400 font-sans">×</span>
+                                </div>
                               </TableCell>
-                              <TableCell className="py-2.5 px-3 text-xs text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+
+                              {/* Valor de Venda da Linha (Recalculado = totalCost × markup) */}
+                              <TableCell className="py-2 px-2 text-xs text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                                 {formatCurrency(peca.salePrice || 0)}
                               </TableCell>
-                              <TableCell className="py-2.5 px-2 text-center">
-                                {manual ? (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRemoveManualItem(peca.id)}
-                                    className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg"
-                                    title="Remover item manual"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span className="sr-only">Remover</span>
-                                  </Button>
-                                ) : (
-                                  <span className="text-slate-300 dark:text-slate-700 text-xs">
-                                    —
-                                  </span>
-                                )}
+
+                              {/* Lixeira em TODAS as linhas (peças geradas e manuais) */}
+                              <TableCell className="py-2 px-2 text-center">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveItemBOM(peca)}
+                                  className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg"
+                                  title={`Remover "${peca.description}"`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span className="sr-only">Remover</span>
+                                </Button>
                               </TableCell>
                             </TableRow>
                           )

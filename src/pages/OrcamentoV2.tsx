@@ -51,7 +51,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { ModuleEditDrawer, ModuloSalvoData } from '@/components/ModuleEditDrawer'
+import { ModuleEditDrawer, ModuloSalvoData, AjustesBOMModulo } from '@/components/ModuleEditDrawer'
 import {
   createOrcamento,
   updateOrcamento,
@@ -101,6 +101,7 @@ export interface ModuloComercialV2 {
     iluminacaoLed?: boolean | null
   } | null
   itensBOM?: OrcamentoBOMItem[]
+  ajustesBOM?: AjustesBOMModulo
 }
 
 export interface AmbienteV2 {
@@ -320,6 +321,7 @@ export default function OrcamentoV2() {
                       mdfInterno: m.mdf_interno || orc.mdf_interno || null,
                       composicao: m.composicao || null,
                       itensBOM: m.itens || [],
+                      ajustesBOM: (m as any).ajustes_bom || (m as any).ajustesBOM || undefined,
                     }))
                   : [],
               }))
@@ -845,6 +847,7 @@ export default function OrcamentoV2() {
       mdfFundo: 'MDF 6mm Branco TX',
       composicao: mod.composicao || null,
       itensBOM: mod.itensBOM || [],
+      ajustesBOM: mod.ajustesBOM,
     }
     setEditingModuloData(dataToEdit)
     setIsDrawerOpen(true)
@@ -890,6 +893,7 @@ export default function OrcamentoV2() {
                 mdfInterno: moduloData.mdfInterno,
                 composicao: moduloData.composicao || null,
                 itensBOM: moduloData.itensBOM,
+                ajustesBOM: moduloData.ajustesBOM,
               }
             }),
           }
@@ -912,6 +916,7 @@ export default function OrcamentoV2() {
         mdfInterno: moduloData.mdfInterno,
         composicao: moduloData.composicao || null,
         itensBOM: moduloData.itensBOM,
+        ajustesBOM: moduloData.ajustesBOM,
       }
 
       setAmbientes((prev) =>
@@ -997,7 +1002,8 @@ export default function OrcamentoV2() {
                 }
               : undefined,
             itens: mod.itensBOM || [],
-          }
+            ajustes_bom: mod.ajustesBOM,
+          } as any
         })
 
         const subtotal = amb.modulos.reduce((acc, m) => acc + (Number(m.valorTotal) || 0), 0)
