@@ -17,13 +17,13 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from '@/components/ui/sheet'
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -1128,30 +1128,27 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-2xl lg:max-w-3xl p-0 flex flex-col h-full bg-slate-50 dark:bg-slate-950 border-l border-slate-200 dark:border-slate-800 shadow-2xl"
-      >
-        {/* Cabeçalho do Painel Lateral */}
-        <SheetHeader className="px-6 py-4 border-b border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-left shrink-0">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[96vw] max-w-6xl h-[90vh] max-h-[90vh] p-0 flex flex-col gap-0 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl overflow-hidden">
+        {/* Cabeçalho do Modal Centralizado */}
+        <DialogHeader className="px-6 py-4 border-b border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-left shrink-0">
           <div className="flex items-center gap-2 pr-8">
             <div className="w-8 h-8 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
               <Box className="w-4 h-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <SheetTitle className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
+              <DialogTitle className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
                 Configurar Módulo — {ambienteNome || 'Ambiente'}
-              </SheetTitle>
-              <SheetDescription className="text-xs text-slate-500 dark:text-slate-400 truncate">
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500 dark:text-slate-400 truncate">
                 Defina foto/IA, dimensões, materiais e confira a engenharia deste móvel
-              </SheetDescription>
+              </DialogDescription>
             </div>
           </div>
-        </SheetHeader>
+        </DialogHeader>
 
         {/* Corpo com seletor de 3 Abas */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
           <Tabs
             value={activeTab}
             onValueChange={(val) => setActiveTab(val as typeof activeTab)}
@@ -2042,22 +2039,20 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
-                      variant="outline"
                       size="sm"
                       onClick={() => setIsCatalogModalOpen(true)}
-                      className="h-7 px-2.5 text-[11px] font-semibold rounded-lg border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 gap-1"
+                      className="h-8 px-3 text-xs font-bold rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 gap-1.5 shadow-xs transition-all"
                     >
-                      <Package className="w-3 h-3 text-slate-600 dark:text-slate-400" />
+                      <Package className="w-3.5 h-3.5 text-amber-400 dark:text-amber-600" />
                       <span>+ Item Catálogo</span>
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
                       size="sm"
                       onClick={() => setIsCustomModalOpen(true)}
-                      className="h-7 px-2.5 text-[11px] font-semibold rounded-lg border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 gap-1"
+                      className="h-8 px-3 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-600 dark:hover:bg-blue-700 gap-1.5 shadow-xs transition-all"
                     >
-                      <PlusCircle className="w-3 h-3 text-slate-600 dark:text-slate-400" />
+                      <PlusCircle className="w-3.5 h-3.5" />
                       <span>+ Item Avulso</span>
                     </Button>
                   </div>
@@ -2247,6 +2242,41 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                           )
                         })
                       )}
+
+                      {/* Linha final para adição direta na lista técnica */}
+                      <TableRow className="bg-slate-50/80 dark:bg-slate-950/60 border-t-2 border-dashed border-slate-200 dark:border-slate-800 hover:bg-slate-100/60 dark:hover:bg-slate-900/60 transition-colors">
+                        <TableCell colSpan={7} className="py-3 px-4">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                              <span className="text-slate-400 font-mono text-sm">＋</span>
+                              <span>Adicionar item na lista técnica:</span>
+                              <span className="text-[11px] text-slate-400 font-normal hidden md:inline">
+                                (entra como linha editável de engenharia e custo)
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setIsCatalogModalOpen(true)}
+                                className="h-8 px-3 text-xs font-bold rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 gap-1.5 shadow-xs"
+                              >
+                                <Package className="w-3.5 h-3.5 text-amber-400 dark:text-amber-600" />
+                                <span>+ Item Catálogo</span>
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setIsCustomModalOpen(true)}
+                                className="h-8 px-3 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-600 dark:hover:bg-blue-700 gap-1.5 shadow-xs"
+                              >
+                                <PlusCircle className="w-3.5 h-3.5" />
+                                <span>+ Item Avulso</span>
+                              </Button>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     </TableBody>
                   </Table>
                 </div>
@@ -2315,7 +2345,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         />
 
         {/* Rodapé fixo com o botão pedido: 'Salvar Módulo no Ambiente' */}
-        <SheetFooter className="px-6 py-4 border-t border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <DialogFooter className="px-6 py-4 border-t border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3 sm:space-x-0">
           <div className="flex items-center gap-2 text-xs text-slate-500 w-full sm:w-auto justify-between sm:justify-start">
             <span>
               Qtd:{' '}
@@ -2352,8 +2382,8 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
               <span>Salvar Módulo no Ambiente</span>
             </Button>
           </div>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -49,7 +49,9 @@ export const AddFromCatalogModal: React.FC<AddFromCatalogModalProps> = ({
     }).format(val)
 
   const handleQuantityChange = (id: string, value: string) => {
-    const num = Math.max(1, Number(value) || 1)
+    const normalized = value.replace(',', '.')
+    const parsed = parseFloat(normalized)
+    const num = isNaN(parsed) || parsed <= 0 ? 0 : parsed
     setQuantities((prev) => ({ ...prev, [id]: num }))
   }
 
@@ -170,10 +172,11 @@ export const AddFromCatalogModal: React.FC<AddFromCatalogModalProps> = ({
                       <Input
                         id={`qty-${mat.id}`}
                         type="number"
-                        min={1}
+                        step="any"
+                        min="0.01"
                         value={currentQty}
                         onChange={(e) => handleQuantityChange(mat.id, e.target.value)}
-                        className="w-16 h-9 rounded-lg text-xs font-mono font-bold text-center border-slate-300"
+                        className="w-20 h-9 rounded-lg text-xs font-mono font-bold text-center border-slate-300"
                       />
                     </div>
 
