@@ -132,6 +132,8 @@ function parseMdfSpec(mdf?: string | { cor?: string; espessura?: number } | null
     const rawCor = (mdf.cor || '').trim()
     const espessura = mdf.espessura ? `${mdf.espessura}mm` : ''
     const cor = rawCor
+      .replace(/\s*\(\d+\s*mm\)/gi, '')
+      .replace(/\s+\d+\s*mm/gi, '')
       .replace(/^mdf\s*\d*\s*mm\s*/i, '')
       .replace(/^mdf\s+/i, '')
       .trim()
@@ -253,7 +255,8 @@ export function montarDescricaoNaturalModulo({
   // Montagem natural
   let desc = tipoMovel
   if (ext.cor) {
-    desc += ` em MDF cor ${ext.cor}${ext.espessura ? ` (${ext.espessura})` : ''}`
+    const specExt = ext.espessura ? `${ext.espessura} ${ext.cor}` : ext.cor
+    desc += ` em MDF ${specExt}`
   }
 
   // Se mdfInterno presente e diferente, append
@@ -263,7 +266,8 @@ export function montarDescricaoNaturalModulo({
       (int.espessura && ext.espessura && int.espessura !== ext.espessura))
 
   if (int.cor && isInternalDifferent) {
-    desc += ` (interno em MDF cor ${int.cor}${int.espessura ? ` (${int.espessura})` : ''})`
+    const specInt = int.espessura ? `${int.espessura} ${int.cor}` : int.cor
+    desc += ` (interno em MDF ${specInt})`
   }
 
   if (itensComposicao.length > 0) {

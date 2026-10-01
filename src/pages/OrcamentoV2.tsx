@@ -538,13 +538,6 @@ export default function OrcamentoV2() {
     navigate('/orcamentos')
   }
 
-  const handleExportarPdf = () => {
-    toast({
-      title: 'Exportar PDF',
-      description: 'A exportação de PDF estará disponível nas próximas etapas.',
-    })
-  }
-
   // Criação de novo ambiente
   const handleAddAmbiente = (nomeEscolhido: string) => {
     const nomeLimpo = nomeEscolhido.trim()
@@ -1293,7 +1286,7 @@ export default function OrcamentoV2() {
   return (
     <TooltipProvider delayDuration={150}>
       <div className="relative min-h-[calc(100vh-10rem)] pb-28 space-y-6">
-        {/* 1. Cabeçalho principal com nome do sistema, botão Voltar e botão Exportar PDF */}
+        {/* 1. Cabeçalho principal com nome do sistema, botão Voltar e ações */}
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-3">
             <Button
@@ -1338,16 +1331,6 @@ export default function OrcamentoV2() {
             >
               <Plus className="w-4 h-4 text-slate-500 dark:text-slate-400" />
               <span>Novo</span>
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleExportarPdf}
-              className="h-9 px-4 gap-2 text-xs font-semibold border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl shadow-xs"
-            >
-              <FileDown className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-              <span>Exportar PDF</span>
             </Button>
 
             <Button
