@@ -26,6 +26,8 @@ interface CustomerDropzoneProps {
   onFilesSelect: (files: UploadedFileState[] | null) => void
   error?: string | null
   onClearError?: () => void
+  multiple?: boolean
+  maxFiles?: number
 }
 
 const PERSPECTIVE_LABELS = [
@@ -41,6 +43,8 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
   onFilesSelect,
   error,
   onClearError,
+  multiple = true,
+  maxFiles = 5,
 }) => {
   const [isDragOver, setIsDragOver] = useState(false)
   const [internalError, setInternalError] = useState<string | null>(null)
@@ -95,10 +99,15 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
     }
 
     if (valid.length > 0) {
-      // Acumula os novos arquivos mantendo os existentes, respeitando o limite máximo de 5 imagens
-      const combined = [...uploadedFiles, ...valid].slice(0, 5)
-      onFilesSelect(combined)
-      setActiveIndex(Math.max(0, combined.length - 1))
+      if (!multiple) {
+        onFilesSelect([valid[0]])
+        setActiveIndex(0)
+      } else {
+        // Acumula os novos arquivos mantendo os existentes, respeitando o limite maxFiles (padrão 5)
+        const combined = [...uploadedFiles, ...valid].slice(0, maxFiles)
+        onFilesSelect(combined)
+        setActiveIndex(Math.max(0, combined.length - 1))
+      }
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
@@ -203,12 +212,12 @@ export const CustomerDropzone: React.FC<CustomerDropzoneProps> = ({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Hidden native input — agora aceita múltiplos arquivos */}
+      {/* Hidden native input — aceita múltiplos arquivos quando multiple = true */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
-        multiple
+        multiple={multiple}
         className="hidden"
         onChange={handleFileInputChange}
       />
