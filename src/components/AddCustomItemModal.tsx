@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,12 @@ import {
 } from '@/components/ui/select'
 import { PlusCircle, AlertCircle } from 'lucide-react'
 import type { BudgetItem } from '@/data/mockData'
-import { CATEGORIAS_MATERIAL } from '@/services/catalogo'
+import {
+  listarCategoriasPersonalizadas,
+  getListaCombinadaCategorias,
+  type CategoriaPersonalizada,
+} from '@/services/catalogo'
+import { NovaCategoriaModal } from '@/components/NovaCategoriaModal'
 
 interface AddCustomItemModalProps {
   isOpen: boolean
@@ -39,9 +44,25 @@ export const AddCustomItemModal: React.FC<AddCustomItemModalProps> = ({
   const [nome, setNome] = useState('')
   const [categoria, setCategoria] = useState<string>('Ferragem')
   const [quantidade, setQuantidade] = useState<number>(1)
+  const [categoriasPersonalizadas, setCategoriasPersonalizadas] = useState<
+    CategoriaPersonalizada[]
+  >([])
+  const [novaCategoriaModalOpen, setNovaCategoriaModalOpen] = useState(false)
   const [unidade, setUnidade] = useState<string>('un')
   const [precoCusto, setPrecoCusto] = useState<string>('')
   const [errors, setErrors] = useState<{ nome?: string; precoCusto?: string }>({})
+
+  useEffect(() => {
+    if (isOpen) {
+      listarCategoriasPersonalizadas().then((cats) => {
+        setCategoriasPersonalizadas(cats || [])
+      })
+    }
+  }, [isOpen])
+
+  const listaCategoriasCombinada = useMemo(() => {
+    return getListaCombinadaCategorias(categoriasPersonalizadas)
+  }, [categoriasPersonalizadas])
 
   const resetForm = () => {
     setNome('')
@@ -156,19 +177,38 @@ export const AddCustomItemModal: React.FC<AddCustomItemModalProps> = ({
               <Label htmlFor="item-categoria" className="text-xs font-bold text-slate-700">
                 Categoria
               </Label>
-              <Select value={categoria} onValueChange={setCategoria}>
+              <Select
+                value={categoria}
+                onValueChange={(v) => {
+                  if (v === '__NOVA_CATEGORIA__') {
+                    setNovaCategoriaModalOpen(true)
+                  } else {
+                    setCategoria(v)
+                  }
+                }}
+              >
                 <SelectTrigger
                   id="item-categoria"
                   className="h-10 rounded-xl text-sm bg-white border-slate-300"
                 >
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  {CATEGORIAS_MATERIAL.map((cat) => (
+                <SelectContent className="rounded-xl max-h-72">
+                  {listaCategoriasCombinada.map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
                     </SelectItem>
                   ))}
+                  <div className="pt-1.5 pb-1 px-1 border-t border-slate-100 mt-1">
+                    <SelectItem
+                      value="__NOVA_CATEGORIA__"
+                      className="text-slate-900 font-semibold focus:bg-slate-100 cursor-pointer flex items-center"
+                    >
+                      <span className="flex items-center text-slate-800 font-medium">
+                        ＋ Nova categoria…
+                      </span>
+                    </SelectItem>
+                  </div>
                 </SelectContent>{' '}
               </Select>
             </div>
@@ -274,6 +314,16 @@ export const AddCustomItemModal: React.FC<AddCustomItemModalProps> = ({
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <NovaCategoriaModal
+        isOpen={novaCategoriaModalOpen}
+        onClose={() => setNovaCategoriaModalOpen(false)}
+        categoriasExistentes={listaCategoriasCombinada}
+        onCategoriaCriada={(novaCat) => {
+          setCategoriasPersonalizadas((prev) => [...prev, novaCat])
+          setCategoria(novaCat.nome)
+        }}
+      />
     </Dialog>
   )
 }

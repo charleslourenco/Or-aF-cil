@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Package,
   RefreshCw,
+  Tag,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -55,10 +56,14 @@ import {
   createMaterial,
   updateMaterial,
   deleteMaterial,
-  CATEGORIAS_MATERIAL,
+  listarCategoriasPersonalizadas,
+  getListaCombinadaCategorias,
   UNIDADES_MATERIAL,
   type CatalogoMaterial,
+  type CategoriaPersonalizada,
 } from '@/services/catalogo'
+import { NovaCategoriaModal } from '@/components/NovaCategoriaModal'
+import { GerenciarCategoriasModal } from '@/components/GerenciarCategoriasModal'
 
 /** Estilos de badge por categoria (cores conforme especificação). */
 const CATEGORIA_BADGE: Record<string, string> = {
@@ -101,8 +106,15 @@ const EMPTY_FORM: FormState = {
 
 export default function CatalogPage() {
   const [materiais, setMateriais] = useState<CatalogoMaterial[]>([])
+  const [categoriasPersonalizadas, setCategoriasPersonalizadas] = useState<
+    CategoriaPersonalizada[]
+  >([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Modais de categorias
+  const [novaCategoriaModalOpen, setNovaCategoriaModalOpen] = useState(false)
+  const [gerenciarCategoriasOpen, setGerenciarCategoriasOpen] = useState(false)
 
   // Filtros
   const [busca, setBusca] = useState('')
@@ -122,7 +134,11 @@ export default function CatalogPage() {
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchCatalogoMateriais()
+      const [data, customCats] = await Promise.all([
+        fetchCatalogoMateriais(),
+        listarCategoriasPersonalizadas(),
+      ])
+
       if (data === null) {
         const errorMsg =
           'Não foi possível carregar o catálogo de materiais. Verifique sua conexão com o servidor ou tente novamente.'
@@ -132,6 +148,8 @@ export default function CatalogPage() {
       } else {
         setMateriais(data)
       }
+
+      setCategoriasPersonalizadas(customCats || [])
     } catch (err) {
       console.error('Erro ao carregar catálogo:', err)
       const errorMsg =
@@ -148,6 +166,11 @@ export default function CatalogPage() {
   useEffect(() => {
     carregar()
   }, [carregar])
+
+  // Lista combinada de categorias: 13 fixas + personalizadas do banco
+  const listaCategoriasCombinada = useMemo(() => {
+    return getListaCombinadaCategorias(categoriasPersonalizadas)
+  }, [categoriasPersonalizadas])
 
   // Filtro no frontend (busca por nome + categoria)
   const materiaisFiltrados = useMemo(() => {
@@ -282,13 +305,24 @@ export default function CatalogPage() {
             Gerencie chapas, ferragens, fitas de borda e acabamentos
           </p>
         </div>
-        <Button
-          onClick={abrirModalNovo}
-          className="bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl h-11 px-5 shadow-sm"
-        >
-          <Plus className="w-4 h-4 mr-1.5" />
-          Novo Material
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setGerenciarCategoriasOpen(true)}
+            className="rounded-xl h-11 px-4 border-slate-300 hover:bg-slate-50 font-medium text-slate-700"
+          >
+            <Tag className="w-4 h-4 mr-1.5 text-slate-500" />
+            Categorias ({categoriasPersonalizadas.length})
+          </Button>
+          <Button
+            onClick={abrirModalNovo}
+            className="bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl h-11 px-5 shadow-sm"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
+            Novo Material
+          </Button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -308,7 +342,7 @@ export default function CatalogPage() {
           </SelectTrigger>
           <SelectContent className="rounded-xl">
             <SelectItem value="todos">Todas as categorias</SelectItem>
-            {CATEGORIAS_MATERIAL.map((cat) => (
+            {listaCategoriasCombinada.map((cat) => (
               <SelectItem key={cat} value={cat}>
                 {cat}
               </SelectItem>
@@ -497,17 +531,33 @@ export default function CatalogPage() {
                 <Label className="text-xs font-bold uppercase tracking-wide">Categoria</Label>
                 <Select
                   value={form.categoria}
-                  onValueChange={(v) => setForm((prev) => ({ ...prev, categoria: v }))}
+                  onValueChange={(v) => {
+                    if (v === '__NOVA_CATEGORIA__') {
+                      setNovaCategoriaModalOpen(true)
+                    } else {
+                      setForm((prev) => ({ ...prev, categoria: v }))
+                    }
+                  }}
                 >
                   <SelectTrigger className="h-11 rounded-xl border-slate-300">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    {CATEGORIAS_MATERIAL.map((cat) => (
+                  <SelectContent className="rounded-xl max-h-72">
+                    {listaCategoriasCombinada.map((cat) => (
                       <SelectItem key={cat} value={cat}>
                         {cat}
                       </SelectItem>
                     ))}
+                    <div className="pt-1.5 pb-1 px-1 border-t border-slate-100 mt-1">
+                      <SelectItem
+                        value="__NOVA_CATEGORIA__"
+                        className="text-slate-900 font-semibold focus:bg-slate-100 cursor-pointer flex items-center"
+                      >
+                        <span className="flex items-center text-slate-800 font-medium">
+                          ＋ Nova categoria…
+                        </span>
+                      </SelectItem>
+                    </div>
                   </SelectContent>
                 </Select>
               </div>
@@ -643,6 +693,34 @@ export default function CatalogPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal de Criação de Nova Categoria */}
+      <NovaCategoriaModal
+        isOpen={novaCategoriaModalOpen}
+        onClose={() => setNovaCategoriaModalOpen(false)}
+        categoriasExistentes={listaCategoriasCombinada}
+        onCategoriaCriada={(novaCat) => {
+          setCategoriasPersonalizadas((prev) => [...prev, novaCat])
+          setForm((prev) => ({ ...prev, categoria: novaCat.nome }))
+        }}
+      />
+
+      {/* Modal de Gestão/Exclusão de Categorias */}
+      <GerenciarCategoriasModal
+        isOpen={gerenciarCategoriasOpen}
+        onClose={() => setGerenciarCategoriasOpen(false)}
+        categoriasPersonalizadas={categoriasPersonalizadas}
+        onAbrirNovaCategoria={() => setNovaCategoriaModalOpen(true)}
+        onCategoriaExcluida={(id, nomeExcluida) => {
+          setCategoriasPersonalizadas((prev) => prev.filter((c) => c.id !== id))
+          if (categoriaFiltro === nomeExcluida) {
+            setCategoriaFiltro('todos')
+          }
+          if (form.categoria === nomeExcluida) {
+            setForm((prev) => ({ ...prev, categoria: 'MDF 15mm' }))
+          }
+        }}
+      />
     </div>
   )
 }
