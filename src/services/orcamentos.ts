@@ -5,7 +5,40 @@ import { supabase } from '@/lib/supabase/client'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any
 
-export type OrcamentoStatus = 'Rascunho' | 'Em Negociação' | 'Aprovado'
+export type OrcamentoStatus = 'Rascunho' | 'Enviado' | 'Em Negociação' | 'Aprovado' | 'Perdido'
+
+export const STATUS_ORCAMENTO: OrcamentoStatus[] = [
+  'Rascunho',
+  'Enviado',
+  'Em Negociação',
+  'Aprovado',
+  'Perdido',
+]
+
+/** Serviço ou complemento cobrado à parte dos móveis (instalação, frete, projeto...). */
+export interface ServicoAdicional {
+  id: string
+  descricao: string
+  /** Valor de venda cobrado do cliente (sem markup) */
+  valor: number
+  /** Custo interno do serviço (entra na DRE; opcional) */
+  custo?: number
+}
+
+/** Dados comerciais complementares do orçamento (coluna condicoes_json). */
+export interface CondicoesOrcamento {
+  cliente_telefone?: string | null
+  cliente_email?: string | null
+  cliente_documento?: string | null
+  endereco_obra?: string | null
+  servicos?: ServicoAdicional[]
+  desconto_tipo?: 'percentual' | 'valor'
+  desconto_valor?: number
+  validade_dias?: number | null
+  prazo_entrega?: string | null
+  revisao?: number
+  orcamento_origem_id?: string | null
+}
 
 export interface OrcamentoBOMItem {
   id: string
@@ -74,6 +107,16 @@ export interface ComposicaoModuloPersistida {
   semTamponamento?: boolean
   tampoPedra?: boolean
   perfilConstrutivo?: string
+  qtdCabideiros?: number | null
+  iluminacaoLed?: boolean | null
+  rackPainel?: {
+    ativo: boolean
+    largura?: number
+    altura: number
+    profundidade: number
+    divisorias: number
+  } | null
+  ripado?: { qtd: number; largura: number } | null
 }
 
 export interface ModuloOrcamento {
@@ -92,6 +135,12 @@ export interface ModuloOrcamento {
   adaptacoes?: string
   descricao_manual?: string
   perfil_construtivo?: string
+  /** Especificação completa do MDF (nome do catálogo + espessura) para reabrir sem perder dados */
+  mdf_externo_spec?: { cor: string; espessura: number } | null
+  mdf_interno_spec?: { cor: string; espessura: number } | null
+  quantidade?: number
+  valor_unitario?: number
+  ajustes_bom?: unknown
 }
 
 export interface AmbienteOrcamento {
@@ -120,6 +169,7 @@ export interface Orcamento {
   mdf_interno?: string | null
   mdf_fundo?: string | null
   padrao_projeto?: string | null
+  condicoes_json?: CondicoesOrcamento | null
   created_at: string | null
   updated_at: string | null
 }
@@ -141,6 +191,7 @@ export interface OrcamentoInput {
   mdf_interno?: string | null
   mdf_fundo?: string | null
   padrao_projeto?: string | null
+  condicoes_json?: CondicoesOrcamento | null
 }
 
 // Auxiliar para obter a data ISO do início do mês atual (ex: 2026-08-01T00:00:00.000Z)
@@ -148,6 +199,30 @@ function getInicioDoMesAtual(): string {
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
   return startOfMonth.toISOString()
+}
+
+function getInicioDoMesAnterior(): string {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0).toISOString()
+}
+
+/** Conta os orçamentos criados no mês anterior (comparação no painel). */
+export async function fetchOrcamentosCountMesAnterior(): Promise<number | null> {
+  try {
+    const { count, error } = await db
+      .from('Orcamentos')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', getInicioDoMesAnterior())
+      .lt('created_at', getInicioDoMesAtual())
+    if (error) {
+      console.error('Erro ao contar orçamentos do mês anterior:', error.message ?? error)
+      return null
+    }
+    return count ?? 0
+  } catch (err) {
+    console.error('Erro inesperado ao contar orçamentos do mês anterior:', err)
+    return null
+  }
 }
 
 /**
@@ -265,26 +340,32 @@ export async function fetchTicketMedio(): Promise<number | null> {
     const startOfMonth = getInicioDoMesAtual()
     const { data, error } = await db
       .from('Orcamentos')
-      .select('valor_total')
+      .select('valor_total, ambientes_json')
       .gte('created_at', startOfMonth)
-
     if (error) {
       console.error('Erro ao calcular ticket médio do mês:', error.message ?? error)
       return null
     }
-
     if (!data || data.length === 0) return 0
-
-    let validCount = 0
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let totalModulos = 0
     const total = data.reduce((acc: number, curr: any) => {
       const val =
         typeof curr.valor_total === 'number' ? curr.valor_total : parseFloat(curr.valor_total) || 0
-      validCount += 1
+      const ambientes = Array.isArray(curr.ambientes_json) ? curr.ambientes_json : []
+      const modulos = ambientes.reduce((n: number, a: any) => {
+        const lista = Array.isArray(a?.modulos) ? a.modulos : []
+        return (
+          n +
+          lista.reduce(
+            (q: number, m: any) => q + (Number(m?.quantidade) > 0 ? Number(m.quantidade) : 1),
+            0,
+          )
+        )
+      }, 0)
+      totalModulos += modulos > 0 ? modulos : 1
       return acc + val
     }, 0)
-
-    return validCount > 0 ? total / validCount : 0
+    return totalModulos > 0 ? total / totalModulos : 0
   } catch (err) {
     console.error('Erro inesperado ao calcular ticket médio do mês:', err)
     return null
@@ -343,6 +424,7 @@ export async function updateOrcamento(
     if (input.mdf_interno !== undefined) updatePayload.mdf_interno = input.mdf_interno
     if (input.mdf_fundo !== undefined) updatePayload.mdf_fundo = input.mdf_fundo
     if (input.padrao_projeto !== undefined) updatePayload.padrao_projeto = input.padrao_projeto
+    if (input.condicoes_json !== undefined) updatePayload.condicoes_json = input.condicoes_json
 
     const { data, error } = await db
       .from('Orcamentos')
@@ -387,6 +469,7 @@ export async function createOrcamento(input: OrcamentoInput): Promise<Orcamento 
         mdf_interno: input.mdf_interno ?? null,
         mdf_fundo: input.mdf_fundo ?? null,
         padrao_projeto: input.padrao_projeto ?? null,
+        condicoes_json: input.condicoes_json ?? null,
       })
       .select()
       .single()
