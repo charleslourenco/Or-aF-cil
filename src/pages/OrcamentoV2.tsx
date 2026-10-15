@@ -51,7 +51,13 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { ModuleEditDrawer, ModuloSalvoData, AjustesBOMModulo } from '@/components/ModuleEditDrawer'
+import {
+  ModuleEditDrawer,
+  ModuloSalvoData,
+  AjustesBOMModulo,
+  ComposicaoModuloSalva,
+} from '@/components/ModuleEditDrawer'
+import type { PadraoProjeto } from '@/lib/pricing'
 import {
   createOrcamento,
   updateOrcamento,
@@ -90,16 +96,11 @@ export interface ModuloComercialV2 {
     profundidade: number
   }
   perfilConstrutivo?: string
+  padraoProjeto?: PadraoProjeto
   mdfExterno?: { cor?: string; espessura?: number } | string | null
   mdfInterno?: { cor?: string; espessura?: number } | string | null
-  composicao?: {
-    portas?: { qtd?: number | null; tipo?: string | null } | null
-    gavetas?: { qtd?: number | null } | null
-    prateleiras?: { qtd?: number | null } | null
-    cabideiro?: boolean | number | null
-    sapateira?: boolean | null
-    iluminacaoLed?: boolean | null
-  } | null
+  mdfFundo?: string
+  composicao?: ComposicaoModuloSalva | null
   itensBOM?: OrcamentoBOMItem[]
   ajustesBOM?: AjustesBOMModulo
 }
@@ -179,6 +180,38 @@ const clearDraftSessionStorage = (): void => {
   }
 }
 
+const hojeLocalISO = () => {
+  const d = new Date()
+  const off = d.getTimezoneOffset()
+  return new Date(d.getTime() - off * 60_000).toISOString().split('T')[0]
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100
+
+/** Converte o MDF salvo (objeto novo ou texto antigo "Branco TX (18mm)") para { cor, espessura }. */
+const parseMdfSalvo = (
+  spec: unknown,
+  texto: unknown,
+  espessuraPadrao: 15 | 18,
+): { cor: string; espessura: 15 | 18 } => {
+  if (spec && typeof spec === 'object' && typeof (spec as any).cor === 'string') {
+    const esp = Number((spec as any).espessura)
+    return { cor: (spec as any).cor, espessura: esp === 15 || esp === 18 ? esp : espessuraPadrao }
+  }
+  if (typeof texto === 'string' && texto.trim()) {
+    const m = texto.match(/\((\d+)\s*mm\)\s*$/i)
+    const esp = m ? Number(m[1]) : NaN
+    return {
+      cor: m ? texto.replace(m[0], '').trim() : texto.trim(),
+      espessura: esp === 15 || esp === 18 ? (esp as 15 | 18) : espessuraPadrao,
+    }
+  }
+  return { cor: 'Branco TX', espessura: espessuraPadrao }
+}
+
+const novoIdLocal = (prefixo: string) =>
+  `${prefixo}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+
 export default function OrcamentoV2() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -197,10 +230,7 @@ export default function OrcamentoV2() {
 
   // Estado para Dados do Cliente
   const [nomeCliente, setNomeCliente] = useState('')
-  const [dataOrcamento, setDataOrcamento] = useState(() => {
-    const today = new Date()
-    return today.toISOString().split('T')[0]
-  })
+  const [dataOrcamento, setDataOrcamento] = useState(() => hojeLocalISO())
   // Campos Forma de Pagamento e Observações: iniciam SEMPRE VAZIOS por padrão
   const [formaPagamento, setFormaPagamento] = useState('')
   const [isCustomFormaPagamento, setIsCustomFormaPagamento] = useState(false)
@@ -281,9 +311,30 @@ export default function OrcamentoV2() {
       })
   }, [])
 
+  // Zera todos os campos do formulário (usado por "Novo" e ao sair de um orçamento salvo)
+  function limparFormulario() {
+    clearDraftSessionStorage()
+    setNomeCliente('')
+    setDataOrcamento(hojeLocalISO())
+    setFormaPagamento('')
+    setIsCustomFormaPagamento(false)
+    setObservacoes('')
+    setAmbientes([])
+    setExpandedAmbientes([])
+    setActiveAmbienteId(null)
+    setOrcamentoId(null)
+    setNumeroSequencial(null)
+    setStatusOrcamento('Rascunho')
+    setIsSavedSuccessfully(false)
+    setIsOrcamentoFinalizado(false)
+  }
+
+  const prevOrcamentoIdParamRef = useRef<string | null>(orcamentoIdParam)
+
   // Carregar orçamento existente se vier ID na URL (tem precedência sobre o rascunho de sessionStorage)
   useEffect(() => {
     if (orcamentoIdParam) {
+      prevOrcamentoIdParamRef.current = orcamentoIdParam
       isDraftInitializedRef.current = true
       setIsLoadingOrcamento(true)
       fetchOrcamentoById(orcamentoIdParam)
@@ -303,26 +354,45 @@ export default function OrcamentoV2() {
             // Mapeia ambientes_json salvo para AmbienteV2[]
             if (Array.isArray(orc.ambientes_json)) {
               const mappedAmbientes: AmbienteV2[] = orc.ambientes_json.map((a: any) => ({
-                id: a.id || `amb-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+                id: a.id || novoIdLocal('amb'),
                 nome: a.nome,
                 modulos: Array.isArray(a.modulos)
-                  ? a.modulos.map((m: any) => ({
-                      id: m.id || `mod-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-                      moduloId: m.modulo_id,
-                      modulo: m.nome,
-                      descricaoTipo: m.adaptacoes || m.perfil_construtivo || 'Módulo Sob Medida',
-                      descricaoManual: m.descricao_manual || undefined,
-                      quantidade: 1,
-                      valorUnitario: m.subtotal || 0,
-                      valorTotal: m.subtotal || 0,
-                      dimensoes: m.dimensoes,
-                      perfilConstrutivo: m.perfil_construtivo,
-                      mdfExterno: m.mdf_externo || orc.mdf_externo || null,
-                      mdfInterno: m.mdf_interno || orc.mdf_interno || null,
-                      composicao: m.composicao || null,
-                      itensBOM: m.itens || [],
-                      ajustesBOM: (m as any).ajustes_bom || (m as any).ajustesBOM || undefined,
-                    }))
+                  ? a.modulos.map((m: any) => {
+                      // Quantidade e valor unitário salvos (orçamentos antigos não tinham: assume 1)
+                      const qtd = Number(m.quantidade) > 0 ? Number(m.quantidade) : 1
+                      const total = Number(m.subtotal) || 0
+                      const unit =
+                        Number(m.valor_unitario) > 0
+                          ? Number(m.valor_unitario)
+                          : round2(total / qtd)
+                      return {
+                        id: m.id || novoIdLocal('mod'),
+                        moduloId: m.modulo_id,
+                        modulo: m.nome,
+                        descricaoTipo: m.adaptacoes || m.perfil_construtivo || 'Módulo Sob Medida',
+                        descricaoManual: m.descricao_manual || undefined,
+                        quantidade: qtd,
+                        valorUnitario: unit,
+                        valorTotal: total,
+                        dimensoes: m.dimensoes,
+                        perfilConstrutivo: m.perfil_construtivo,
+                        padraoProjeto: m.padrao_projeto === 'premium' ? 'premium' : 'comercial',
+                        mdfExterno: parseMdfSalvo(
+                          m.mdf_externo_spec,
+                          m.mdf_externo || orc.mdf_externo,
+                          18,
+                        ),
+                        mdfInterno: parseMdfSalvo(
+                          m.mdf_interno_spec,
+                          m.mdf_interno || orc.mdf_interno,
+                          15,
+                        ),
+                        mdfFundo: m.mdf_fundo || orc.mdf_fundo || 'MDF 6mm Branco TX',
+                        composicao: m.composicao || null,
+                        itensBOM: m.itens || [],
+                        ajustesBOM: m.ajustes_bom || m.ajustesBOM || undefined,
+                      }
+                    })
                   : [],
               }))
               setAmbientes(mappedAmbientes)
@@ -332,6 +402,7 @@ export default function OrcamentoV2() {
                 setActiveAmbienteId(ultimo.id)
                 setExpandedAmbientes([ultimo.id])
               }
+              setIsSavedSuccessfully(true)
             }
           }
         })
@@ -342,11 +413,22 @@ export default function OrcamentoV2() {
           setIsLoadingOrcamento(false)
         })
     } else {
+      // Saiu de um orçamento salvo (?id=) para "Novo Orçamento" sem desmontar a tela: começa limpo
+      if (prevOrcamentoIdParamRef.current) {
+        prevOrcamentoIdParamRef.current = null
+        limparFormulario()
+        return
+      }
+
       // Quando a URL NÃO traz ?id=, restaura o rascunho anterior de sessionStorage (apenas uma vez na inicialização)
       if (!isDraftInitializedRef.current) {
         isDraftInitializedRef.current = true
         const draft = readDraftSessionStorage()
-        if (draft) {
+        // Rascunho de um orçamento já salvo não é restaurado em "Novo Orçamento"
+        // (evita sobrescrever o orçamento antigo ou reabrir um orçamento excluído)
+        if (draft && draft.orcamentoId) {
+          clearDraftSessionStorage()
+        } else if (draft) {
           if (typeof draft.nomeCliente === 'string') setNomeCliente(draft.nomeCliente)
           if (draft.dataOrcamento) setDataOrcamento(draft.dataOrcamento)
           if (typeof draft.formaPagamento === 'string') setFormaPagamento(draft.formaPagamento)
@@ -359,9 +441,6 @@ export default function OrcamentoV2() {
               setExpandedAmbientes([ultimo.id])
             }
           }
-          if (draft.orcamentoId) setOrcamentoId(draft.orcamentoId)
-          if (typeof draft.numeroSequencial === 'number')
-            setNumeroSequencial(draft.numeroSequencial)
         }
       }
     }
@@ -413,23 +492,56 @@ export default function OrcamentoV2() {
     for (const sub of subtotalPorAmbiente.values()) {
       total += sub
     }
-    return total
+    return round2(total)
   }, [subtotalPorAmbiente])
 
-  // Custo Total Geral: soma de Number(peca.totalCost) de mod.itensBOM de todos os módulos de todos os ambientes
   const custoTotalGeral = useMemo(() => {
     let custo = 0
     for (const amb of ambientes) {
       for (const mod of amb.modulos) {
+        const qtd = Number(mod.quantidade) > 0 ? Number(mod.quantidade) : 1
         if (Array.isArray(mod.itensBOM)) {
           for (const peca of mod.itensBOM) {
-            custo += Number(peca.totalCost) || 0
+            custo += (Number(peca.totalCost) || 0) * qtd
           }
         }
       }
     }
-    return custo
+    return round2(custo)
   }, [ambientes])
+
+  // Lista técnica consolidada do orçamento, com as quantidades multiplicadas pela qtd do módulo
+  const bomConsolidada = useMemo(() => {
+    const lista: OrcamentoBOMItem[] = []
+    ambientes.forEach((amb) => {
+      amb.modulos.forEach((mod) => {
+        const qtd = Number(mod.quantidade) > 0 ? Number(mod.quantidade) : 1
+        if (!Array.isArray(mod.itensBOM)) return
+        mod.itensBOM.forEach((peca) => {
+          lista.push({
+            ...peca,
+            description: `${amb.nome} · ${mod.modulo}${qtd > 1 ? ` (${qtd}x)` : ''}: ${peca.description}`,
+            metragem: round2((Number(peca.metragem) || 0) * qtd),
+            totalCost: round2((Number(peca.totalCost) || 0) * qtd),
+            salePrice: round2((Number(peca.salePrice) || 0) * qtd),
+          })
+        })
+      })
+    })
+    return lista
+  }, [ambientes])
+
+  // Aviso ao fechar/recarregar a aba com alterações não salvas
+  const temAlteracoesPendentes = !isSavedSuccessfully && ambientes.some((a) => a.modulos.length > 0)
+  useEffect(() => {
+    if (!temAlteracoesPendentes) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [temAlteracoesPendentes])
 
   // Cálculo determinístico da DRE a partir da engenharia financeira do banco
   const calcularDRE = useCallback((): OrcamentoDRE => {
@@ -511,22 +623,14 @@ export default function OrcamentoV2() {
 
   // Reiniciar formulário e iniciar novo orçamento de forma explícita (limpa sessionStorage)
   const handleIniciarNovoOrcamento = () => {
-    clearDraftSessionStorage()
-    setNomeCliente('')
-    const today = new Date().toISOString().split('T')[0]
-    setDataOrcamento(today)
-    setFormaPagamento('')
-    setIsCustomFormaPagamento(false)
-    setObservacoes('')
-    setAmbientes([])
-    setExpandedAmbientes([])
-    setActiveAmbienteId(null)
-    setOrcamentoId(null)
-    setNumeroSequencial(null)
-    setStatusOrcamento('Rascunho')
-    setIsSavedSuccessfully(false)
-    setIsOrcamentoFinalizado(false)
-    // Se a URL tinha ?id=, remove para voltar ao modo novo
+    if (
+      temAlteracoesPendentes &&
+      !window.confirm('Há alterações não salvas neste orçamento. Deseja descartá-las?')
+    ) {
+      return
+    }
+    prevOrcamentoIdParamRef.current = null
+    limparFormulario()
     setSearchParams({}, { replace: true })
     toast({
       title: 'Novo Orçamento',
@@ -535,6 +639,12 @@ export default function OrcamentoV2() {
   }
 
   const handleVoltar = () => {
+    if (
+      temAlteracoesPendentes &&
+      !window.confirm('Há alterações não salvas neste orçamento. Deseja sair mesmo assim?')
+    ) {
+      return
+    }
     navigate('/orcamentos')
   }
 
@@ -802,26 +912,9 @@ export default function OrcamentoV2() {
   const handleOpenEditModuloDrawer = (ambienteId: string, mod: ModuloComercialV2) => {
     setTargetAmbienteId(ambienteId)
     setEditingModuloId(mod.id)
-    const extObj =
-      typeof mod.mdfExterno === 'object' && mod.mdfExterno !== null
-        ? {
-            cor: mod.mdfExterno.cor || 'Branco TX',
-            espessura: (mod.mdfExterno.espessura as 15 | 18) || 18,
-          }
-        : {
-            cor: typeof mod.mdfExterno === 'string' ? mod.mdfExterno : 'Branco TX',
-            espessura: 18 as const,
-          }
-    const intObj =
-      typeof mod.mdfInterno === 'object' && mod.mdfInterno !== null
-        ? {
-            cor: mod.mdfInterno.cor || 'Branco TX',
-            espessura: (mod.mdfInterno.espessura as 15 | 18) || 15,
-          }
-        : {
-            cor: typeof mod.mdfInterno === 'string' ? mod.mdfInterno : 'Branco TX',
-            espessura: 15 as const,
-          }
+    // Mantém a espessura e o material salvos (antes eram forçados para 18/15mm)
+    const extObj = parseMdfSalvo(mod.mdfExterno, mod.mdfExterno, 18)
+    const intObj = parseMdfSalvo(mod.mdfInterno, mod.mdfInterno, 15)
 
     const dataToEdit: ModuloSalvoData = {
       id: mod.id,
@@ -834,10 +927,10 @@ export default function OrcamentoV2() {
       valorTotal: mod.valorTotal || 0,
       dimensoes: mod.dimensoes || { largura: 800, altura: 700, profundidade: 550 },
       perfilConstrutivo: (mod.perfilConstrutivo as any) || 'Fechado Envelopado',
-      padraoProjeto: 'comercial',
+      padraoProjeto: mod.padraoProjeto || 'comercial',
       mdfExterno: extObj,
       mdfInterno: intObj,
-      mdfFundo: 'MDF 6mm Branco TX',
+      mdfFundo: mod.mdfFundo || 'MDF 6mm Branco TX',
       composicao: mod.composicao || null,
       itensBOM: mod.itensBOM || [],
       ajustesBOM: mod.ajustesBOM,
@@ -882,8 +975,10 @@ export default function OrcamentoV2() {
                 valorTotal: moduloData.valorTotal,
                 dimensoes: moduloData.dimensoes,
                 perfilConstrutivo: moduloData.perfilConstrutivo,
+                padraoProjeto: moduloData.padraoProjeto,
                 mdfExterno: moduloData.mdfExterno,
                 mdfInterno: moduloData.mdfInterno,
+                mdfFundo: moduloData.mdfFundo,
                 composicao: moduloData.composicao || null,
                 itensBOM: moduloData.itensBOM,
                 ajustesBOM: moduloData.ajustesBOM,
@@ -905,8 +1000,10 @@ export default function OrcamentoV2() {
         valorTotal: moduloData.valorTotal,
         dimensoes: moduloData.dimensoes,
         perfilConstrutivo: moduloData.perfilConstrutivo,
+        padraoProjeto: moduloData.padraoProjeto,
         mdfExterno: moduloData.mdfExterno,
         mdfInterno: moduloData.mdfInterno,
+        mdfFundo: moduloData.mdfFundo,
         composicao: moduloData.composicao || null,
         itensBOM: moduloData.itensBOM,
         ajustesBOM: moduloData.ajustesBOM,
@@ -933,7 +1030,10 @@ export default function OrcamentoV2() {
   }
 
   // Persistência Completa no Supabase: Orcamentos, Ambientes, Módulos e Peças BOM
-  const handleSalvarOrcamento = async () => {
+  const handleSalvarOrcamento = async (): Promise<{
+    id: string
+    numeroSequencial: number | null
+  } | null> => {
     const nomeLimpo = nomeCliente.trim()
     if (!nomeLimpo) {
       toast({
@@ -941,7 +1041,8 @@ export default function OrcamentoV2() {
         description: 'Informe o nome do cliente antes de salvar o orçamento.',
         variant: 'destructive',
       })
-      return
+      document.getElementById('clientNameV2')?.focus()
+      return null
     }
 
     setIsSaving(true)
@@ -964,6 +1065,18 @@ export default function OrcamentoV2() {
             adaptacoes: mod.descricaoTipo,
             descricao_manual: mod.descricaoManual || undefined,
             subtotal: mod.valorTotal,
+            quantidade: Number(mod.quantidade) > 0 ? Number(mod.quantidade) : 1,
+            valor_unitario: mod.valorUnitario,
+            padrao_projeto: mod.padraoProjeto || 'comercial',
+            mdf_fundo: mod.mdfFundo || undefined,
+            mdf_externo_spec:
+              typeof mod.mdfExterno === 'object' && mod.mdfExterno?.cor
+                ? { cor: mod.mdfExterno.cor, espessura: mod.mdfExterno.espessura || 18 }
+                : null,
+            mdf_interno_spec:
+              typeof mod.mdfInterno === 'object' && mod.mdfInterno?.cor
+                ? { cor: mod.mdfInterno.cor, espessura: mod.mdfInterno.espessura || 15 }
+                : null,
             mdf_externo:
               typeof mod.mdfExterno === 'object' && mod.mdfExterno?.cor
                 ? `${mod.mdfExterno.cor} (${mod.mdfExterno.espessura || 18}mm)`
@@ -978,6 +1091,7 @@ export default function OrcamentoV2() {
                   : undefined,
             composicao: mod.composicao
               ? {
+                  ...mod.composicao,
                   portas: mod.composicao.portas
                     ? {
                         qtd: mod.composicao.portas.qtd || 0,
@@ -1010,19 +1124,7 @@ export default function OrcamentoV2() {
       })
 
       // 2. Consolidação de todas as peças (BOM) do orçamento para a coluna bom_json
-      const todasPecasBOM: OrcamentoBOMItem[] = []
-      ambientes.forEach((amb) => {
-        amb.modulos.forEach((mod) => {
-          if (Array.isArray(mod.itensBOM)) {
-            mod.itensBOM.forEach((peca) => {
-              todasPecasBOM.push({
-                ...peca,
-                description: `${amb.nome} · ${mod.modulo}: ${peca.description}`,
-              })
-            })
-          }
-        })
-      })
+      const todasPecasBOM: OrcamentoBOMItem[] = bomConsolidada
 
       const primeiroAmbienteNome = ambientes[0]?.nome || null
       const primeiroModuloNome = ambientes[0]?.modulos[0]?.modulo || null
@@ -1053,13 +1155,15 @@ export default function OrcamentoV2() {
           title: 'Orçamento atualizado!',
           description: `Orçamento nº ${updated.numero_sequencial ?? ''} salvo com sucesso.`,
         })
+
+        return { id: updated.id, numeroSequencial: updated.numero_sequencial ?? null }
       } else {
         // Cria novo orçamento
         const created = await createOrcamento({
           cliente_nome: nomeLimpo,
           data: `${dataOrcamento}T12:00:00.000Z`,
           valor_total: valorTotalGeral,
-          status: 'Rascunho',
+          status: statusOrcamento || 'Rascunho',
           forma_pagamento: formaPagamento.trim() || null,
           observacoes: observacoes.trim() || null,
           ambiente: primeiroAmbienteNome,
@@ -1077,6 +1181,7 @@ export default function OrcamentoV2() {
         setNumeroSequencial(created.numero_sequencial ?? null)
         setIsSavedSuccessfully(true)
 
+        prevOrcamentoIdParamRef.current = created.id
         // Item b: Sincroniza a URL com o ID do orçamento via setSearchParams({ id }, { replace: true })
         setSearchParams({ id: created.id }, { replace: true })
 
@@ -1084,6 +1189,8 @@ export default function OrcamentoV2() {
           title: 'Orçamento criado!',
           description: `Orçamento nº ${created.numero_sequencial ?? ''} salvo com sucesso no banco de dados.`,
         })
+
+        return { id: created.id, numeroSequencial: created.numero_sequencial ?? null }
       }
     } catch (err: any) {
       console.error('Erro ao salvar orçamento:', err)
@@ -1092,6 +1199,7 @@ export default function OrcamentoV2() {
         description: err.message || 'Verifique a conexão com o Supabase e tente novamente.',
         variant: 'destructive',
       })
+      return null
     } finally {
       setIsSaving(false)
     }
@@ -1108,6 +1216,25 @@ export default function OrcamentoV2() {
         variant: 'destructive',
       })
       return
+    }
+
+    // A proposta sempre sai de um orçamento salvo: garante número real e conteúdo igual ao do banco
+    if (!nomeCliente.trim()) {
+      toast({
+        title: 'Informe o cliente',
+        description: 'Preencha o nome do cliente para gerar a Proposta Comercial.',
+        variant: 'destructive',
+      })
+      document.getElementById('clientNameV2')?.focus()
+      return
+    }
+    let numeroParaPdf = numeroSequencial
+    let idParaPdf = orcamentoId
+    if (!orcamentoId || !isSavedSuccessfully) {
+      const salvo = await handleSalvarOrcamento()
+      if (!salvo) return
+      numeroParaPdf = salvo.numeroSequencial
+      idParaPdf = salvo.id
     }
 
     setIsGeneratingPdf('proposta')
@@ -1142,17 +1269,17 @@ export default function OrcamentoV2() {
       })
 
       const codigoFormatado =
-        numeroSequencial !== null && numeroSequencial !== undefined
-          ? String(numeroSequencial).padStart(3, '0')
+        numeroParaPdf !== null && numeroParaPdf !== undefined
+          ? String(numeroParaPdf).padStart(3, '0')
           : 'PROV'
 
       await gerarPropostaComercial({
-        orcamentoId: orcamentoId || undefined,
-        numeroSequencial,
+        orcamentoId: idParaPdf || undefined,
+        numeroSequencial: numeroParaPdf,
         codigo: codigoFormatado,
         data: `${dataOrcamento}T12:00:00.000Z`,
         cliente: {
-          nome: nomeCliente.trim() || 'Cliente Não Informado',
+          nome: nomeCliente.trim(),
         },
         empresa: perfilEmpresa,
         ambientes: [],
@@ -1164,7 +1291,7 @@ export default function OrcamentoV2() {
 
       toast({
         title: '✓ Proposta Comercial Gerada',
-        description: `Download do PDF para ${nomeCliente.trim() || 'Cliente'} concluído com sucesso.`,
+        description: `Download do PDF para ${nomeCliente.trim()} concluído com sucesso.`,
       })
     } catch (err: unknown) {
       console.error('Erro ao gerar proposta comercial em memória:', err)
@@ -1202,20 +1329,7 @@ export default function OrcamentoV2() {
       const dre = calcularDRE()
 
       // Consolidação de todas as peças BOM
-      const bomParaPdf: OrcamentoBOMItem[] = []
-      ambientes.forEach((amb) => {
-        amb.modulos.forEach((mod) => {
-          if (Array.isArray(mod.itensBOM)) {
-            mod.itensBOM.forEach((peca) => {
-              bomParaPdf.push({
-                ...peca,
-                description: `${amb.nome} · ${mod.modulo}: ${peca.description}`,
-              })
-            })
-          }
-        })
-      })
-
+      const bomParaPdf: OrcamentoBOMItem[] = bomConsolidada
       // Mapeamento dos ambientes no formato AmbienteOrcamento para a tabela de engenharia
       const ambientesParaPdf: AmbienteOrcamento[] = ambientes.map((amb) => ({
         id: amb.id,
@@ -2133,7 +2247,7 @@ export default function OrcamentoV2() {
                           </Button>
 
                           <span className="text-[11px] text-slate-400 dark:text-slate-500 text-center sm:text-right">
-                            Configure dimensões, foto/IA e perfil no painel lateral
+                            Foto/IA, medidas, materiais e peças são configurados na janela do módulo
                           </span>
                         </div>
 
