@@ -20,6 +20,13 @@ import {
   Settings,
   Loader2,
   CreditCard,
+  Copy,
+  Phone,
+  Mail,
+  MapPin,
+  Wrench,
+  Percent,
+  History,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -67,6 +74,9 @@ import {
   ModuloOrcamento,
   OrcamentoBOMItem,
   OrcamentoDRE,
+  CondicoesOrcamento,
+  ServicoAdicional,
+  STATUS_ORCAMENTO,
 } from '@/services/orcamentos'
 import { fetchPerfilEmpresa, PerfilEmpresa } from '@/services/empresa'
 import {
@@ -147,6 +157,8 @@ interface OrcaV2DraftData {
   ambientes: AmbienteV2[]
   orcamentoId: string | null
   numeroSequencial: number | null
+  condicoes?: CondicoesOrcamento
+  status?: string
   savedAt?: number
 }
 
@@ -231,6 +243,18 @@ export default function OrcamentoV2() {
   // Estado para Dados do Cliente
   const [nomeCliente, setNomeCliente] = useState('')
   const [dataOrcamento, setDataOrcamento] = useState(() => hojeLocalISO())
+  // Contato do cliente e endereço da obra
+  const [clienteTelefone, setClienteTelefone] = useState('')
+  const [clienteEmail, setClienteEmail] = useState('')
+  const [enderecoObra, setEnderecoObra] = useState('')
+  // Complementos comerciais: serviços, desconto, validade, prazo e revisão
+  const [servicos, setServicos] = useState<ServicoAdicional[]>([])
+  const [descontoTipo, setDescontoTipo] = useState<'percentual' | 'valor'>('percentual')
+  const [descontoValor, setDescontoValor] = useState<number>(0)
+  const [validadeDias, setValidadeDias] = useState<number>(15)
+  const [prazoEntrega, setPrazoEntrega] = useState('')
+  const [revisao, setRevisao] = useState<number>(0)
+  const [orcamentoOrigemId, setOrcamentoOrigemId] = useState<string | null>(null)
   // Campos Forma de Pagamento e Observações: iniciam SEMPRE VAZIOS por padrão
   const [formaPagamento, setFormaPagamento] = useState('')
   const [isCustomFormaPagamento, setIsCustomFormaPagamento] = useState(false)
@@ -311,6 +335,47 @@ export default function OrcamentoV2() {
       })
   }, [])
 
+  // Condições comerciais atuais no formato salvo em condicoes_json
+  const condicoesAtuais = useMemo<CondicoesOrcamento>(
+    () => ({
+      cliente_telefone: clienteTelefone.trim() || null,
+      cliente_email: clienteEmail.trim() || null,
+      endereco_obra: enderecoObra.trim() || null,
+      servicos: servicos.filter((sv) => sv.descricao.trim() || sv.valor),
+      desconto_tipo: descontoTipo,
+      desconto_valor: descontoValor,
+      validade_dias: validadeDias || null,
+      prazo_entrega: prazoEntrega.trim() || null,
+      revisao,
+      orcamento_origem_id: orcamentoOrigemId,
+    }),
+    [
+      clienteTelefone,
+      clienteEmail,
+      enderecoObra,
+      servicos,
+      descontoTipo,
+      descontoValor,
+      validadeDias,
+      prazoEntrega,
+      revisao,
+      orcamentoOrigemId,
+    ],
+  )
+
+  function aplicarCondicoes(c: CondicoesOrcamento) {
+    setClienteTelefone(c.cliente_telefone || '')
+    setClienteEmail(c.cliente_email || '')
+    setEnderecoObra(c.endereco_obra || '')
+    setServicos(Array.isArray(c.servicos) ? c.servicos : [])
+    setDescontoTipo(c.desconto_tipo === 'valor' ? 'valor' : 'percentual')
+    setDescontoValor(Number(c.desconto_valor) || 0)
+    setValidadeDias(typeof c.validade_dias === 'number' ? c.validade_dias : 15)
+    setPrazoEntrega(c.prazo_entrega || '')
+    setRevisao(Number(c.revisao) || 0)
+    setOrcamentoOrigemId(c.orcamento_origem_id || null)
+  }
+
   // Zera todos os campos do formulário (usado por "Novo" e ao sair de um orçamento salvo)
   function limparFormulario() {
     clearDraftSessionStorage()
@@ -319,6 +384,7 @@ export default function OrcamentoV2() {
     setFormaPagamento('')
     setIsCustomFormaPagamento(false)
     setObservacoes('')
+    aplicarCondicoes({})
     setAmbientes([])
     setExpandedAmbientes([])
     setActiveAmbienteId(null)
@@ -351,6 +417,7 @@ export default function OrcamentoV2() {
             }
             setFormaPagamento(orc.forma_pagamento || '')
             setObservacoes(orc.observacoes || '')
+            aplicarCondicoes(orc.condicoes_json || {})
             // Mapeia ambientes_json salvo para AmbienteV2[]
             if (Array.isArray(orc.ambientes_json)) {
               const mappedAmbientes: AmbienteV2[] = orc.ambientes_json.map((a: any) => ({
@@ -429,6 +496,8 @@ export default function OrcamentoV2() {
         if (draft && draft.orcamentoId) {
           clearDraftSessionStorage()
         } else if (draft) {
+          if (draft.condicoes) aplicarCondicoes(draft.condicoes)
+          if (typeof draft.status === 'string') setStatusOrcamento(draft.status)
           if (typeof draft.nomeCliente === 'string') setNomeCliente(draft.nomeCliente)
           if (draft.dataOrcamento) setDataOrcamento(draft.dataOrcamento)
           if (typeof draft.formaPagamento === 'string') setFormaPagamento(draft.formaPagamento)
@@ -462,6 +531,8 @@ export default function OrcamentoV2() {
       ambientes,
       orcamentoId,
       numeroSequencial,
+      condicoes: condicoesAtuais,
+      status: statusOrcamento,
       savedAt: Date.now(),
     }
     writeDraftSessionStorage(draftData)
@@ -473,6 +544,8 @@ export default function OrcamentoV2() {
     ambientes,
     orcamentoId,
     numeroSequencial,
+    condicoesAtuais,
+    statusOrcamento,
     isLoadingOrcamento,
   ])
 
@@ -486,14 +559,38 @@ export default function OrcamentoV2() {
     return map
   }, [ambientes])
 
-  // Valor Total Geral: SOMA apenas após salvar módulos nos ambientes
-  const valorTotalGeral = useMemo(() => {
+  // Subtotal dos produtos (móveis planejados)
+  const valorProdutos = useMemo(() => {
     let total = 0
     for (const sub of subtotalPorAmbiente.values()) {
       total += sub
     }
     return round2(total)
   }, [subtotalPorAmbiente])
+
+  // Serviços adicionais (instalação, frete, projeto...) cobrados sem markup
+  const valorServicos = useMemo(
+    () => round2(servicos.reduce((acc, sv) => acc + (Number(sv.valor) || 0), 0)),
+    [servicos],
+  )
+  const custoServicos = useMemo(
+    () => round2(servicos.reduce((acc, sv) => acc + (Number(sv.custo) || 0), 0)),
+    [servicos],
+  )
+
+  // Desconto comercial (% sobre móveis + serviços, ou valor fixo)
+  const valorDesconto = useMemo(() => {
+    const base = valorProdutos + valorServicos
+    const v = Math.max(0, Number(descontoValor) || 0)
+    const desc = descontoTipo === 'percentual' ? (base * Math.min(v, 100)) / 100 : Math.min(v, base)
+    return round2(desc)
+  }, [valorProdutos, valorServicos, descontoTipo, descontoValor])
+
+  // Valor Total Geral (final): móveis + serviços − desconto
+  const valorTotalGeral = useMemo(
+    () => round2(valorProdutos + valorServicos - valorDesconto),
+    [valorProdutos, valorServicos, valorDesconto],
+  )
 
   const custoTotalGeral = useMemo(() => {
     let custo = 0
@@ -507,8 +604,8 @@ export default function OrcamentoV2() {
         }
       }
     }
-    return round2(custo)
-  }, [ambientes])
+    return round2(custo + custoServicos)
+  }, [ambientes, custoServicos])
 
   // Lista técnica consolidada do orçamento, com as quantidades multiplicadas pela qtd do módulo
   const bomConsolidada = useMemo(() => {
@@ -646,6 +743,80 @@ export default function OrcamentoV2() {
       return
     }
     navigate('/orcamentos')
+  }
+
+  // Nova versão: copia este orçamento para um novo registro (revisão +1), mantendo o original intacto
+  const handleNovaVersao = () => {
+    if (!orcamentoId) {
+      toast({
+        title: 'Salve o orçamento primeiro',
+        description: 'A nova versão é criada a partir de um orçamento já salvo.',
+      })
+      return
+    }
+    setOrcamentoOrigemId(orcamentoOrigemId || orcamentoId)
+    setRevisao((r) => r + 1)
+    setOrcamentoId(null)
+    setNumeroSequencial(null)
+    setStatusOrcamento('Rascunho')
+    setIsSavedSuccessfully(false)
+    prevOrcamentoIdParamRef.current = null
+    isDraftInitializedRef.current = true
+    setSearchParams({}, { replace: true })
+    toast({
+      title: `Revisão ${revisao + 1} criada`,
+      description:
+        'Faça as alterações e clique em Salvar: será gravado um novo orçamento e o anterior fica preservado.',
+    })
+  }
+
+  // Duplicar ambiente inteiro (com todos os módulos)
+  const handleDuplicarAmbiente = (ambienteId: string) => {
+    const origem = ambientes.find((a) => a.id === ambienteId)
+    if (!origem) return
+    const copia: AmbienteV2 = {
+      id: novoIdLocal('amb'),
+      nome: `${origem.nome} (cópia)`,
+      modulos: origem.modulos.map((m) => ({ ...m, id: novoIdLocal('mod') })),
+    }
+    setAmbientes((prev) => {
+      const idx = prev.findIndex((a) => a.id === ambienteId)
+      const next = [...prev]
+      next.splice(idx + 1, 0, copia)
+      return next
+    })
+    setIsSavedSuccessfully(false)
+    toast({ title: 'Ambiente duplicado', description: `"${copia.nome}" foi criado.` })
+  }
+
+  // Duplicar módulo dentro do mesmo ambiente
+  const handleDuplicarModulo = (ambienteId: string, moduloId: string) => {
+    setAmbientes((prev) =>
+      prev.map((amb) => {
+        if (amb.id !== ambienteId) return amb
+        const idx = amb.modulos.findIndex((m) => m.id === moduloId)
+        if (idx < 0) return amb
+        const copia = { ...amb.modulos[idx], id: novoIdLocal('mod') }
+        const modulos = [...amb.modulos]
+        modulos.splice(idx + 1, 0, copia)
+        return { ...amb, modulos }
+      }),
+    )
+    setIsSavedSuccessfully(false)
+  }
+
+  // Serviços
+  const handleAddServico = (descricao = '') => {
+    setServicos((prev) => [...prev, { id: novoIdLocal('srv'), descricao, valor: 0, custo: 0 }])
+    setIsSavedSuccessfully(false)
+  }
+  const handleUpdateServico = (id: string, patch: Partial<ServicoAdicional>) => {
+    setServicos((prev) => prev.map((sv) => (sv.id === id ? { ...sv, ...patch } : sv)))
+    setIsSavedSuccessfully(false)
+  }
+  const handleRemoveServico = (id: string) => {
+    setServicos((prev) => prev.filter((sv) => sv.id !== id))
+    setIsSavedSuccessfully(false)
   }
 
   // Criação de novo ambiente
@@ -1144,6 +1315,7 @@ export default function OrcamentoV2() {
           ambientes_json: ambientesJsonPayload,
           bom_json: todasPecasBOM,
           dre_json: dreCalculada,
+          condicoes_json: condicoesAtuais,
         })
 
         if (!updated) {
@@ -1171,6 +1343,7 @@ export default function OrcamentoV2() {
           ambientes_json: ambientesJsonPayload,
           bom_json: todasPecasBOM,
           dre_json: dreCalculada,
+          condicoes_json: condicoesAtuais,
         })
 
         if (!created) {
@@ -1278,12 +1451,28 @@ export default function OrcamentoV2() {
         numeroSequencial: numeroParaPdf,
         codigo: codigoFormatado,
         data: `${dataOrcamento}T12:00:00.000Z`,
+        revisao,
         cliente: {
           nome: nomeCliente.trim(),
+          telefone: clienteTelefone.trim() || undefined,
+          email: clienteEmail.trim() || undefined,
+          endereco: enderecoObra.trim() || undefined,
         },
         empresa: perfilEmpresa,
         ambientes: [],
         ambientesGrupos,
+        subtotalMoveis: valorProdutos,
+        servicos: condicoesAtuais.servicos?.map((sv) => ({
+          descricao: sv.descricao || 'Serviço',
+          valor: Number(sv.valor) || 0,
+        })),
+        desconto: valorDesconto,
+        descontoDescricao:
+          descontoTipo === 'percentual' && descontoValor > 0
+            ? `Desconto (${descontoValor}%)`
+            : 'Desconto',
+        validadeDias: validadeDias || null,
+        prazoEntrega: prazoEntrega.trim() || null,
         valorTotal: valorTotalGeral,
         formaPagamento: formaPagamento.trim() || null,
         observacoes: observacoes.trim() || null,
@@ -1433,7 +1622,49 @@ export default function OrcamentoV2() {
             {numeroSequencial && (
               <span className="text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
                 Nº {numeroSequencial}
+                {revisao > 0 ? ` · Rev. ${revisao}` : ''}
               </span>
+            )}
+
+            {!numeroSequencial && revisao > 0 && (
+              <span className="text-xs font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
+                Revisão {revisao} (não salva)
+              </span>
+            )}
+
+            <Select
+              value={statusOrcamento}
+              onValueChange={(v) => {
+                setStatusOrcamento(v)
+                setIsSavedSuccessfully(false)
+              }}
+            >
+              <SelectTrigger
+                aria-label="Status do orçamento"
+                className="h-9 w-40 rounded-xl text-xs font-semibold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xs"
+              >
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border-slate-200 dark:border-slate-800 shadow-xl bg-white dark:bg-slate-950">
+                {STATUS_ORCAMENTO.map((st) => (
+                  <SelectItem key={st} value={st} className="text-xs font-medium cursor-pointer">
+                    {st}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {orcamentoId && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleNovaVersao}
+                className="h-9 px-3 gap-1.5 text-xs font-semibold border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl shadow-xs"
+                title="Criar uma nova versão deste orçamento, preservando o original"
+              >
+                <History className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                <span>Nova Versão</span>
+              </Button>
             )}
 
             <Button
@@ -1503,7 +1734,10 @@ export default function OrcamentoV2() {
                   type="text"
                   placeholder="Ex.: Maria Oliveira"
                   value={nomeCliente}
-                  onChange={(e) => setNomeCliente(e.target.value)}
+                  onChange={(e) => {
+                    setNomeCliente(e.target.value)
+                    setIsSavedSuccessfully(false)
+                  }}
                   className="h-11 rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                 />
               </div>
@@ -1520,7 +1754,76 @@ export default function OrcamentoV2() {
                   id="quoteDateV2"
                   type="date"
                   value={dataOrcamento}
-                  onChange={(e) => setDataOrcamento(e.target.value)}
+                  onChange={(e) => {
+                    setDataOrcamento(e.target.value)
+                    setIsSavedSuccessfully(false)
+                  }}
+                  className="h-11 rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
+                />
+              </div>
+            </div>
+
+            {/* Contato do cliente e endereço da obra */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="clienteTelefoneV2"
+                  className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5"
+                >
+                  <Phone className="w-3.5 h-3.5 text-slate-500" />
+                  Telefone / WhatsApp
+                </Label>
+                <Input
+                  id="clienteTelefoneV2"
+                  type="tel"
+                  placeholder="(47) 99999-9999"
+                  value={clienteTelefone}
+                  onChange={(e) => {
+                    setClienteTelefone(e.target.value)
+                    setIsSavedSuccessfully(false)
+                  }}
+                  className="h-11 rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="clienteEmailV2"
+                  className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5"
+                >
+                  <Mail className="w-3.5 h-3.5 text-slate-500" />
+                  E-mail
+                </Label>
+                <Input
+                  id="clienteEmailV2"
+                  type="email"
+                  placeholder="cliente@email.com"
+                  value={clienteEmail}
+                  onChange={(e) => {
+                    setClienteEmail(e.target.value)
+                    setIsSavedSuccessfully(false)
+                  }}
+                  className="h-11 rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="enderecoObraV2"
+                  className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                  Endereço da Obra
+                </Label>
+                <Input
+                  id="enderecoObraV2"
+                  type="text"
+                  placeholder="Rua, número, bairro, cidade"
+                  value={enderecoObra}
+                  onChange={(e) => {
+                    setEnderecoObra(e.target.value)
+                    setIsSavedSuccessfully(false)
+                  }}
                   className="h-11 rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
                 />
               </div>
@@ -1970,6 +2273,26 @@ export default function OrcamentoV2() {
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation()
+                            handleDuplicarAmbiente(amb.id)
+                          }}
+                          className={cn(
+                            'h-8 w-8 p-0 rounded-lg shrink-0 transition-colors',
+                            isActive
+                              ? 'text-white/70 hover:text-white hover:bg-white/10 dark:text-slate-900/70 dark:hover:text-slate-900 dark:hover:bg-slate-900/10'
+                              : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800',
+                          )}
+                          title={`Duplicar ambiente "${amb.nome}"`}
+                          aria-label={`Duplicar ambiente ${amb.nome}`}
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
                             handleRemoveAmbiente(amb.id)
                           }}
                           className={cn(
@@ -2053,6 +2376,15 @@ export default function OrcamentoV2() {
                                             aria-label={`Editar módulo ${mod.modulo}`}
                                           >
                                             <Pencil className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDuplicarModulo(amb.id, mod.id)}
+                                            className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                            title={`Duplicar módulo "${mod.modulo}"`}
+                                            aria-label={`Duplicar módulo ${mod.modulo}`}
+                                          >
+                                            <Copy className="w-3.5 h-3.5" />
                                           </button>
                                         </div>
                                       </TableCell>
@@ -2297,7 +2629,276 @@ export default function OrcamentoV2() {
           )}
         </section>
 
-        {/* 4. Resumo Geral do Projeto (exibido quando o orçamento for finalizado pelo fluxo guiado ou quando houver ambientes) */}
+        {/* 4. Card "3 — Serviços, Desconto e Prazos" */}
+        <Card className="border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm rounded-2xl">
+          <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/80">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <CardTitle className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-xs">
+                  3
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Wrench className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                  <span>Serviços e Complementos</span>
+                </div>
+              </CardTitle>
+
+              <div className="flex items-center flex-wrap gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddServico('Instalação / Montagem')}
+                  className="h-8 px-2.5 text-xs font-semibold rounded-xl border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Instalação / Montagem
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddServico('Frete')}
+                  className="h-8 px-2.5 text-xs font-semibold rounded-xl border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Frete
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddServico('Projeto / Medição')}
+                  className="h-8 px-2.5 text-xs font-semibold rounded-xl border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Projeto / Medição
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddServico('')}
+                  className="h-8 px-2.5 text-xs font-semibold rounded-xl border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Outro
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Cobrados à parte, sem markup. O custo interno (opcional) entra na análise de lucro.
+            </p>
+          </CardHeader>
+
+          <CardContent className="pt-4 space-y-4">
+            {/* Lista de serviços adicionais */}
+            {servicos.length > 0 && (
+              <div className="space-y-2.5">
+                {servicos.map((sv) => (
+                  <div
+                    key={sv.id}
+                    className="grid grid-cols-12 gap-2 items-center p-2 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800"
+                  >
+                    <div className="col-span-12 sm:col-span-6">
+                      <Input
+                        type="text"
+                        placeholder="Descrição do serviço (ex.: Montagem especializada)"
+                        value={sv.descricao}
+                        onChange={(e) => handleUpdateServico(sv.id, { descricao: e.target.value })}
+                        className="h-9 text-xs rounded-lg border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                      />
+                    </div>
+                    <div className="col-span-6 sm:col-span-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Valor cliente"
+                        value={sv.valor || ''}
+                        onChange={(e) =>
+                          handleUpdateServico(sv.id, {
+                            valor: Math.max(0, Number(e.target.value) || 0),
+                          })
+                        }
+                        className="h-9 text-xs font-mono rounded-lg border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-right"
+                        title="Valor cobrado do cliente (R$)"
+                      />
+                    </div>
+                    <div className="col-span-5 sm:col-span-3">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Custo interno"
+                        value={sv.custo || ''}
+                        onChange={(e) =>
+                          handleUpdateServico(sv.id, {
+                            custo: Math.max(0, Number(e.target.value) || 0),
+                          })
+                        }
+                        className="h-9 text-xs font-mono rounded-lg border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-right"
+                        title="Custo interno do serviço (R$, opcional)"
+                      />
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveServico(sv.id)}
+                        className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg"
+                        title="Remover serviço"
+                        aria-label="Remover serviço"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Desconto, Validade da Proposta e Prazo de Entrega */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+              {/* Desconto */}
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="descontoValorV2"
+                  className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5"
+                >
+                  <Percent className="w-3.5 h-3.5 text-slate-500" />
+                  Desconto
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={descontoTipo}
+                    onValueChange={(val: 'percentual' | 'valor') => {
+                      setDescontoTipo(val)
+                      setIsSavedSuccessfully(false)
+                    }}
+                  >
+                    <SelectTrigger
+                      aria-label="Tipo de desconto"
+                      className="h-11 w-20 rounded-xl text-xs font-bold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+                      <SelectItem
+                        value="percentual"
+                        className="text-xs font-semibold cursor-pointer"
+                      >
+                        %
+                      </SelectItem>
+                      <SelectItem value="valor" className="text-xs font-semibold cursor-pointer">
+                        R$
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Input
+                    id="descontoValorV2"
+                    type="number"
+                    min="0"
+                    step={descontoTipo === 'percentual' ? '0.5' : '10'}
+                    placeholder="0"
+                    value={descontoValor || ''}
+                    onChange={(e) => {
+                      setDescontoValor(Math.max(0, Number(e.target.value) || 0))
+                      setIsSavedSuccessfully(false)
+                    }}
+                    className="h-11 rounded-xl text-sm font-mono border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
+                  />
+                </div>
+                {valorDesconto > 0 && (
+                  <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                    − {formatCurrency(valorDesconto)} no total
+                  </p>
+                )}
+              </div>
+
+              {/* Validade da Proposta (dias) */}
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="validadeV2"
+                  className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                  Validade da Proposta (dias)
+                </Label>
+                <Input
+                  id="validadeV2"
+                  type="number"
+                  min="1"
+                  placeholder="15"
+                  value={validadeDias || ''}
+                  onChange={(e) => {
+                    setValidadeDias(Math.max(1, Number(e.target.value) || 0))
+                    setIsSavedSuccessfully(false)
+                  }}
+                  className="h-11 rounded-xl text-sm font-mono border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
+                />
+              </div>
+
+              {/* Prazo de Entrega */}
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="prazoEntregaV2"
+                  className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                  Prazo de Entrega
+                </Label>
+                <Input
+                  id="prazoEntregaV2"
+                  type="text"
+                  placeholder="Ex.: 45 dias úteis após a medição final"
+                  value={prazoEntrega}
+                  onChange={(e) => {
+                    setPrazoEntrega(e.target.value)
+                    setIsSavedSuccessfully(false)
+                  }}
+                  className="h-11 rounded-xl text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-slate-600 focus:ring-2 focus:ring-slate-600/20"
+                />
+              </div>
+            </div>
+
+            {/* Resumo quando houver serviços ou desconto */}
+            {(valorServicos > 0 || valorDesconto > 0) && (
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 p-3.5 space-y-1.5 text-xs">
+                <div className="flex justify-between items-center text-slate-600 dark:text-slate-400">
+                  <span>Móveis planejados</span>
+                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                    {formatCurrency(valorProdutos)}
+                  </span>
+                </div>
+                {valorServicos > 0 && (
+                  <div className="flex justify-between items-center text-slate-600 dark:text-slate-400">
+                    <span>Serviços adicionais</span>
+                    <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                      + {formatCurrency(valorServicos)}
+                    </span>
+                  </div>
+                )}
+                {valorDesconto > 0 && (
+                  <div className="flex justify-between items-center text-rose-600 dark:text-rose-400">
+                    <span>Desconto comercial</span>
+                    <span className="font-mono font-semibold">
+                      − {formatCurrency(valorDesconto)}
+                    </span>
+                  </div>
+                )}
+                <div className="pt-1.5 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-sm font-bold text-slate-900 dark:text-slate-100">
+                  <span>Total da proposta</span>
+                  <span className="font-mono text-base">{formatCurrency(valorTotalGeral)}</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 5. Resumo Geral do Projeto (exibido quando o orçamento for finalizado pelo fluxo guiado ou quando houver ambientes) */}
         {isOrcamentoFinalizado && ambientes.length > 0 && (
           <section
             ref={resumoGeralRef}
@@ -2550,7 +3151,9 @@ export default function OrcamentoV2() {
                     Valor Total Geral
                   </span>
                   <span className="text-xs text-slate-400 dark:text-slate-500 hidden md:inline">
-                    Soma de todos os ambientes e módulos
+                    {valorServicos > 0 || valorDesconto > 0
+                      ? 'Móveis + serviços − desconto'
+                      : 'Soma de todos os ambientes e módulos'}
                   </span>
                 </div>
               </div>
