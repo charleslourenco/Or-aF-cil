@@ -27,6 +27,7 @@ import {
   Wrench,
   Percent,
   History,
+  FileUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -87,6 +88,12 @@ import {
   ComissaoPersonalizada,
 } from '@/services/engenharia'
 import { gerarPropostaComercial, gerarAnaliseCusto, montarDescricaoNaturalModulo } from '@/lib/pdf'
+import {
+  ImportarProjetoPdfModal,
+  ResultadoImportacaoProjeto,
+} from '@/components/ImportarProjetoPdfModal'
+import { fetchCatalogoMateriais, CatalogoMaterial } from '@/services/catalogo'
+import { fetchTemplatesEngenharia, TemplateEngenharia } from '@/services/templates'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
@@ -307,6 +314,12 @@ export default function OrcamentoV2() {
     [],
   )
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<'proposta' | 'custo' | null>(null)
+  // Importação de projeto em PDF (prancha do arquiteto → ambientes, módulos e itens extras)
+  const [isImportPdfOpen, setIsImportPdfOpen] = useState(false)
+  const [isLoadingImportData, setIsLoadingImportData] = useState(false)
+  const [catalogoMateriais, setCatalogoMateriais] = useState<CatalogoMaterial[]>([])
+  const [templatesEngenharia, setTemplatesEngenharia] = useState<TemplateEngenharia[]>([])
+  const importDataLoadedRef = useRef(false)
 
   // Carregar dados de Perfil da Empresa e Configurações de Engenharia
   useEffect(() => {
@@ -817,6 +830,95 @@ export default function OrcamentoV2() {
   const handleRemoveServico = (id: string) => {
     setServicos((prev) => prev.filter((sv) => sv.id !== id))
     setIsSavedSuccessfully(false)
+  }
+
+  // Abre o modal de importação de PDF carregando catálogo e biblioteca na primeira vez
+  const handleAbrirImportacaoPdf = async () => {
+    if (!importDataLoadedRef.current) {
+      setIsLoadingImportData(true)
+      try {
+        const [cat, tpl] = await Promise.all([fetchCatalogoMateriais(), fetchTemplatesEngenharia()])
+        setCatalogoMateriais(cat ?? [])
+        setTemplatesEngenharia(tpl?.data ?? [])
+        importDataLoadedRef.current = true
+      } catch (err) {
+        console.warn('Falha ao carregar catálogo/biblioteca para importação de PDF:', err)
+      } finally {
+        setIsLoadingImportData(false)
+      }
+    }
+    setIsImportPdfOpen(true)
+  }
+
+  // Recebe o resultado revisado da importação e insere no orçamento
+  const handleImportarProjeto = (res: ResultadoImportacaoProjeto) => {
+    const novosIds: string[] = []
+    let totalModulos = 0
+
+    setAmbientes((prev) => {
+      const lista = [...prev]
+      res.ambientes.forEach((ambImp) => {
+        const modulosNovos: ModuloComercialV2[] = ambImp.modulos.map((m) => ({
+          id: `mod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          moduloId: m.moduloId,
+          modulo: m.nome,
+          descricaoTipo: m.descricaoTipo,
+          descricaoManual: m.descricaoManual,
+          quantidade: m.quantidade,
+          valorUnitario: m.valorUnitario,
+          valorTotal: m.valorTotal,
+          dimensoes: m.dimensoes,
+          perfilConstrutivo: m.perfilConstrutivo,
+          padraoProjeto: m.padraoProjeto,
+          mdfExterno: m.mdfExterno,
+          mdfInterno: m.mdfInterno,
+          mdfFundo: m.mdfFundo,
+          composicao: m.composicao || null,
+          itensBOM: m.itensBOM,
+          ajustesBOM: m.ajustesBOM,
+        }))
+        totalModulos += modulosNovos.length
+
+        // Se já existe ambiente com o mesmo nome, acrescenta os módulos nele
+        const idx = lista.findIndex(
+          (a) => a.nome.trim().toLowerCase() === ambImp.nome.trim().toLowerCase(),
+        )
+        if (idx >= 0) {
+          lista[idx] = { ...lista[idx], modulos: [...lista[idx].modulos, ...modulosNovos] }
+          novosIds.push(lista[idx].id)
+        } else {
+          const novoId = `amb-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+          lista.push({ id: novoId, nome: ambImp.nome, modulos: modulosNovos })
+          novosIds.push(novoId)
+        }
+      })
+      return lista
+    })
+
+    if (res.servicos.length > 0) {
+      setServicos((prev) => [...prev, ...res.servicos])
+    }
+
+    if (res.observacoes.length > 0) {
+      setObservacoes((prev) => {
+        const extra = res.observacoes.map((o) => `• ${o}`).join('\n')
+        return prev.trim() ? `${prev.trim()}\n${extra}` : extra
+      })
+    }
+
+    if (novosIds.length > 0) {
+      setExpandedAmbientes((prev) => Array.from(new Set([...prev, ...novosIds])))
+      setActiveAmbienteId(novosIds[novosIds.length - 1])
+    }
+    setIsOrcamentoFinalizado(false)
+    setIsSavedSuccessfully(false)
+
+    toast({
+      title: 'Projeto importado',
+      description: `${totalModulos} módulo(s) em ${res.ambientes.length} ambiente(s)${
+        res.servicos.length > 0 ? ` e ${res.servicos.length} item(ns) avulso(s)` : ''
+      } inseridos a partir de "${res.titulo}". Confira os valores e ajuste no drawer se precisar.`,
+    })
   }
 
   // Criação de novo ambiente
@@ -2022,6 +2124,22 @@ export default function OrcamentoV2() {
                   <Plus className="w-4 h-4" />
                   <span>+ Adicionar Ambiente</span>
                 </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleAbrirImportacaoPdf}
+                  disabled={isLoadingImportData}
+                  className="h-10 px-4 gap-2 text-xs font-bold rounded-xl border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  title="Ler a prancha de detalhamento do arquiteto (PDF) e inserir ambientes, módulos e itens extras"
+                >
+                  {isLoadingImportData ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileUp className="w-4 h-4" />
+                  )}
+                  <span>Importar projeto (PDF)</span>
+                </Button>
               </div>
             </div>
           </div>
@@ -3112,6 +3230,16 @@ export default function OrcamentoV2() {
             </form>
           </DialogContent>
         </Dialog>
+
+        <ImportarProjetoPdfModal
+          open={isImportPdfOpen}
+          onOpenChange={setIsImportPdfOpen}
+          catalogo={catalogoMateriais}
+          templates={templatesEngenharia}
+          configEngenharia={configEngenharia}
+          onImportar={handleImportarProjeto}
+          onCatalogoAtualizado={(novo) => setCatalogoMateriais((prev) => [...prev, novo])}
+        />
 
         {/* Drawer Lateral (Sheet) para Configuração do Módulo */}
         <ModuleEditDrawer
