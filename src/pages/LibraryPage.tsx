@@ -661,12 +661,19 @@ export default function LibraryPage() {
         (perfilRetornado === 'Fechado Envelopado' ||
           perfilRetornado === 'Balcão (tampo por conta do cliente)' ||
           perfilRetornado === 'Aberto / Painel' ||
-          perfilRetornado === 'Caixa Simples')
+          perfilRetornado === 'Caixa Simples' ||
+          perfilRetornado === 'Tampo sobre Estrutura')
       ) {
         setPreviewPerfil(perfilRetornado)
       } else {
         const nomeLower = nome.toLowerCase()
         if (
+          nomeLower.includes('mesa') ||
+          nomeLower.includes('escrivaninha') ||
+          nomeLower.includes('aparador')
+        ) {
+          setPreviewPerfil('Tampo sobre Estrutura')
+        } else if (
           nomeLower.includes('painel') ||
           nomeLower.includes('tv') ||
           nomeLower.includes('rack') ||

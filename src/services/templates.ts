@@ -11,6 +11,7 @@ export type PerfilConstrutivo =
   | 'Balcão (tampo por conta do cliente)'
   | 'Aberto / Painel'
   | 'Caixa Simples'
+  | 'Tampo sobre Estrutura'
 
 export const PERFIS_CONSTRUTIVOS_INFO: Record<
   PerfilConstrutivo,
@@ -38,6 +39,12 @@ export const PERFIS_CONSTRUTIVOS_INFO: Record<
     label: 'Caixa Simples',
     descCurta: 'Caixa única tradicional sem caixaria interna (sem envelopamento).',
     exemplo: 'Aéreo simples, nicho fechado básico.',
+  },
+  'Tampo sobre Estrutura': {
+    label: 'Tampo sobre Estrutura',
+    descCurta:
+      'Apenas o tampo em MDF (largura × profundidade) com fita de borda no perímetro. Sem laterais, base, fundo ou travessas: pés, base metálica e acessórios entram como itens avulsos.',
+    exemplo: 'Mesa, escrivaninha, bancada solta, aparador sobre pés ou estrutura metálica.',
   },
 }
 

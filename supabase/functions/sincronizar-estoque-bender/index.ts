@@ -24,7 +24,9 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-const BENDER_URL = (Deno.env.get('BENDER_SUPABASE_URL') || 'https://igsdtxyopeiecpxwovgh.supabase.co').replace(/\/$/, '')
+const BENDER_URL = (
+  Deno.env.get('BENDER_SUPABASE_URL') || 'https://igsdtxyopeiecpxwovgh.supabase.co'
+).replace(/\/$/, '')
 const BENDER_KEY = Deno.env.get('BENDER_SERVICE_ROLE_KEY') || ''
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
@@ -50,7 +52,12 @@ interface ItemCatalogo {
   origem_id: string | null
 }
 
-const CATEGORIAS_PERSONALIZADAS_NECESSARIAS = ['Puxadores', 'Móveis soltos', 'Espelho', 'Portas de Vidro e Alumínio']
+const CATEGORIAS_PERSONALIZADAS_NECESSARIAS = [
+  'Puxadores',
+  'Móveis soltos',
+  'Espelho',
+  'Portas de Vidro e Alumínio',
+]
 
 const num = (v: unknown): number => {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(',', '.'))
@@ -72,20 +79,47 @@ export function classificarItemBender(it: ItemBender): string | null {
 
   if (/TUBO METALO|METALON|METALOM/.test(tn)) return 'Serralheria Terceirizada'
   if (/FILME|RODO|^VASSOURA|ASSISTENCIA|CAMARIM IZZY/.test(tn)) return null
-  if (/CHAPA|MDF|MDP|COMPENSADO|PAINEL 15MM|GUARARAPES 15MM|PEARL RUBI/.test(tudo) && !/FITA/.test(tudo)) return null
-  if (/FITA DE BORDA|FITAS DE BORDA|BORDAS|FITA PVC|FITA BORDA|FITA_DE_BORDA|PERFIL FITA|POM DUBAI|PTA LUME/.test(tudo)) return null
-  if (/LIMPEZA|EPI|UNIFORME|ETIQUETA|EMBALAGEM|LIXA|BROCA|FRESA|SERRA|ESTOPA|QUIMICO|QUÍMICO|COLA|ADESIVO|SOLVENTE|INSUMO|DUPLA FACE|BALDE|ESTILETE|PARAFUSO|PARAFISO|COLCHÃO|COLCHAO|FRETE/.test(tudo)) return null
+  if (
+    /CHAPA|MDF|MDP|COMPENSADO|PAINEL 15MM|GUARARAPES 15MM|PEARL RUBI/.test(tudo) &&
+    !/FITA/.test(tudo)
+  )
+    return null
+  if (
+    /FITA DE BORDA|FITAS DE BORDA|BORDAS|FITA PVC|FITA BORDA|FITA_DE_BORDA|PERFIL FITA|POM DUBAI|PTA LUME/.test(
+      tudo,
+    )
+  )
+    return null
+  if (
+    /LIMPEZA|EPI|UNIFORME|ETIQUETA|EMBALAGEM|LIXA|BROCA|FRESA|SERRA|ESTOPA|QUIMICO|QUÍMICO|COLA|ADESIVO|SOLVENTE|INSUMO|DUPLA FACE|BALDE|ESTILETE|PARAFUSO|PARAFISO|COLCHÃO|COLCHAO|FRETE/.test(
+      tudo,
+    )
+  )
+    return null
   if (/PUXADOR|^PUX |PERFIL PUXADOR|CAVA/.test(tn)) return 'Puxadores'
-  if (/LED|FONTE|INTERRUPTOR|LUM |DIFUSOR|W\/M|HIPER BRILHO|CALHA|PERFILED/.test(tn)) return 'Iluminação'
-  if (/FECHO|DESEMPENADEIRA|PORTA VASSOURA|PORTA XICARAS|TAMPA P\/ PORTAS|TUBO ZINC/.test(tn)) return 'Ferragem'
-  if (/TOMADA|PASSA FIO|PASSA-FIO|FIO |CABO|FILTRO|ELETR|ELÉTR/.test(tudo)) return 'Componentes Elétricos'
-  if (/DOBRAD|CORREDI|ARTICULAD|AMORTECEDOR|ALINHADOR|SUPORTE|CABIDEIRO|KIT|TRILHO|PERFIL|RODIZIO|RODÍZIO|^PÉ |PE PLAST|PÉ PLÁST|PÉ DE PL|PÉ CROM|NIVELADOR|BATENTE|FECHADURA|CALCO|CALÇO|PISTÃO|PISTAO|PENDURADOR|LIXEIRA|PINCAIS|CANALETA|FIXA|LIMIT/.test(tn)) return 'Ferragem'
+  if (/LED|FONTE|INTERRUPTOR|LUM |DIFUSOR|W\/M|HIPER BRILHO|CALHA|PERFILED/.test(tn))
+    return 'Iluminação'
+  if (/FECHO|DESEMPENADEIRA|PORTA VASSOURA|PORTA XICARAS|TAMPA P\/ PORTAS|TUBO ZINC/.test(tn))
+    return 'Ferragem'
+  if (/TOMADA|PASSA FIO|PASSA-FIO|FIO |CABO|FILTRO|ELETR|ELÉTR/.test(tudo))
+    return 'Componentes Elétricos'
+  if (
+    /DOBRAD|CORREDI|ARTICULAD|AMORTECEDOR|ALINHADOR|SUPORTE|CABIDEIRO|KIT|TRILHO|PERFIL|RODIZIO|RODÍZIO|^PÉ |PE PLAST|PÉ PLÁST|PÉ DE PL|PÉ CROM|NIVELADOR|BATENTE|FECHADURA|CALCO|CALÇO|PISTÃO|PISTAO|PENDURADOR|LIXEIRA|PINCAIS|CANALETA|FIXA|LIMIT/.test(
+      tn,
+    )
+  )
+    return 'Ferragem'
   if (/^MESA /.test(tn)) return 'Móveis soltos'
   if (/ESPELHO/.test(tudo)) return 'Espelho'
   if (/VIDRO|PORTA/.test(tudo)) return 'Portas de Vidro e Alumínio'
   if (/FERRAGE|ACABAMENTO/.test(tc)) return 'Ferragem'
   if (/CUBA|TABUA|TÁBUA|MANTA/.test(tn)) return 'Acessórios'
-  if (/MOVEIS SOLTOS|MÓVEIS SOLTOS|CAMA|MESA|CADEIRA|BANQUETA|SOFA|SOFÁ|PUFE|OFFICE|BASE BOX/.test(tudo)) return 'Móveis soltos'
+  if (
+    /MOVEIS SOLTOS|MÓVEIS SOLTOS|CAMA|MESA|CADEIRA|BANQUETA|SOFA|SOFÁ|PUFE|OFFICE|BASE BOX/.test(
+      tudo,
+    )
+  )
+    return 'Móveis soltos'
   return null
 }
 
@@ -113,7 +147,9 @@ async function lerEstoqueBender(): Promise<ItemBender[]> {
     })
     if (!resp.ok) {
       const txt = await resp.text()
-      throw new Error(`Falha ao ler o estoque do Sistema Bender (${resp.status}): ${txt.slice(0, 300)}`)
+      throw new Error(
+        `Falha ao ler o estoque do Sistema Bender (${resp.status}): ${txt.slice(0, 300)}`,
+      )
     }
     const lote = (await resp.json()) as ItemBender[]
     itens.push(...lote)
@@ -132,10 +168,19 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (!BENDER_KEY) {
-      return json({ ok: false, error: 'Segredo BENDER_SERVICE_ROLE_KEY não configurado no projeto OrçaFácil.' }, 500)
+      return json(
+        {
+          ok: false,
+          error: 'Segredo BENDER_SERVICE_ROLE_KEY não configurado no projeto OrçaFácil.',
+        },
+        500,
+      )
     }
     if (!SUPABASE_URL || !SERVICE_KEY) {
-      return json({ ok: false, error: 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY indisponíveis.' }, 500)
+      return json(
+        { ok: false, error: 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY indisponíveis.' },
+        500,
+      )
     }
 
     let modo: 'simular' | 'aplicar' = 'aplicar'
@@ -209,7 +254,13 @@ Deno.serve(async (req: Request) => {
         // já espelhado: atualiza custo, saldo e fornecedor; mantém nome/categoria editados no OrçaFácil
         atualizar.push({
           id: existenteId.id,
-          dados: { preco_custo: c.preco, estoque_qtd: c.qtd, fornecedor: c.fornecedor, sincronizado_em: agora, updated_at: agora },
+          dados: {
+            preco_custo: c.preco,
+            estoque_qtd: c.qtd,
+            fornecedor: c.fornecedor,
+            sincronizado_em: agora,
+            updated_at: agora,
+          },
         })
       } else if (existenteNome) {
         // item cadastrado à mão com o mesmo nome: vincula ao Bender e assume o custo real
@@ -264,10 +315,16 @@ Deno.serve(async (req: Request) => {
 
     // 4. Garante as categorias personalizadas usadas
     const { data: cats } = await supabase.from('CategoriasPersonalizadas').select('nome')
-    const existentes = new Set(((cats || []) as { nome: string }[]).map((c) => c.nome.trim().toLowerCase()))
-    const novasCats = CATEGORIAS_PERSONALIZADAS_NECESSARIAS.filter((n) => !existentes.has(n.toLowerCase()) && porCategoria[n])
+    const existentes = new Set(
+      ((cats || []) as { nome: string }[]).map((c) => c.nome.trim().toLowerCase()),
+    )
+    const novasCats = CATEGORIAS_PERSONALIZADAS_NECESSARIAS.filter(
+      (n) => !existentes.has(n.toLowerCase()) && porCategoria[n],
+    )
     if (novasCats.length > 0) {
-      const { error } = await supabase.from('CategoriasPersonalizadas').insert(novasCats.map((nome) => ({ nome })))
+      const { error } = await supabase
+        .from('CategoriasPersonalizadas')
+        .insert(novasCats.map((nome) => ({ nome })))
       if (error) console.warn('Não foi possível criar categorias personalizadas:', error.message)
     }
 
@@ -282,7 +339,8 @@ Deno.serve(async (req: Request) => {
         lote.map((u) => supabase.from('CatalogoMateriais').update(u.dados).eq('id', u.id)),
       )
       const falha = resultados.find((r) => r.error)
-      if (falha?.error) throw new Error(`Erro ao atualizar itens do catálogo: ${falha.error.message}`)
+      if (falha?.error)
+        throw new Error(`Erro ao atualizar itens do catálogo: ${falha.error.message}`)
     }
 
     return json(resumo)

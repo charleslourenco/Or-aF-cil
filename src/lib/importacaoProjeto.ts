@@ -59,11 +59,20 @@ export interface ComposicaoProjeto {
   tampo: string | null
 }
 
+/**
+ * Tipo de móvel lido da prancha: decide como a BOM é montada.
+ * - caixaria / painel: motor geométrico completo (calcularBOM)
+ * - tampo_estrutura: só o tampo de MDF + fita; estrutura e acessórios vêm dos itens extras
+ * - metalico: nenhuma peça de MDF; todo o custo vem dos itens extras
+ */
+export type TipoMovel = 'caixaria' | 'painel' | 'tampo_estrutura' | 'metalico' | 'outro'
+
 export interface ModuloProjeto {
   codigo: string
   nome: string
   descricao: string
   quantidade: number
+  tipo_movel?: TipoMovel
   perfil_construtivo: PerfilConstrutivo
   template_id: string | null
   dimensoes_mm: { largura: number; altura: number; profundidade: number }
@@ -325,7 +334,13 @@ export function converterModuloProjeto({
 }: ConverterModuloParams): ModuloSalvoData {
   const markup = markupPadraoEngenharia(configEngenharia)
   const perda = perdaPadraoEngenharia(configEngenharia)
-  const perfil: PerfilConstrutivo = modulo.perfil_construtivo || 'Fechado Envelopado'
+  const tipoMovel: TipoMovel =
+    modulo.tipo_movel || (modulo.perfil_construtivo === 'Aberto / Painel' ? 'painel' : 'caixaria')
+  // Mesas/escrivaninhas: o motor tem o perfil "Tampo sobre Estrutura" (só tampo + fita de borda)
+  const perfil: PerfilConstrutivo =
+    tipoMovel === 'tampo_estrutura'
+      ? 'Tampo sobre Estrutura'
+      : modulo.perfil_construtivo || 'Fechado Envelopado'
   const isPainel = perfil === 'Aberto / Painel'
 
   const dimensoes: Dimensoes = {
@@ -381,25 +396,25 @@ export function converterModuloProjeto({
     perfil_construtivo: perfil,
   }
 
-  const pecas = calcularBOM(
-    moduloPayload,
-    dimensoes,
-    mdfExterno,
-    mdfInterno,
-    mdfFundo,
-    'comercial',
-    catalogo.length > 0 ? catalogo : undefined,
-    markup,
-    1.0,
-    composicao,
-    perda,
-  )
-
-  const extras = extrasSelecionados ?? modulo.itens_extras ?? []
-  const itensExtras = extras.map((e) => converterItemExtraParaBOM(e, markup, catalogo))
-
-  const itensBOM: OrcamentoBOMItem[] = [
-    ...pecas.map((p) => ({
+  let pecas: OrcamentoBOMItem[]
+  if (tipoMovel === 'metalico') {
+    // Floreiras, bancos, estruturas: nenhuma peça de MDF; o custo vem dos itens extras
+    pecas = []
+  } else {
+    // Caixaria, painel e tampo sobre estrutura: motor geométrico (calcularBOM) com o perfil certo
+    pecas = calcularBOM(
+      moduloPayload,
+      dimensoes,
+      mdfExterno,
+      mdfInterno,
+      mdfFundo,
+      'comercial',
+      catalogo.length > 0 ? catalogo : undefined,
+      markup,
+      1.0,
+      composicao,
+      perda,
+    ).map((p) => ({
       id: p.id,
       description: p.description,
       material: p.material,
@@ -412,9 +427,13 @@ export function converterModuloProjeto({
       salePrice: p.salePrice,
       item_nao_cadastrado: p.item_nao_cadastrado,
       catalogo_id: p.catalogo_id,
-    })),
-    ...itensExtras,
-  ]
+    }))
+  }
+
+  const extras = extrasSelecionados ?? modulo.itens_extras ?? []
+  const itensExtras = extras.map((e) => converterItemExtraParaBOM(e, markup, catalogo))
+
+  const itensBOM: OrcamentoBOMItem[] = [...pecas, ...itensExtras]
 
   const valorUnitario = round2(itensBOM.reduce((acc, it) => acc + (it.salePrice || 0), 0))
   const quantidade = Math.max(1, Math.round(modulo.quantidade || 1))
@@ -430,6 +449,8 @@ export function converterModuloProjeto({
   if (iluminacaoLed) detalhes.push('LED')
   if (itensExtras.length > 0)
     detalhes.push(`${itensExtras.length} ${itensExtras.length === 1 ? 'acessório' : 'acessórios'}`)
+  if (tipoMovel === 'tampo_estrutura') detalhes.push('tampo sobre estrutura')
+  if (tipoMovel === 'metalico') detalhes.push('sem MDF')
   detalhes.push('importado do PDF')
 
   const composicaoSalva: ComposicaoModuloSalva = {

@@ -511,6 +511,13 @@ export function calcularBOM(
   } else {
     // Fallback por nome
     if (
+      nomeTemplateLower.includes('mesa') ||
+      nomeTemplateLower.includes('escrivaninha') ||
+      nomeTemplateLower.includes('aparador') ||
+      nomeTemplateLower.includes('tampo solto')
+    ) {
+      perfilEfetivo = 'Tampo sobre Estrutura'
+    } else if (
       nomeTemplateLower.includes('painel') ||
       nomeTemplateLower.includes('tv') ||
       nomeTemplateLower.includes('rack') ||
@@ -537,12 +544,51 @@ export function calcularBOM(
   const isBalcao = perfilEfetivo === 'Balcão (tampo por conta do cliente)'
   const isAbertoPainel = perfilEfetivo === 'Aberto / Painel'
   const isCaixaSimples = perfilEfetivo === 'Caixa Simples'
+  const isTampoEstrutura = perfilEfetivo === 'Tampo sobre Estrutura'
 
   // =========================================================================
   // DIMENSÕES E SUBTRAÇÕES PARAMÉTRICAS
   // =========================================================================
   const { recuo_caixa_interna_mm, altura_rodape_mm, altura_rodateto_mm, altura_travessa_mm } =
     PARAMS_CONSTRUTIVOS
+
+  // =========================================================================
+  // TRATAMENTO ESPECÍFICO: PERFIL "TAMPO SOBRE ESTRUTURA" (MESAS, ESCRIVANINHAS, APARADORES)
+  // O móvel é só um TAMPO (L × P) em MDF Externo com fita de borda no perímetro.
+  // ZERO laterais, ZERO base, ZERO fundo, ZERO travessas, ZERO caixaria.
+  // Pés, base metálica, ponteiras e acessórios entram como itens avulsos/extras.
+  // =========================================================================
+  if (isTampoEstrutura) {
+    const areaTampo = ((L * P) / 1_000_000) * PERDA * escala
+    pecas.push(
+      criarPeca(
+        'bom-tampo-estrutura',
+        `Tampo em MDF (1x) — ${L}×${P}mm`,
+        rotuloMdfExterno,
+        espExt,
+        areaTampo,
+        'm²',
+        custoMdfExterno,
+        effectiveMarkup,
+      ),
+    )
+
+    const perimetroFitaTampoM = (2 * (L + P) * escala) / 1000
+    pecas.push(
+      criarPeca(
+        'bom-fita-borda-tampo',
+        `Fita de Borda do tampo — ${round2(perimetroFitaTampoM)}m linear`,
+        'Fita de Borda',
+        0,
+        perimetroFitaTampoM,
+        'm',
+        resolverCustoUnitario('Fita de Borda', catalogoPrecos, padraoProjeto),
+        effectiveMarkup,
+      ),
+    )
+
+    return pecas
+  }
 
   // =========================================================================
   // TRATAMENTO ESPECÍFICO: PERFIL "ABERTO / PAINEL" (EX: PAINEL DE TV, NICHOS)

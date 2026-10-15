@@ -134,6 +134,8 @@ export const LibraryMatchCard: React.FC<LibraryMatchCardProps> = ({
         return 'bg-sky-50 text-sky-900 border-sky-300'
       case 'Caixa Simples':
         return 'bg-slate-100 text-slate-800 border-slate-300'
+      case 'Tampo sobre Estrutura':
+        return 'bg-violet-50 text-violet-900 border-violet-300'
       default:
         return 'bg-slate-100 text-slate-800 border-slate-300'
     }

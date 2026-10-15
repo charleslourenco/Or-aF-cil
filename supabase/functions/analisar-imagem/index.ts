@@ -509,8 +509,7 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         textoDescricao.includes('balcão') ||
         textoDescricao.includes('balcao')
 
-      const ehMesa =
-        /\b(mesa|escrivaninha|aparador)\b/.test(textoDescricao) && !ehIlhaOuBalcao
+      const ehMesa = /\b(mesa|escrivaninha|aparador)\b/.test(textoDescricao) && !ehIlhaOuBalcao
 
       if (ehMesa) {
         perfilSugerido = 'Tampo sobre Estrutura'
