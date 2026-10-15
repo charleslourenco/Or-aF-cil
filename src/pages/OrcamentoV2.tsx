@@ -901,8 +901,27 @@ export default function OrcamentoV2() {
 
     if (res.observacoes.length > 0) {
       setObservacoes((prev) => {
-        const extra = res.observacoes.map((o) => `• ${o}`).join('\n')
-        return prev.trim() ? `${prev.trim()}\n${extra}` : extra
+        const atual = prev.trim()
+        const jaTem = new Set(
+          atual
+            .split('\n')
+            .map((l) =>
+              l
+                .replace(/^•\s*/, '')
+                .trim()
+                .toLowerCase(),
+            )
+            .filter(Boolean),
+        )
+        const novas: string[] = []
+        res.observacoes.forEach((o) => {
+          const chave = o.trim().toLowerCase().replace(/\.$/, '')
+          if (!chave || jaTem.has(chave) || jaTem.has(`${chave}.`)) return
+          jaTem.add(chave)
+          novas.push(`• ${o.trim()}`)
+        })
+        if (novas.length === 0) return prev
+        return atual ? `${atual}\n${novas.join('\n')}` : novas.join('\n')
       })
     }
 
@@ -3237,6 +3256,7 @@ export default function OrcamentoV2() {
           catalogo={catalogoMateriais}
           templates={templatesEngenharia}
           configEngenharia={configEngenharia}
+          ambientesExistentes={ambientes.map((a) => a.nome)}
           onImportar={handleImportarProjeto}
           onCatalogoAtualizado={(novo) => setCatalogoMateriais((prev) => [...prev, novo])}
         />

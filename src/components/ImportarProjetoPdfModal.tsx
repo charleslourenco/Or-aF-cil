@@ -23,6 +23,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { createMaterial, type CatalogoMaterial } from '@/services/catalogo'
@@ -57,6 +64,8 @@ interface ImportarProjetoPdfModalProps {
   onImportar: (resultado: ResultadoImportacaoProjeto) => void
   /** Chamado quando um item é cadastrado no catálogo a partir da revisão. */
   onCatalogoAtualizado?: (novo: CatalogoMaterial) => void
+  /** Nomes dos ambientes que já existem no orçamento (para inserir os módulos neles). */
+  ambientesExistentes?: string[]
 }
 
 interface EdicaoExtra {
@@ -87,6 +96,7 @@ export const ImportarProjetoPdfModal: React.FC<ImportarProjetoPdfModalProps> = (
   configEngenharia,
   onImportar,
   onCatalogoAtualizado,
+  ambientesExistentes = [],
 }) => {
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -152,8 +162,14 @@ export const ImportarProjetoPdfModal: React.FC<ImportarProjetoPdfModalProps> = (
       // Seleciona tudo por padrão
       const sel: Record<string, boolean> = {}
       const nomes: Record<number, string> = {}
+      // Se o orçamento já tem ambientes, sugere o existente como destino (evita duplicar
+      // "Sala" / "Sala - Colaborativo" quando o projeto vem em várias pranchas)
+      const destinoPadrao = ambientesExistentes.length === 1 ? ambientesExistentes[0] : null
       resultado.ambientes.forEach((amb, ai) => {
-        nomes[ai] = amb.nome
+        const jaExiste = ambientesExistentes.find(
+          (n) => n.trim().toLowerCase() === (amb.nome || '').trim().toLowerCase(),
+        )
+        nomes[ai] = jaExiste || destinoPadrao || amb.nome
         amb.modulos.forEach((mod, mi) => {
           sel[`m-${ai}-${mi}`] = true
           mod.itens_extras.forEach((_, ei) => {
@@ -586,8 +602,37 @@ export const ImportarProjetoPdfModal: React.FC<ImportarProjetoPdfModalProps> = (
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-800/60">
                     <Boxes className="w-4 h-4 text-slate-600 dark:text-slate-300" />
                     <span className="text-[11px] uppercase tracking-wide text-slate-500">
-                      Ambiente
+                      Inserir no ambiente
                     </span>
+                    {ambientesExistentes.length > 0 && (
+                      <Select
+                        value={
+                          ambientesExistentes.includes(nomesAmbientes[ai] ?? amb.nome)
+                            ? (nomesAmbientes[ai] ?? amb.nome)
+                            : '__novo__'
+                        }
+                        onValueChange={(v) =>
+                          setNomesAmbientes((prev) => ({
+                            ...prev,
+                            [ai]: v === '__novo__' ? amb.nome : v,
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-7 w-56 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ambientesExistentes.map((n) => (
+                            <SelectItem key={n} value={n} className="text-xs">
+                              {n} (já existe)
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="__novo__" className="text-xs">
+                            Novo ambiente…
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
                     <Input
                       value={nomesAmbientes[ai] ?? amb.nome}
                       onChange={(e) =>
@@ -595,6 +640,7 @@ export const ImportarProjetoPdfModal: React.FC<ImportarProjetoPdfModalProps> = (
                       }
                       className="h-7 max-w-xs text-sm font-semibold"
                     />
+                    <span className="text-[11px] text-slate-400">(prancha: {amb.nome})</span>
                   </div>
                   <div className="divide-y divide-slate-100 dark:divide-slate-800">
                     {amb.modulos.map((mod, mi) => {
@@ -630,7 +676,11 @@ export const ImportarProjetoPdfModal: React.FC<ImportarProjetoPdfModalProps> = (
                                   {mod.nome}
                                 </p>
                                 <Badge variant="secondary" className="text-[10px]">
-                                  {mod.perfil_construtivo}
+                                  {mod.tipo_movel === 'tampo_estrutura'
+                                    ? 'Tampo sobre estrutura'
+                                    : mod.tipo_movel === 'metalico'
+                                      ? 'Metálico / sem MDF'
+                                      : mod.perfil_construtivo}
                                 </Badge>
                                 <Badge
                                   variant="outline"
