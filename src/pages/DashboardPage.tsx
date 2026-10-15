@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   FileText,
@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   Layers,
   TrendingUp,
+  TrendingDown,
+  Search,
   Plus,
   RefreshCw,
   AlertCircle,
@@ -17,21 +19,34 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import {
   fetchOrcamentos,
   fetchOrcamentosCount,
+  fetchOrcamentosCountMesAnterior,
   fetchOrcamentosSomaValor,
   fetchOrcamentosAprovadosCount,
   fetchTicketMedio,
   deleteOrcamento,
+  updateOrcamento,
+  STATUS_ORCAMENTO,
   Orcamento,
 } from '@/services/orcamentos'
 
 const statusStyles: Record<string, string> = {
-  Aprovado: 'bg-slate-200 text-slate-800',
+  Aprovado: 'bg-emerald-100 text-emerald-800',
   'Em Negociação': 'bg-amber-100 text-amber-700',
+  Enviado: 'bg-sky-100 text-sky-800',
+  Perdido: 'bg-rose-100 text-rose-700',
   Rascunho: 'bg-slate-100 text-slate-600',
 }
 
@@ -107,19 +122,25 @@ export default function DashboardPage() {
   const [ticketMedio, setTicketMedio] = useState<number | null>(null)
   const [quotes, setQuotes] = useState<Orcamento[] | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [countMesAnterior, setCountMesAnterior] = useState<number | null>(null)
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null)
+  const [busca, setBusca] = useState('')
+  const [filtroStatus, setFiltroStatus] = useState<string>('todos')
 
   const loadDashboardData = useCallback(async () => {
     setLoading(true)
     setHasError(false)
 
     try {
-      const [quotesRes, countRes, somaRes, aprovadosRes, ticketRes] = await Promise.all([
-        fetchOrcamentos(),
-        fetchOrcamentosCount(),
-        fetchOrcamentosSomaValor(),
-        fetchOrcamentosAprovadosCount(),
-        fetchTicketMedio(),
-      ])
+      const [quotesRes, countRes, somaRes, aprovadosRes, ticketRes, anteriorRes] =
+        await Promise.all([
+          fetchOrcamentos(),
+          fetchOrcamentosCount(),
+          fetchOrcamentosSomaValor(),
+          fetchOrcamentosAprovadosCount(),
+          fetchTicketMedio(),
+          fetchOrcamentosCountMesAnterior(),
+        ])
 
       // Se todas as consultas de erro retornarem null, marcar erro global
       if (
@@ -127,7 +148,8 @@ export default function DashboardPage() {
         countRes === null &&
         somaRes === null &&
         aprovadosRes === null &&
-        ticketRes === null
+        ticketRes === null &&
+        anteriorRes === null
       ) {
         setHasError(true)
       } else {
@@ -136,6 +158,7 @@ export default function DashboardPage() {
         setSomaValor(somaRes)
         setAprovadosCount(aprovadosRes)
         setTicketMedio(ticketRes)
+        setCountMesAnterior(anteriorRes)
       }
     } catch (err) {
       console.error('Erro ao carregar dados do dashboard:', err)
@@ -178,6 +201,50 @@ export default function DashboardPage() {
       setDeletingId(null)
     }
   }
+
+  // Troca de status direto na lista (Rascunho → Enviado → Aprovado/Perdido)
+  const handleStatusChange = async (quote: Orcamento, novoStatus: string) => {
+    if (novoStatus === (quote.status || 'Rascunho')) return
+    setUpdatingStatusId(quote.id)
+    const atualizado = await updateOrcamento(quote.id, { status: novoStatus })
+    setUpdatingStatusId(null)
+    if (!atualizado) {
+      toast({
+        title: 'Erro ao alterar status',
+        description: 'Não foi possível salvar o novo status.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setQuotes((prev) =>
+      prev ? prev.map((q) => (q.id === quote.id ? { ...q, status: novoStatus } : q)) : prev,
+    )
+    const aprovadosRes = await fetchOrcamentosAprovadosCount()
+    if (aprovadosRes !== null) setAprovadosCount(aprovadosRes)
+  }
+
+  // Busca por cliente/número e filtro por status
+  const quotesFiltrados = useMemo(() => {
+    if (!quotes) return quotes
+    const termo = busca.trim().toLowerCase()
+    return quotes.filter((q) => {
+      const statusOk = filtroStatus === 'todos' || (q.status || 'Rascunho') === filtroStatus
+      if (!statusOk) return false
+      if (!termo) return true
+      const numero = q.numero_sequencial ? String(q.numero_sequencial).padStart(3, '0') : ''
+      return (
+        (q.cliente_nome || '').toLowerCase().includes(termo) ||
+        numero.includes(termo.replace('#', ''))
+      )
+    })
+  }, [quotes, busca, filtroStatus])
+
+  // Variação do número de orçamentos em relação ao mês anterior
+  const variacaoMes = useMemo(() => {
+    if (totalCount === null || countMesAnterior === null) return null
+    if (countMesAnterior === 0) return totalCount > 0 ? null : 0
+    return Math.round(((totalCount - countMesAnterior) / countMesAnterior) * 100)
+  }, [totalCount, countMesAnterior])
 
   // Formatação dos valores de KPI respeitando as regras especificadas
   const displayTotalCount = totalCount !== null ? totalCount.toString() : '—'
@@ -232,10 +299,30 @@ export default function DashboardPage() {
             value={displayTotalCount}
             loading={loading}
           >
-            <div className="flex items-center gap-1 text-slate-700 text-xs font-semibold">
-              <TrendingUp className="w-3.5 h-3.5" />
-              <span>+12% em relação ao mês anterior</span>
-            </div>
+            {variacaoMes === null ? (
+              <span className="text-xs text-slate-400 font-medium">
+                {countMesAnterior === 0 && (totalCount ?? 0) > 0
+                  ? 'Nenhum orçamento no mês anterior'
+                  : 'Sem comparação com o mês anterior'}
+              </span>
+            ) : (
+              <div
+                className={cn(
+                  'flex items-center gap-1 text-xs font-semibold',
+                  variacaoMes < 0 ? 'text-rose-600' : 'text-emerald-700',
+                )}
+              >
+                {variacaoMes < 0 ? (
+                  <TrendingDown className="w-3.5 h-3.5" />
+                ) : (
+                  <TrendingUp className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {variacaoMes > 0 ? '+' : ''}
+                  {variacaoMes}% em relação ao mês anterior ({countMesAnterior})
+                </span>
+              </div>
+            )}
           </KpiCard>
 
           <KpiCard
@@ -280,14 +367,44 @@ export default function DashboardPage() {
 
         {/* Recent Quotes Section */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">Últimos Orçamentos Gerados</h3>
-            {quotes && quotes.length > 0 && (
-              <span className="text-xs font-medium text-slate-500">
-                {quotes.length}{' '}
-                {quotes.length === 1 ? 'orçamento encontrado' : 'orçamentos encontrados'}
-              </span>
-            )}
+          <div className="px-5 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-900">Todos os Orçamentos</h3>
+              {quotes && quotes.length > 0 && (
+                <span className="text-xs font-medium text-slate-500">
+                  {busca.trim() === '' && filtroStatus === 'todos'
+                    ? `${quotes.length} no total`
+                    : `${quotesFiltrados?.length ?? 0} de ${quotes.length}`}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Input
+                  type="text"
+                  placeholder="Buscar por cliente ou nº"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="h-9 pl-8 w-full text-xs"
+                />
+              </div>
+
+              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                <SelectTrigger className="h-9 w-full sm:w-44 text-xs">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os status</SelectItem>
+                  {STATUS_ORCAMENTO.map((st) => (
+                    <SelectItem key={st} value={st}>
+                      {st}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Estado: Carregando (Skeleton) */}
@@ -355,12 +472,24 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {/* Estado: Filtro sem resultados */}
+          {!loading &&
+            quotes !== null &&
+            quotes.length > 0 &&
+            quotesFiltrados &&
+            quotesFiltrados.length === 0 && (
+              <div className="p-8 text-center text-sm text-slate-500">
+                Nenhum orçamento corresponde à busca ou ao filtro.
+              </div>
+            )}
+
           {/* Estado: Tabela com dados reais */}
-          {!loading && quotes !== null && quotes.length > 0 && (
+          {!loading && quotesFiltrados && quotesFiltrados.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-sm">
                 <thead>
                   <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider">
+                    <th className="text-left font-semibold px-5 py-3">Nº</th>
                     <th className="text-left font-semibold px-5 py-3">Cliente</th>
                     <th className="text-left font-semibold px-5 py-3">Ambiente</th>
                     <th className="text-left font-semibold px-5 py-3">Módulo</th>
@@ -371,7 +500,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {quotes.map((quote) => {
+                  {quotesFiltrados.map((quote) => {
                     const statusKey = quote.status || 'Rascunho'
                     const statusClass = statusStyles[statusKey] || 'bg-slate-100 text-slate-600'
                     const valorNum =
@@ -380,9 +509,15 @@ export default function DashboardPage() {
                         : quote.valor_total
                           ? parseFloat(quote.valor_total)
                           : 0
+                    const numeroFormatado = quote.numero_sequencial
+                      ? `#${String(quote.numero_sequencial).padStart(3, '0')}`
+                      : '—'
 
                     return (
                       <tr key={quote.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-5 py-3.5 font-mono text-xs text-slate-500">
+                          {numeroFormatado}
+                        </td>
                         <td className="px-5 py-3.5 font-medium text-slate-900">
                           {quote.cliente_nome || '—'}
                         </td>
@@ -430,14 +565,28 @@ export default function DashboardPage() {
                           {formatCurrency(valorNum)}
                         </td>
                         <td className="px-5 py-3.5">
-                          <span
-                            className={cn(
-                              'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                              statusClass,
-                            )}
+                          <Select
+                            value={statusKey}
+                            disabled={updatingStatusId === quote.id}
+                            onValueChange={(novoStatus) => handleStatusChange(quote, novoStatus)}
                           >
-                            {statusKey}
-                          </span>
+                            <SelectTrigger
+                              aria-label="Alterar status"
+                              className={cn(
+                                'h-7 w-36 rounded-full border-0 px-2.5 text-xs font-semibold focus:ring-0',
+                                statusClass,
+                              )}
+                            >
+                              <SelectValue>{statusKey}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {STATUS_ORCAMENTO.map((st) => (
+                                <SelectItem key={st} value={st}>
+                                  {st}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-1.5">
