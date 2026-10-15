@@ -56,7 +56,8 @@ export const AddFromCatalogModal: React.FC<AddFromCatalogModalProps> = ({
   }
 
   const handleAdd = (material: CatalogoMaterial) => {
-    const quantidade = quantities[material.id] ?? 1
+    const qtdInformada = quantities[material.id]
+    const quantidade = typeof qtdInformada === 'number' && qtdInformada > 0 ? qtdInformada : 1
     const unitCost = Number(material.preco_custo) || 0
     const totalCost = unitCost * quantidade
     const effectiveMarkup = markupEngenharia > 0 ? markupEngenharia : 2.5
@@ -77,6 +78,7 @@ export const AddFromCatalogModal: React.FC<AddFromCatalogModalProps> = ({
       totalCost,
       markup: effectiveMarkup,
       salePrice,
+      catalogo_id: material.id,
     }
 
     onAddItem(newItem)

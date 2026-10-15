@@ -43,7 +43,10 @@ export const AddCustomItemModal: React.FC<AddCustomItemModalProps> = ({
 }) => {
   const [nome, setNome] = useState('')
   const [categoria, setCategoria] = useState<string>('Ferragem')
-  const [quantidade, setQuantidade] = useState<number>(1)
+  // Guardado como texto para aceitar valores fracionados (ex.: 0,5 m) enquanto o usuário digita
+  const [quantidadeTexto, setQuantidadeTexto] = useState<string>('1')
+  const quantidadeNum = parseFloat(quantidadeTexto.replace(',', '.'))
+  const quantidade = Number.isFinite(quantidadeNum) && quantidadeNum > 0 ? quantidadeNum : 1
   const [categoriasPersonalizadas, setCategoriasPersonalizadas] = useState<
     CategoriaPersonalizada[]
   >([])
@@ -67,7 +70,7 @@ export const AddCustomItemModal: React.FC<AddCustomItemModalProps> = ({
   const resetForm = () => {
     setNome('')
     setCategoria('Ferragem')
-    setQuantidade(1)
+    setQuantidadeTexto('1')
     setUnidade('un')
     setPrecoCusto('')
     setErrors({})
@@ -246,8 +249,8 @@ export const AddCustomItemModal: React.FC<AddCustomItemModalProps> = ({
                 type="number"
                 min={0.01}
                 step="any"
-                value={quantidade}
-                onChange={(e) => setQuantidade(Number(e.target.value) || 1)}
+                value={quantidadeTexto}
+                onChange={(e) => setQuantidadeTexto(e.target.value)}
                 className="h-10 rounded-xl text-sm font-mono border-slate-300"
               />
             </div>
