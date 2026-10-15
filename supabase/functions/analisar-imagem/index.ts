@@ -52,6 +52,7 @@ export type PerfilConstrucaoSugerido =
   | 'Balcão (tampo por conta do cliente)'
   | 'Aberto / Painel'
   | 'Caixa Simples'
+  | 'Tampo sobre Estrutura'
 
 interface ModuloDetectado {
   codigo_modulo: string
@@ -245,6 +246,7 @@ ${listaCatalogoText}
    - "Balcão (tampo por conta do cliente)": ilha de cozinha, bancada central, balcão cooktop, balcões de pia, gabinetes inferiores de cozinha/banheiro onde o topo receberá tampo avulso (granito/madeira). NUNCA gere tampo automaticamente.
    - "Aberto / Painel": painéis de TV, painéis de cabeceira, racks abertos, estantes abertas, nichos sem tamponamento, sem base/teto internos nem rodateto.
    - "Caixa Simples": aéreos e caixas sem tamponamento externo.
+   - "Tampo sobre Estrutura": mesas, escrivaninhas, aparadores e bancadas soltas: apenas um TAMPO de MDF apoiado em pés ou estrutura metálica. NÃO é caixaria nem balcão: não tem laterais, base, fundo nem travessas. Use este perfil sempre que o móvel for uma mesa.
 
 6. DECOMPOSIÇÃO ESTRUTURADA DE COMPONENTES E INTERIOR VISÍVEL:
    - Analise minuciosamente a parte externa e o INTERIOR visível do móvel.
@@ -490,6 +492,9 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         if (txt.includes('aereo') || txt.includes('aéreo') || txt.includes('suspenso')) {
           return 'Caixa Simples'
         }
+        if (txt.includes('mesa') || txt.includes('escrivaninha') || txt.includes('aparador')) {
+          return 'Tampo sobre Estrutura'
+        }
         return 'Fechado Envelopado'
       }
 
@@ -504,13 +509,19 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
         textoDescricao.includes('balcão') ||
         textoDescricao.includes('balcao')
 
-      if (ehIlhaOuBalcao) {
+      const ehMesa =
+        /\b(mesa|escrivaninha|aparador)\b/.test(textoDescricao) && !ehIlhaOuBalcao
+
+      if (ehMesa) {
+        perfilSugerido = 'Tampo sobre Estrutura'
+      } else if (ehIlhaOuBalcao) {
         perfilSugerido = 'Balcão (tampo por conta do cliente)'
       } else if (
         perfilRaw === 'Fechado Envelopado' ||
         perfilRaw === 'Balcão (tampo por conta do cliente)' ||
         perfilRaw === 'Aberto / Painel' ||
-        perfilRaw === 'Caixa Simples'
+        perfilRaw === 'Caixa Simples' ||
+        perfilRaw === 'Tampo sobre Estrutura'
       ) {
         perfilSugerido = perfilRaw as PerfilConstrucaoSugerido
       } else {
@@ -574,7 +585,9 @@ Retorne EXATAMENTE o JSON no formato abaixo, sem markdown, sem blocos de código
       const textoFallback = `${nomeFallback} ${descFallback}`.toLowerCase()
 
       let perfilFallback: PerfilConstrucaoSugerido = 'Fechado Envelopado'
-      if (
+      if (/\b(mesa|escrivaninha|aparador)\b/.test(textoFallback)) {
+        perfilFallback = 'Tampo sobre Estrutura'
+      } else if (
         textoFallback.includes('ilha') ||
         textoFallback.includes('bancada') ||
         textoFallback.includes('balcão') ||

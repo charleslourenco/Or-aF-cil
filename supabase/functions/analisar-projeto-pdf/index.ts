@@ -40,12 +40,14 @@ type PerfilConstrutivo =
   | 'Balcão (tampo por conta do cliente)'
   | 'Aberto / Painel'
   | 'Caixa Simples'
+  | 'Tampo sobre Estrutura'
 
 const PERFIS_VALIDOS: PerfilConstrutivo[] = [
   'Fechado Envelopado',
   'Balcão (tampo por conta do cliente)',
   'Aberto / Painel',
   'Caixa Simples',
+  'Tampo sobre Estrutura',
 ]
 
 const CATEGORIAS_VALIDAS = [
@@ -77,11 +79,16 @@ export interface ItemExtraProjeto {
   justificativa?: string
 }
 
+export type TipoMovel = 'caixaria' | 'painel' | 'tampo_estrutura' | 'metalico' | 'outro'
+
+const TIPOS_MOVEL: TipoMovel[] = ['caixaria', 'painel', 'tampo_estrutura', 'metalico', 'outro']
+
 export interface ModuloProjeto {
   codigo: string
   nome: string
   descricao: string
   quantidade: number
+  tipo_movel: TipoMovel
   perfil_construtivo: PerfilConstrutivo
   template_id: string | null
   dimensoes_mm: { largura: number; altura: number; profundidade: number }
@@ -132,22 +139,7 @@ const normalizar = (s: string): string =>
     .replace(/\s+/g, ' ')
     .trim()
 
-const STOPWORDS = new Set([
-  'de',
-  'da',
-  'do',
-  'das',
-  'dos',
-  'em',
-  'para',
-  'com',
-  'e',
-  'o',
-  'a',
-  'un',
-  'mm',
-  'cm',
-])
+const STOPWORDS = new Set(['de', 'da', 'do', 'das', 'dos', 'em', 'para', 'com', 'e', 'o', 'a', 'un', 'mm', 'cm'])
 
 const tokens = (s: string): string[] =>
   normalizar(s)
@@ -202,40 +194,37 @@ const espessura = (v: unknown, fallback: 15 | 18): 15 | 18 => {
 function normalizarPerfil(v: unknown): PerfilConstrutivo {
   const s = normalizar(String(v ?? ''))
   if (PERFIS_VALIDOS.some((p) => normalizar(p) === s)) return String(v) as PerfilConstrutivo
-  if (s.includes('painel') || s.includes('aberto') || s.includes('prateleira flutuante'))
-    return 'Aberto / Painel'
-  if (s.includes('balcao') || s.includes('bancada') || s.includes('tampo'))
-    return 'Balcão (tampo por conta do cliente)'
+  if (s.includes('painel') || s.includes('aberto') || s.includes('prateleira flutuante')) return 'Aberto / Painel'
+  if (s.includes('tampo sobre') || s.includes('mesa') || s.includes('escrivaninha')) return 'Tampo sobre Estrutura'
+  if (s.includes('balcao') || s.includes('bancada') || s.includes('tampo')) return 'Balcão (tampo por conta do cliente)'
   if (s.includes('caixa') || s.includes('aereo') || s.includes('nicho')) return 'Caixa Simples'
   return 'Fechado Envelopado'
+}
+
+function normalizarTipoMovel(v: unknown, perfil: PerfilConstrutivo, nome: string): TipoMovel {
+  const s = normalizar(String(v ?? ''))
+  const found = TIPOS_MOVEL.find((t) => normalizar(t) === s)
+  if (found) return found
+  const n = normalizar(nome)
+  if (/\b(mesa|bancada de estudo|escrivaninha|aparador|balcao de atendimento)\b/.test(n)) return 'tampo_estrutura'
+  if (/\b(floreira|banco|cadeira|suporte|estrutura|lixeira|bicicletario)\b/.test(n)) return 'metalico'
+  if (perfil === 'Aberto / Painel') return 'painel'
+  return 'caixaria'
 }
 
 function normalizarCategoria(v: unknown): string {
   const s = normalizar(String(v ?? ''))
   const found = CATEGORIAS_VALIDAS.find((c) => normalizar(c) === s)
   if (found) return found
-  if (s.includes('eletric') || s.includes('tomada') || s.includes('passa'))
-    return 'Componentes Elétricos'
+  if (s.includes('eletric') || s.includes('tomada') || s.includes('passa')) return 'Componentes Elétricos'
   if (s.includes('led') || s.includes('ilumin')) return 'Iluminação'
-  if (s.includes('metal') || s.includes('serralh') || s.includes('aco') || s.includes('ferro'))
-    return 'Serralheria Terceirizada'
-  if (s.includes('vidro') || s.includes('pedra') || s.includes('granito') || s.includes('acess'))
-    return 'Acessórios'
-  if (
-    s.includes('ferragem') ||
-    s.includes('puxador') ||
-    s.includes('dobradica') ||
-    s.includes('corredica')
-  )
-    return 'Ferragem'
+  if (s.includes('metal') || s.includes('serralh') || s.includes('aco') || s.includes('ferro')) return 'Serralheria Terceirizada'
+  if (s.includes('vidro') || s.includes('pedra') || s.includes('granito') || s.includes('acess')) return 'Acessórios'
+  if (s.includes('ferragem') || s.includes('puxador') || s.includes('dobradica') || s.includes('corredica')) return 'Ferragem'
   return 'Outro'
 }
 
-function normalizarItemExtra(
-  raw: any,
-  catalogo: CatalogoMaterialInfo[],
-  idsValidos: Set<string>,
-): ItemExtraProjeto | null {
+function normalizarItemExtra(raw: any, catalogo: CatalogoMaterialInfo[], idsValidos: Set<string>): ItemExtraProjeto | null {
   const descricao = String(raw?.descricao || raw?.nome || '').trim()
   if (!descricao) return null
 
@@ -266,12 +255,9 @@ function normalizarItemExtra(
     descricao,
     quantidade: num(raw?.quantidade, 1),
     unidade,
-    categoria_sugerida:
-      catalogoItem?.categoria || normalizarCategoria(raw?.categoria_sugerida ?? raw?.categoria),
+    categoria_sugerida: catalogoItem?.categoria || normalizarCategoria(raw?.categoria_sugerida ?? raw?.categoria),
     catalogo_id: catalogoId,
-    catalogo_nome: catalogoItem
-      ? catalogoItem.nome_material || catalogoItem.descricao || null
-      : null,
+    catalogo_nome: catalogoItem ? catalogoItem.nome_material || catalogoItem.descricao || null : null,
     item_nao_cadastrado: !catalogoItem,
     preco_custo_estimado: catalogoItem
       ? Number(catalogoItem.preco_custo || 0)
@@ -314,13 +300,19 @@ function normalizarModulo(
 
   const mdfExtCor = String(raw?.mdf_externo?.cor || raw?.mdf_externo || 'Branco TX').trim()
   const mdfIntCor = String(raw?.mdf_interno?.cor || raw?.mdf_interno || 'Branco TX').trim()
+  const perfilLido = normalizarPerfil(raw?.perfil_construtivo)
+  const tipoMovelLido = normalizarTipoMovel(raw?.tipo_movel, perfilLido, nome)
+  // Mesas/escrivaninhas: o perfil construtivo do motor é "Tampo sobre Estrutura" (só tampo + fita)
+  const perfil: PerfilConstrutivo =
+    tipoMovelLido === 'tampo_estrutura' ? 'Tampo sobre Estrutura' : perfilLido
 
   return {
     codigo,
     nome,
     descricao: String(raw?.descricao || '').trim(),
     quantidade: Math.max(1, Math.round(num(raw?.quantidade, 1))),
-    perfil_construtivo: normalizarPerfil(raw?.perfil_construtivo),
+    tipo_movel: normalizarTipoMovel(raw?.tipo_movel, perfil, nome),
+    perfil_construtivo: perfil,
     template_id: templateId,
     dimensoes_mm: {
       largura: Math.round(num(raw?.dimensoes_mm?.largura, 1000)),
@@ -424,11 +416,18 @@ ${listaTemplatesText}
 2. Agrupe os módulos por AMBIENTE (Sala, Cozinha, Quarto, Escritório...). Se a prancha não nomear o ambiente, use o título da prancha.
 3. DIMENSÕES sempre em MILÍMETROS (largura × altura × profundidade). Converta cm e m. Painéis: profundidade = profundidade das prateleiras/nichos acoplados ao painel (ex.: 200); painel sem prateleiras = 150. Prateleiras flutuantes e nichos acoplados a um painel entram na composição/itens do painel, não como módulo separado, a menos que a tabela de mobiliário os liste separadamente.
 4. MDF: informe cor/padrão e espessura (15 ou 18) do MDF externo (frentes/laterais aparentes) e do MDF interno. Se a prancha cita marca (Duratex, Arauco, Guararapes...), inclua no nome da cor. Fundo: "MDF 6mm <cor>".
-5. PERFIL CONSTRUTIVO (exatamente um destes textos):
+5a. TIPO DE MÓVEL ("tipo_movel", exatamente um destes): 
+   - "caixaria": armários, balcões, aéreos, gaveteiros, roupeiros, caixas de MDF (laterais + base + topo + fundo).
+   - "painel": painéis de TV, painéis ripados, cabeceiras, prateleiras fixadas na parede.
+   - "tampo_estrutura": mesas, escrivaninhas, bancadas de estudo, aparadores: um TAMPO de MDF sobre estrutura metálica ou pés. NÃO tem laterais, base, fundo nem portas. Só o tampo é MDF; a estrutura metálica, ponteiras, ganchos e filtros vão em itens extras.
+   - "metalico": floreiras, bancos de madeira/metal, cadeiras, suportes, estruturas 100% metálicas ou de madeira maciça: NÃO tem nenhuma peça de MDF; TODO o custo vai em itens extras (estrutura, chapa, assento ripado, pintura...).
+   - "outro": quando não se encaixa; descreva em "descricao".
+5b. PERFIL CONSTRUTIVO (exatamente um destes textos; para tipo_movel "tampo_estrutura" use "Tampo sobre Estrutura" e para "metalico" use "Caixa Simples"):
    - "Fechado Envelopado": armários, roupeiros, armários altos fechados.
    - "Balcão (tampo por conta do cliente)": balcões/bancadas/gabinetes que recebem tampo de pedra ou vidro fornecido à parte.
    - "Aberto / Painel": painéis de TV, painéis ripados, cabeceiras, estantes abertas, prateleiras.
    - "Caixa Simples": aéreos e caixas simples sem tamponamento.
+   - "Tampo sobre Estrutura": mesas, escrivaninhas, aparadores, bancadas de estudo: só o tampo de MDF sobre pés/estrutura metálica.
    Armário baixo com tampo em MDF do próprio móvel = "Fechado Envelopado"; se o tampo é pedra/vidro fornecido à parte = "Balcão (tampo por conta do cliente)".
 6. COMPOSIÇÃO: conte portas (e tipo: abrir/correr/batente/nenhum), gavetas, prateleiras internas, divisórias verticais (compartimentos − 1), cabideiro, LED, puxadores (quantidade e tipo: cava 45°, perfil, concha, sem puxador...), rodapé em mm, tampo (descreva se houver).
 7. ITENS EXTRAS (MUITO IMPORTANTE): tudo que está escrito na prancha e NÃO é peça de MDF nem ferragem básica de montagem deve virar item extra com QUANTIDADE calculada a partir do texto:
@@ -439,11 +438,15 @@ ${listaTemplatesText}
    - puxadores especiais (cava/perfil/concha), dobradiças com amortecimento, corrediças se citadas
    - estofados, tecidos, instalação especial
    Exemplo: "6 tomadas por compartimento" com 3 compartimentos = 18 tomadas. "1 passa-fio por compartimento" = 3 passa-fios. "6 passa-fios circulares" = 6.
+   FILTRO/RÉGUA/EXTENSÃO com N tomadas = 1 UNIDADE por móvel (descricao "Filtro de N tomadas embutido", quantidade 1), nunca N unidades.
+   ESTRUTURA METÁLICA / SERRALHERIA: 1 unidade por móvel, categoria "Serralheria Terceirizada", custo estimado de fabricação em serralheria no Brasil proporcional ao porte (mesa individual tubular ~R$ 300–450; mesa 1,35 m ~R$ 450–700; banco de 2,5 m com 3 apoios ~R$ 600–900; floreira de chapa 70×25×70 ~R$ 350–500; pintura eletrostática inclusa). Seja consistente: móveis parecidos recebem custos parecidos.
+   VIDRO TEMPERADO / ESPELHO / PEDRA: sempre em m² (largura × profundidade do tampo ou da porta), categoria "Acessórios", custo estimado por m² (vidro temperado 6 mm incolor bordas polidas ~R$ 350–450/m²).
    Para cada item extra: se existir item equivalente no catálogo, informe o "catalogo_id" (ID real) e "item_nao_cadastrado": false; se NÃO existir, "catalogo_id": null, "item_nao_cadastrado": true e "preco_custo_estimado" com um custo unitário realista em reais no mercado brasileiro. Sempre preencha "categoria_sugerida" com uma destas: ${CATEGORIAS_VALIDAS.join(', ')}.
    Vincule o item extra ao módulo a que pertence (dentro de "itens_extras" do módulo). Itens do projeto que não pertencem a um módulo específico vão em "itens_extras_gerais".
 8. Em "observacoes" do projeto, transcreva as notas da prancha que afetam o orçamento (conferir medidas no local, acabamentos, exigências de instalação).
 9. "confianca": "alta" quando a prancha traz medidas e descrição explícitas; "media" quando parte foi inferida das imagens; "baixa" quando houve dúvida.
 10. Nunca invente módulos que não estão na prancha. Não inclua chapas de MDF, parafusos, cola ou fita de borda como itens extras (o sistema já calcula isso).
+11. CHECKLIST FINAL (obrigatório antes de responder): percorra TODO o texto da prancha procurando as palavras vidro, espelho, pedra, granito, quartzo, tomada, filtro, passa-fio, passa-cabo, USB, LED, fita, perfil, metal, metálica, aço, inox, tubular, chapa, ponteira, gancho, rodízio, estofado, tecido, madeira, ripado, puxador, cava, perfil. Cada ocorrência que descreve um componente do móvel DEVE aparecer como item extra do módulo correspondente (com a quantidade certa). Um módulo com tipo_movel "metalico" ou "tampo_estrutura" sem nenhum item extra está ERRADO.
 
 Responda SOMENTE com JSON válido, sem markdown, neste formato:
 {
@@ -462,6 +465,7 @@ Responda SOMENTE com JSON válido, sem markdown, neste formato:
           "nome": "Painel de TV liso",
           "descricao": "Painel liso em MDF Carvalho Avelã com faixa vertical, 2 prateleiras flutuantes e 6 passa-fios",
           "quantidade": 1,
+          "tipo_movel": "painel",
           "perfil_construtivo": "Aberto / Painel",
           "template_id": null,
           "dimensoes_mm": { "largura": 3720, "altura": 2400, "profundidade": 200 },
@@ -503,8 +507,7 @@ Responda SOMENTE com JSON válido, sem markdown, neste formato:
 }`
 
     const userContent: Array<
-      | { type: 'text'; text: string }
-      | { type: 'image_url'; image_url: { url: string; detail?: 'high' | 'low' | 'auto' } }
+      { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: 'high' | 'low' | 'auto' } }
     > = [
       {
         type: 'text',
@@ -549,10 +552,7 @@ Responda SOMENTE com JSON válido, sem markdown, neste formato:
     try {
       parsed = JSON.parse(jsonMatch[0])
     } catch (e) {
-      return json(
-        { error: `JSON da IA inválido: ${e instanceof Error ? e.message : String(e)}` },
-        500,
-      )
+      return json({ error: `JSON da IA inválido: ${e instanceof Error ? e.message : String(e)}` }, 500)
     }
 
     const ambientesRaw: any[] = Array.isArray(parsed?.ambientes) ? parsed.ambientes : []
@@ -599,9 +599,6 @@ Responda SOMENTE com JSON válido, sem markdown, neste formato:
     return json(resultado)
   } catch (err) {
     console.error('[analisar-projeto-pdf] erro:', err)
-    return json(
-      { error: err instanceof Error ? err.message : 'Erro interno ao analisar o PDF.' },
-      500,
-    )
+    return json({ error: err instanceof Error ? err.message : 'Erro interno ao analisar o PDF.' }, 500)
   }
 })
