@@ -56,6 +56,18 @@ export interface PropostaComercialData {
   valorTotal: number
   formaPagamento?: string | null
   observacoes?: string | null
+  /** Número da revisão do orçamento (0 = original) */
+  revisao?: number
+  /** Soma dos móveis antes de serviços e desconto */
+  subtotalMoveis?: number
+  /** Serviços cobrados à parte (instalação, frete, projeto...) */
+  servicos?: { descricao: string; valor: number }[]
+  /** Desconto em reais já calculado */
+  desconto?: number
+  descontoDescricao?: string
+  /** Validade da proposta em dias a partir da emissão */
+  validadeDias?: number | null
+  prazoEntrega?: string | null
 }
 
 export interface AnaliseCustoData {
@@ -363,6 +375,17 @@ function formatarData(dataIso?: string | null): string {
 }
 
 /**
+ * Nome de arquivo seguro sem perder letras acentuadas ("Não" vira "Nao", não "N_o").
+ */
+function nomeArquivoSeguro(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+/**
  * Invoca autoTable com segurança suportando chamada doc.autoTable ou autoTable(doc, ...)
  */
 function invokeAutoTable(doc: JsPDFWithAutoTable, options: Record<string, unknown>) {
@@ -429,6 +452,13 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     // A coluna de dados da empresa ganha a largura total.
     const headerLeftMaxW = contentWidth
 
+    // Nome da empresa vem do cadastro (Configurações); Bender Haussform como padrão
+    const nomeEmpresa = (
+      empresa?.nome_fantasia?.trim() ||
+      empresa?.razao_social?.trim() ||
+      'Bender Haussform'
+    ).toUpperCase()
+
     // Código do orçamento formatado
     const numeroFormatado =
       dados.numeroSequencial !== undefined && dados.numeroSequencial !== null
@@ -439,7 +469,10 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
               .replace(/[^a-zA-Z0-9]/g, '')
               .slice(-6)
               .toUpperCase() || '001'
-    const textoNumeroOrcamento = `Orçamento Nº ${numeroFormatado}`
+    const textoNumeroOrcamento =
+      dados.revisao && dados.revisao > 0
+        ? `Orçamento Nº ${numeroFormatado} · Revisão ${dados.revisao}`
+        : `Orçamento Nº ${numeroFormatado}`
     const dataFormatada = formatarData(dados.data)
     const textoEmissao = `Emissão: ${dataFormatada}`
 
@@ -451,7 +484,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(16)
     doc.setTextColor(15, 23, 42) // #0F172A
-    doc.text('BENDER HAUSSFORM', margin, textStartY + 4)
+    doc.text(nomeEmpresa, margin, textStartY + 4)
 
     let subTextY = textStartY + 8.5
     doc.setFont('helvetica', 'normal')
@@ -639,8 +672,12 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
             fillColor: [248, 250, 252],
           },
           columnStyles: {
-            0: { cellWidth: contentWidth * 0.05, halign: 'center' },
-            1: { cellWidth: contentWidth * 0.24, halign: 'left', fontStyle: 'bold' },
+            0: {
+              cellWidth: contentWidth * 0.07,
+              halign: 'center',
+              cellPadding: { top: 2.2, right: 1, bottom: 2.2, left: 1 },
+            },
+            1: { cellWidth: contentWidth * 0.22, halign: 'left', fontStyle: 'bold' },
             2: { cellWidth: contentWidth * 0.38, halign: 'left', valign: 'middle' },
             3: { cellWidth: contentWidth * 0.07, halign: 'center' },
             4: {
@@ -721,8 +758,12 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
           fillColor: [248, 250, 252], // #F8FAFC para linhas pares
         },
         columnStyles: {
-          0: { cellWidth: contentWidth * 0.05, halign: 'center' },
-          1: { cellWidth: contentWidth * 0.24, halign: 'left', fontStyle: 'bold' },
+          0: {
+            cellWidth: contentWidth * 0.07,
+            halign: 'center',
+            cellPadding: { top: 2.2, right: 1, bottom: 2.2, left: 1 },
+          },
+          1: { cellWidth: contentWidth * 0.22, halign: 'left', fontStyle: 'bold' },
           2: { cellWidth: contentWidth * 0.38, halign: 'left', valign: 'middle' },
           3: { cellWidth: contentWidth * 0.07, halign: 'center' },
           4: {
@@ -748,6 +789,43 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       })
 
       y = (doc.lastAutoTable?.finalY ?? y) + 7
+    }
+
+    // 5b. RESUMO DO INVESTIMENTO: móveis + serviços − desconto (só quando houver complementos)
+    const servicosPdf = (dados.servicos || []).filter((sv) => sv && (sv.descricao || sv.valor))
+    const descontoPdf = Number(dados.desconto) || 0
+    if (servicosPdf.length > 0 || descontoPdf > 0) {
+      const linhasResumo: string[][] = [
+        ['Móveis planejados', formatMoeda(dados.subtotalMoveis ?? dados.valorTotal)],
+        ...servicosPdf.map((sv) => [sv.descricao, formatMoeda(Number(sv.valor) || 0)]),
+      ]
+      if (descontoPdf > 0) {
+        linhasResumo.push([dados.descontoDescricao || 'Desconto', `- ${formatMoeda(descontoPdf)}`])
+      }
+      if (y + 10 + linhasResumo.length * 7 > pageHeight - 40) {
+        doc.addPage()
+        y = margin
+      }
+      invokeAutoTable(doc, {
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [['Resumo do Investimento', 'Valor']],
+        body: linhasResumo,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [241, 245, 249],
+          textColor: [51, 65, 85],
+          fontStyle: 'bold',
+          fontSize: 7.5,
+        },
+        bodyStyles: { textColor: [51, 65, 85], fontSize: 8 },
+        columnStyles: {
+          0: { cellWidth: contentWidth * 0.75 },
+          1: { cellWidth: contentWidth * 0.25, halign: 'right' },
+        },
+        styles: { lineColor: [226, 232, 240], lineWidth: 0.3, font: 'helvetica' },
+      })
+      y = (doc.lastAutoTable?.finalY ?? y) + 6
     }
 
     // 6. BOX DE INVESTIMENTO TOTAL (100% da largura útil)
@@ -779,25 +857,43 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
 
     y += boxTotalHeight + 8
 
-    // 7. FORMA DE PAGAMENTO E OBSERVAÇÕES (sem textos automáticos; se ambos vazios omite; se um só renderiza só esse)
-    const formaPagamentoTexto = dados.formaPagamento?.trim() || ''
-    const observacoesTexto = dados.observacoes?.trim() || ''
-    const hasForma = Boolean(formaPagamentoTexto)
-    const hasObs = Boolean(observacoesTexto)
+    // 7. FORMA DE PAGAMENTO E OBSERVAÇÕES
+    // Validade (com data limite), prazo de entrega, forma de pagamento e observações
+    const linhasCondicoes: [string, string][] = []
+    if (dados.validadeDias && dados.validadeDias > 0) {
+      const base = dados.data ? new Date(dados.data) : new Date()
+      const limite = new Date(base.getTime() + dados.validadeDias * 86_400_000)
+      linhasCondicoes.push([
+        'Validade da Proposta:',
+        `${dados.validadeDias} dias (até ${formatarData(limite.toISOString())})`,
+      ])
+    }
+    if (dados.prazoEntrega?.trim()) {
+      linhasCondicoes.push(['Prazo de Entrega:', dados.prazoEntrega.trim()])
+    }
+    if (dados.formaPagamento?.trim()) {
+      linhasCondicoes.push(['Forma de Pagamento:', dados.formaPagamento.trim()])
+    }
+    if (dados.observacoes?.trim()) {
+      linhasCondicoes.push(['Observações e Termos:', dados.observacoes.trim()])
+    }
 
-    if (hasForma || hasObs) {
-      // Medição e quebra de linhas para altura dinâmica do card
+    if (linhasCondicoes.length > 0) {
       const cardContentW = contentWidth - 10
       const labelW = 44
       const valueW = cardContentW - labelW
 
-      const splitForma = hasForma ? doc.splitTextToSize(formaPagamentoTexto, valueW) : []
-      const splitObs = hasObs ? doc.splitTextToSize(observacoesTexto, valueW) : []
-
-      const formaH = hasForma ? (Array.isArray(splitForma) ? splitForma.length : 1) * 4 : 0
-      const obsH = hasObs ? (Array.isArray(splitObs) ? splitObs.length : 1) * 4 : 0
-      const spacingBetween = hasForma && hasObs ? 2.5 : 0
-      const condCardHeight = Math.max(16, 7 + formaH + obsH + spacingBetween + 3)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      const blocos = linhasCondicoes.map(([rotulo, texto]) => {
+        const split = doc.splitTextToSize(texto, valueW)
+        const linhas = Array.isArray(split) ? split : [split]
+        return { rotulo, linhas, altura: linhas.length * 4 }
+      })
+      const condCardHeight = Math.max(
+        16,
+        7 + blocos.reduce((acc, b) => acc + b.altura, 0) + (blocos.length - 1) * 2.5 + 3,
+      )
 
       if (y + condCardHeight + 10 > pageHeight - 35) {
         doc.addPage()
@@ -817,31 +913,15 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       doc.roundedRect(margin, y, contentWidth, condCardHeight, 2, 2, 'S')
 
       let condTextY = y + 6.5
-
-      if (hasForma) {
-        // Forma de Pagamento
-        doc.setFont('helvetica', 'bold')
-        doc.setFontSize(8)
-        doc.setTextColor(51, 65, 85) // #334155
-        doc.text('Forma de Pagamento:', margin + 5, condTextY)
-
-        doc.setFont('helvetica', 'normal')
-        doc.setTextColor(51, 65, 85)
-        doc.text(splitForma, margin + 5 + labelW, condTextY)
-
-        condTextY += formaH + 2.5
-      }
-
-      if (hasObs) {
-        // Observações e Prazos
+      for (const bloco of blocos) {
         doc.setFont('helvetica', 'bold')
         doc.setFontSize(8)
         doc.setTextColor(51, 65, 85)
-        doc.text('Observações e Prazos:', margin + 5, condTextY)
+        doc.text(bloco.rotulo, margin + 5, condTextY)
 
         doc.setFont('helvetica', 'normal')
-        doc.setTextColor(51, 65, 85)
-        doc.text(splitObs, margin + 5 + labelW, condTextY)
+        doc.text(bloco.linhas, margin + 5 + labelW, condTextY)
+        condTextY += bloco.altura + 2.5
       }
 
       y += condCardHeight + 10
@@ -871,7 +951,7 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
     doc.setTextColor(15, 23, 42) // #0F172A
-    doc.text('BENDER HAUSSFORM', sigLeftX + sigWidth / 2, sigY + 4.5, { align: 'center' })
+    doc.text(nomeEmpresa, sigLeftX + sigWidth / 2, sigY + 4.5, { align: 'center' })
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(7.5)
@@ -901,14 +981,14 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(7)
       doc.setTextColor(148, 163, 184) // Slate-400
-      doc.text('BENDER HAUSSFORM • Móveis Sob Medida', margin, pageHeight - 6)
+      doc.text(`${nomeEmpresa} • Móveis Sob Medida`, margin, pageHeight - 6)
       doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, pageHeight - 6, {
         align: 'right',
       })
     }
 
     // Download automático do PDF
-    const sanitizedName = (dados.cliente.nome || 'Cliente').replace(/[^a-zA-Z0-9]/g, '_')
+    const sanitizedName = nomeArquivoSeguro(dados.cliente.nome || 'Cliente') || 'Cliente'
     const codSugestivo =
       dados.numeroSequencial !== undefined && dados.numeroSequencial !== null
         ? String(dados.numeroSequencial).padStart(3, '0')
@@ -916,7 +996,8 @@ export async function gerarPropostaComercial(dados: PropostaComercialData): Prom
             .replace(/[^a-zA-Z0-9]/g, '')
             .slice(-6)
             .toUpperCase() || '000'
-    doc.save(`Proposta_Comercial_${sanitizedName}_${codSugestivo}.pdf`)
+    const sufixoRevisao = dados.revisao && dados.revisao > 0 ? `_Rev${dados.revisao}` : ''
+    doc.save(`Proposta_Comercial_${sanitizedName}_${codSugestivo}${sufixoRevisao}.pdf`)
   } catch (error) {
     console.error('Erro ao gerar proposta comercial em PDF:', error)
     throw error
