@@ -132,7 +132,22 @@ const normalizar = (s: string): string =>
     .replace(/\s+/g, ' ')
     .trim()
 
-const STOPWORDS = new Set(['de', 'da', 'do', 'das', 'dos', 'em', 'para', 'com', 'e', 'o', 'a', 'un', 'mm', 'cm'])
+const STOPWORDS = new Set([
+  'de',
+  'da',
+  'do',
+  'das',
+  'dos',
+  'em',
+  'para',
+  'com',
+  'e',
+  'o',
+  'a',
+  'un',
+  'mm',
+  'cm',
+])
 
 const tokens = (s: string): string[] =>
   normalizar(s)
@@ -187,8 +202,10 @@ const espessura = (v: unknown, fallback: 15 | 18): 15 | 18 => {
 function normalizarPerfil(v: unknown): PerfilConstrutivo {
   const s = normalizar(String(v ?? ''))
   if (PERFIS_VALIDOS.some((p) => normalizar(p) === s)) return String(v) as PerfilConstrutivo
-  if (s.includes('painel') || s.includes('aberto') || s.includes('prateleira flutuante')) return 'Aberto / Painel'
-  if (s.includes('balcao') || s.includes('bancada') || s.includes('tampo')) return 'Balcão (tampo por conta do cliente)'
+  if (s.includes('painel') || s.includes('aberto') || s.includes('prateleira flutuante'))
+    return 'Aberto / Painel'
+  if (s.includes('balcao') || s.includes('bancada') || s.includes('tampo'))
+    return 'Balcão (tampo por conta do cliente)'
   if (s.includes('caixa') || s.includes('aereo') || s.includes('nicho')) return 'Caixa Simples'
   return 'Fechado Envelopado'
 }
@@ -197,15 +214,28 @@ function normalizarCategoria(v: unknown): string {
   const s = normalizar(String(v ?? ''))
   const found = CATEGORIAS_VALIDAS.find((c) => normalizar(c) === s)
   if (found) return found
-  if (s.includes('eletric') || s.includes('tomada') || s.includes('passa')) return 'Componentes Elétricos'
+  if (s.includes('eletric') || s.includes('tomada') || s.includes('passa'))
+    return 'Componentes Elétricos'
   if (s.includes('led') || s.includes('ilumin')) return 'Iluminação'
-  if (s.includes('metal') || s.includes('serralh') || s.includes('aco') || s.includes('ferro')) return 'Serralheria Terceirizada'
-  if (s.includes('vidro') || s.includes('pedra') || s.includes('granito') || s.includes('acess')) return 'Acessórios'
-  if (s.includes('ferragem') || s.includes('puxador') || s.includes('dobradica') || s.includes('corredica')) return 'Ferragem'
+  if (s.includes('metal') || s.includes('serralh') || s.includes('aco') || s.includes('ferro'))
+    return 'Serralheria Terceirizada'
+  if (s.includes('vidro') || s.includes('pedra') || s.includes('granito') || s.includes('acess'))
+    return 'Acessórios'
+  if (
+    s.includes('ferragem') ||
+    s.includes('puxador') ||
+    s.includes('dobradica') ||
+    s.includes('corredica')
+  )
+    return 'Ferragem'
   return 'Outro'
 }
 
-function normalizarItemExtra(raw: any, catalogo: CatalogoMaterialInfo[], idsValidos: Set<string>): ItemExtraProjeto | null {
+function normalizarItemExtra(
+  raw: any,
+  catalogo: CatalogoMaterialInfo[],
+  idsValidos: Set<string>,
+): ItemExtraProjeto | null {
   const descricao = String(raw?.descricao || raw?.nome || '').trim()
   if (!descricao) return null
 
@@ -236,9 +266,12 @@ function normalizarItemExtra(raw: any, catalogo: CatalogoMaterialInfo[], idsVali
     descricao,
     quantidade: num(raw?.quantidade, 1),
     unidade,
-    categoria_sugerida: catalogoItem?.categoria || normalizarCategoria(raw?.categoria_sugerida ?? raw?.categoria),
+    categoria_sugerida:
+      catalogoItem?.categoria || normalizarCategoria(raw?.categoria_sugerida ?? raw?.categoria),
     catalogo_id: catalogoId,
-    catalogo_nome: catalogoItem ? catalogoItem.nome_material || catalogoItem.descricao || null : null,
+    catalogo_nome: catalogoItem
+      ? catalogoItem.nome_material || catalogoItem.descricao || null
+      : null,
     item_nao_cadastrado: !catalogoItem,
     preco_custo_estimado: catalogoItem
       ? Number(catalogoItem.preco_custo || 0)
@@ -470,7 +503,8 @@ Responda SOMENTE com JSON válido, sem markdown, neste formato:
 }`
 
     const userContent: Array<
-      { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: 'high' | 'low' | 'auto' } }
+      | { type: 'text'; text: string }
+      | { type: 'image_url'; image_url: { url: string; detail?: 'high' | 'low' | 'auto' } }
     > = [
       {
         type: 'text',
@@ -515,7 +549,10 @@ Responda SOMENTE com JSON válido, sem markdown, neste formato:
     try {
       parsed = JSON.parse(jsonMatch[0])
     } catch (e) {
-      return json({ error: `JSON da IA inválido: ${e instanceof Error ? e.message : String(e)}` }, 500)
+      return json(
+        { error: `JSON da IA inválido: ${e instanceof Error ? e.message : String(e)}` },
+        500,
+      )
     }
 
     const ambientesRaw: any[] = Array.isArray(parsed?.ambientes) ? parsed.ambientes : []
@@ -562,6 +599,9 @@ Responda SOMENTE com JSON válido, sem markdown, neste formato:
     return json(resultado)
   } catch (err) {
     console.error('[analisar-projeto-pdf] erro:', err)
-    return json({ error: err instanceof Error ? err.message : 'Erro interno ao analisar o PDF.' }, 500)
+    return json(
+      { error: err instanceof Error ? err.message : 'Erro interno ao analisar o PDF.' },
+      500,
+    )
   }
 })
