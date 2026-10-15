@@ -58,6 +58,7 @@ import {
   deleteMaterial,
   listarCategoriasPersonalizadas,
   getListaCombinadaCategorias,
+  sincronizarEstoqueBender,
   UNIDADES_MATERIAL,
   type CatalogoMaterial,
   type CategoriaPersonalizada,
@@ -111,6 +112,7 @@ export default function CatalogPage() {
   >([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sincronizando, setSincronizando] = useState(false)
 
   // Modais de categorias
   const [novaCategoriaModalOpen, setNovaCategoriaModalOpen] = useState(false)
@@ -167,16 +169,58 @@ export default function CatalogPage() {
     carregar()
   }, [carregar])
 
+  const sincronizarComBender = async () => {
+    if (sincronizando) return
+    setSincronizando(true)
+    try {
+      const r = await sincronizarEstoqueBender('aplicar')
+      toast({
+        title: 'Catálogo sincronizado com o Gestor Bender',
+        description: `${r.lidos} itens lidos do estoque • ${r.inseridos} novos • ${r.atualizados} atualizados • ${r.vinculados} vinculados a itens já cadastrados • ${r.ignorados} fora do catálogo (chapas, fitas e consumíveis).`,
+      })
+      await carregar()
+    } catch (err) {
+      toast({
+        title: 'Não foi possível sincronizar',
+        description:
+          err instanceof Error
+            ? err.message
+            : 'Erro inesperado ao sincronizar com o Gestor Bender.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSincronizando(false)
+    }
+  }
+
+  const ultimaSincronizacao = useMemo(() => {
+    const datas = materiais
+      .filter((m) => m.origem === 'bender' && m.sincronizado_em)
+      .map((m) => new Date(m.sincronizado_em as string).getTime())
+      .filter((t) => Number.isFinite(t))
+    if (datas.length === 0) return null
+    return new Date(Math.max(...datas)).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }, [materiais])
+
   // Lista combinada de categorias: 13 fixas + personalizadas do banco
   const listaCategoriasCombinada = useMemo(() => {
     return getListaCombinadaCategorias(categoriasPersonalizadas)
   }, [categoriasPersonalizadas])
 
-  // Filtro no frontend (busca por nome + categoria)
+  // Filtro no frontend (busca por nome + categoria + fornecedor)
   const materiaisFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     return materiais.filter((m) => {
-      const matchBusca = !termo || m.nome_material.toLowerCase().includes(termo)
+      const matchBusca =
+        !termo ||
+        m.nome_material.toLowerCase().includes(termo) ||
+        (m.fornecedor ? m.fornecedor.toLowerCase().includes(termo) : false)
       const matchCategoria = categoriaFiltro === 'todos' || m.categoria === categoriaFiltro
       return matchBusca && matchCategoria
     })
@@ -304,8 +348,28 @@ export default function CatalogPage() {
           <p className="text-sm text-slate-500">
             Gerencie chapas, ferragens, fitas de borda e acabamentos
           </p>
+          {ultimaSincronizacao && (
+            <p className="text-xs text-slate-400">
+              Última sincronização com o Gestor Bender: {ultimaSincronizacao}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={sincronizarComBender}
+            disabled={sincronizando || loading}
+            className="rounded-xl h-11 px-4 border-slate-300 hover:bg-slate-50 font-medium text-slate-700"
+            title="Lê o estoque do Gestor Bender e atualiza custo, saldo e fornecedor dos itens do catálogo"
+          >
+            {sincronizando ? (
+              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-1.5 text-slate-500" />
+            )}
+            {sincronizando ? 'Sincronizando…' : 'Sincronizar com o Gestor Bender'}
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -430,6 +494,8 @@ export default function CatalogPage() {
                   <TableHead className="min-w-[140px]">Categoria</TableHead>
                   <TableHead className="min-w-[80px]">Unidade</TableHead>
                   <TableHead className="min-w-[120px] text-right">Preço de Custo</TableHead>
+                  <TableHead className="min-w-[90px] text-right">Estoque</TableHead>
+                  <TableHead className="min-w-[140px]">Fornecedor</TableHead>
                   <TableHead className="min-w-[120px]">Nível</TableHead>
                   <TableHead className="min-w-[120px] text-right">Ações</TableHead>
                 </TableRow>
@@ -437,7 +503,17 @@ export default function CatalogPage() {
               <TableBody>
                 {materiaisFiltrados.map((m) => (
                   <TableRow key={m.id} className="hover:bg-slate-50/60">
-                    <TableCell className="font-medium text-slate-900">{m.nome_material}</TableCell>
+                    <TableCell className="font-medium text-slate-900">
+                      <span>{m.nome_material}</span>
+                      {m.origem === 'bender' && (
+                        <Badge
+                          variant="outline"
+                          className="ml-2 text-[10px] font-semibold bg-emerald-50 text-emerald-800 border-emerald-200"
+                        >
+                          Gestor Bender
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"
@@ -454,6 +530,12 @@ export default function CatalogPage() {
                     <TableCell className="text-right font-mono font-semibold text-slate-900">
                       {formatCurrency(m.preco_custo)}
                     </TableCell>
+                    <TableCell className="text-right text-slate-600">
+                      {m.origem === 'bender' && typeof m.estoque_qtd === 'number'
+                        ? `${m.estoque_qtd.toLocaleString('pt-BR')} ${m.unidade}`
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-sm">{m.fornecedor || '—'}</TableCell>
                     <TableCell>
                       {m.nivel_padrao === 'premium' ? (
                         <span className="inline-flex items-center gap-1 text-amber-600 font-semibold text-sm">

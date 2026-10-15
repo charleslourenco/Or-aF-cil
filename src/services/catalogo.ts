@@ -88,6 +88,13 @@ export interface CatalogoMaterial {
   ativo: boolean
   created_at: string
   updated_at: string
+  /** 'bender' quando o item é espelho do estoque do Gestor Bender; null/undefined = cadastrado à mão. */
+  origem?: string | null
+  origem_id?: string | null
+  /** Saldo em estoque no Gestor Bender (só para origem 'bender'). */
+  estoque_qtd?: number | null
+  fornecedor?: string | null
+  sincronizado_em?: string | null
 }
 
 /** Payload de criação/atualização de um material. */
@@ -121,7 +128,7 @@ export async function fetchCatalogoMateriais(
     const queryPromise = supabase
       .from('CatalogoMateriais')
       .select(
-        'id, nome_material, categoria, unidade, preco_custo, nivel_padrao, ativo, created_at, updated_at',
+        'id, nome_material, categoria, unidade, preco_custo, nivel_padrao, ativo, created_at, updated_at, origem, origem_id, estoque_qtd, fornecedor, sincronizado_em',
       )
       .eq('ativo', true)
       .order('categoria')
@@ -394,4 +401,49 @@ export async function excluirCategoriaPersonalizada(
       error: err instanceof Error ? err.message : 'Erro inesperado ao excluir categoria.',
     }
   }
+}
+
+/** Resultado da sincronização do estoque do Gestor Bender com o catálogo. */
+export interface ResultadoSincronizacaoBender {
+  ok: boolean
+  modo: 'simular' | 'aplicar'
+  lidos: number
+  considerados: number
+  inseridos: number
+  atualizados: number
+  vinculados: number
+  ignorados: number
+  porCategoria?: Record<string, number>
+  error?: string
+}
+
+/**
+ * Sincroniza o catálogo com o estoque do Gestor Bender (Edge Function `sincronizar-estoque-bender`).
+ * modo 'simular' só conta o que seria feito; 'aplicar' grava.
+ * Lança Error com mensagem legível quando a função falha (ex.: segredo não configurado).
+ */
+export async function sincronizarEstoqueBender(
+  modo: 'simular' | 'aplicar' = 'aplicar',
+): Promise<ResultadoSincronizacaoBender> {
+  const { data, error } = await supabase.functions.invoke('sincronizar-estoque-bender', {
+    body: { modo },
+  })
+  if (error) {
+    let mensagem = error.message || 'Falha ao chamar a sincronização.'
+    try {
+      const ctx = (error as any)?.context
+      if (ctx && typeof ctx.json === 'function') {
+        const corpo = await ctx.json()
+        if (corpo?.error) mensagem = String(corpo.error)
+      }
+    } catch {
+      /* mantém a mensagem padrão */
+    }
+    throw new Error(mensagem)
+  }
+  const res = data as ResultadoSincronizacaoBender
+  if (!res || res.ok === false) {
+    throw new Error(res?.error || 'A sincronização não retornou resultado.')
+  }
+  return res
 }
