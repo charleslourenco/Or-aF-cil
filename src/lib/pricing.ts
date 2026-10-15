@@ -58,6 +58,32 @@ export interface ModuloComposicao {
   tampoPedra?: boolean
   /** Perfil construtivo selecionado ou override (Fechado Envelopado, Balcão, Aberto / Painel, Caixa Simples) */
   perfilConstrutivo?: PerfilConstrutivo | string
+  rackPainel?: RackPainel | null
+  ripado?: RipadoPainel | null
+}
+
+export interface RackPainel {
+  ativo: boolean
+  /** Largura do rack em mm (0 ou vazio = largura total do painel) */
+  largura?: number
+  altura: number
+  profundidade: number
+  /** Divisórias verticais internas do rack (nichos) */
+  divisorias: number
+}
+
+export interface RipadoPainel {
+  qtd: number
+  /** Largura de cada ripa em mm */
+  largura: number
+}
+
+/** Quantidade de dobradiças por porta conforme a altura da folha (regra de ofício). */
+export function dobradicasPorPorta(alturaPortaMm: number): number {
+  if (alturaPortaMm <= 900) return 2
+  if (alturaPortaMm <= 1600) return 3
+  if (alturaPortaMm <= 2100) return 4
+  return 5
 }
 
 /**
@@ -96,7 +122,8 @@ export const CUSTOS_UNITARIOS: Record<string, number> = {
 /** Markup multiplicador padrão aplicado sobre o custo total. */
 export const MARKUP_PADRAO = 2.5
 
-const PERDA = 1.2
+/** Perda padrão de material (20%) quando a engenharia não informa outra. */
+export const PERDA_PERCENT_PADRAO = 20
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
@@ -260,33 +287,40 @@ function findItemCatalogo(
   catalogo: CatalogoMaterial[] | undefined,
   keywords: string[],
   categoria: string | string[] = 'Ferragem',
+  preferencia?: PadraoProjeto,
 ): CatalogoMaterial | undefined {
   if (!catalogo || catalogo.length === 0) return undefined
   const categoriasFiltro = Array.isArray(categoria)
     ? categoria.map((c) => c.toLowerCase())
     : [categoria.toLowerCase()]
-
   const doFiltro = catalogo.filter((c) =>
     categoriasFiltro.includes((c.categoria || '').toLowerCase()),
   )
   if (doFiltro.length === 0) return undefined
 
-  for (const item of doFiltro) {
-    const nome = (item.nome_material || '').toLowerCase()
-    if (keywords.every((kw) => nome.includes(kw.toLowerCase()))) {
-      return item
-    }
-  }
+  const kws = keywords.map((kw) => kw.toLowerCase())
+  const nomeDe = (item: CatalogoMaterial) => (item.nome_material || '').toLowerCase()
 
-  // Tenta pelo menos uma das palavras-chave
-  for (const item of doFiltro) {
-    const nome = (item.nome_material || '').toLowerCase()
-    if (keywords.some((kw) => nome.includes(kw.toLowerCase()))) {
-      return item
-    }
+  // Primeiro os itens que contêm todas as palavras-chave; senão, pelo menos uma
+  let candidatos = doFiltro.filter((item) => kws.every((kw) => nomeDe(item).includes(kw)))
+  if (candidatos.length === 0) {
+    candidatos = doFiltro.filter((item) => kws.some((kw) => nomeDe(item).includes(kw)))
   }
+  if (candidatos.length === 0) return undefined
+  if (candidatos.length === 1) return candidatos[0]
 
-  return undefined
+  // Desempate pelo padrão do projeto, e não pela ordem do catálogo:
+  // comercial usa a opção mais barata, premium a mais cara.
+  const custo = (item: CatalogoMaterial) => Number(item.preco_custo) || 0
+  return candidatos.reduce((melhor, item) =>
+    preferencia === 'premium'
+      ? custo(item) > custo(melhor)
+        ? item
+        : melhor
+      : custo(item) < custo(melhor)
+        ? item
+        : melhor,
+  )
 }
 
 export function calcularBOM(
@@ -303,6 +337,7 @@ export function calcularBOM(
   markup?: number,
   fatorEscala?: number,
   composicao?: ModuloComposicao | null,
+  perdaPercent?: number,
 ): BudgetItem[] {
   // Validação: dimensões e módulo obrigatórios.
   if (!modulo || !dimensoes.largura || !dimensoes.altura || !dimensoes.profundidade) {
@@ -310,6 +345,14 @@ export function calcularBOM(
   }
 
   const effectiveMarkup = typeof markup === 'number' && markup > 0 ? markup : MARKUP_PADRAO
+
+  // Fator de perda vindo da Engenharia Financeira (perda_material_percent); padrão 20%
+  const PERDA =
+    1 +
+    (typeof perdaPercent === 'number' && perdaPercent >= 0 && perdaPercent < 100
+      ? perdaPercent
+      : PERDA_PERCENT_PADRAO) /
+      100
 
   const L = dimensoes.largura
   const A = dimensoes.altura
@@ -361,6 +404,88 @@ export function calcularBOM(
     resolverCustoUnitario('MDF Fundo 6', catalogoPrecos, padraoProjeto)
 
   const pecas: BudgetItem[] = []
+
+  // Iluminação LED (perfil + fita) e fonte/reator, compartilhada entre os perfis
+  const adicionarIluminacaoLed = (metrosLed: number, sufixoId: string) => {
+    const perfilLedMat = findItemCatalogo(
+      catalogoPrecos,
+      ['led', 'perfil'],
+      ['Iluminação', 'Ferragem', 'Componentes Elétricos'],
+      padraoProjeto,
+    )
+    const unitCostLed = perfilLedMat ? Number(perfilLedMat.preco_custo) || 85.0 : 85.0
+    pecas.push({
+      id: `bom-acessorio-led${sufixoId}`,
+      description: perfilLedMat
+        ? `Kit Iluminação LED de Embutir (${metrosLed}m)`
+        : `Kit Iluminação / Fita LED de Embutir (${metrosLed}m) — Estimado`,
+      material: perfilLedMat?.categoria || 'Iluminação',
+      metragem: metrosLed,
+      unidade: 'm',
+      unitCost: unitCostLed,
+      totalCost: round2(unitCostLed * metrosLed),
+      markup: effectiveMarkup,
+      salePrice: round2(unitCostLed * metrosLed * effectiveMarkup),
+      item_nao_cadastrado: !perfilLedMat,
+      catalogo_id: perfilLedMat?.id || null,
+    })
+
+    const fonteMat = findItemCatalogo(
+      catalogoPrecos,
+      ['fonte', 'reator'],
+      ['Componentes Elétricos', 'Iluminação', 'Ferragem'],
+      padraoProjeto,
+    )
+    // Fontes slim costumam atender ~5m de fita cada
+    const qtdFontes = Math.max(1, Math.ceil(metrosLed / 5))
+    const unitCostFonte = fonteMat ? Number(fonteMat.preco_custo) || 80.0 : 80.0
+    pecas.push({
+      id: `bom-acessorio-fonte-led${sufixoId}`,
+      description: fonteMat
+        ? `Fonte/Reator Slim para LED (${qtdFontes}x)`
+        : `Fonte/Reator Slim para LED (${qtdFontes}x) — Estimado`,
+      material: fonteMat?.categoria || 'Componentes Elétricos',
+      metragem: qtdFontes,
+      unidade: 'un',
+      unitCost: unitCostFonte,
+      totalCost: round2(unitCostFonte * qtdFontes),
+      markup: effectiveMarkup,
+      salePrice: round2(unitCostFonte * qtdFontes * effectiveMarkup),
+      item_nao_cadastrado: !fonteMat,
+      catalogo_id: fonteMat?.id || null,
+    })
+  }
+
+  // Dobradiças: quantidade por porta conforme a altura; preço por par ou unidade conforme o catálogo
+  const adicionarDobradicas = (qtdPortas: number, alturaPorta: number, sufixoId: string) => {
+    if (qtdPortas <= 0) return
+    const porPorta = dobradicasPorPorta(alturaPorta)
+    const totalUn = qtdPortas * porPorta
+    const dobradicaMat = findItemCatalogo(
+      catalogoPrecos,
+      ['dobradiça', 'dobradica'],
+      'Ferragem',
+      padraoProjeto,
+    )
+    const unitCostDobradica = dobradicaMat ? Number(dobradicaMat.preco_custo) || 42.0 : 50.0
+    const porUnidade = dobradicaMat?.unidade === 'un'
+    const qtdCobrada = porUnidade ? totalUn : totalUn / 2
+    pecas.push({
+      id: `bom-ferragem-dobradicas${sufixoId}`,
+      description: dobradicaMat
+        ? `Dobradiças com amortecedor (${totalUn} un — ${porPorta} por porta)`
+        : `Dobradiças com amortecedor (${totalUn} un — ${porPorta} por porta) — Estimado`,
+      material: 'Ferragem',
+      metragem: qtdCobrada,
+      unidade: porUnidade ? 'un' : 'par',
+      unitCost: unitCostDobradica,
+      totalCost: round2(unitCostDobradica * qtdCobrada),
+      markup: effectiveMarkup,
+      salePrice: round2(unitCostDobradica * qtdCobrada * effectiveMarkup),
+      item_nao_cadastrado: !dobradicaMat,
+      catalogo_id: dobradicaMat?.id || null,
+    })
+  }
 
   // Verifica se há decomposição/composição fornecida (portas/gavetas/prateleiras/cabideiro/sapateira)
   const temComposicao = composicao !== null && composicao !== undefined
@@ -451,11 +576,11 @@ export function calcularBOM(
       criarPeca(
         'bom-sarrafos-fixacao-painel',
         `Sarrafos Estruturais de Fixação / Mão-Amiga (2x) — ${largSarrafo}×${altSarrafoMm}mm`,
-        rotuloMdfExterno,
-        espExt,
+        rotuloMdfInterno,
+        espInt,
         areaSarrafos,
         'm²',
-        custoMdfExterno,
+        custoMdfInterno,
         effectiveMarkup,
       ),
     )
@@ -486,11 +611,114 @@ export function calcularBOM(
         qtdPrateleirasPainel * (2 * largPratPainel + 2 * profPratPainel) * escala
     }
 
+    // 3b. Rack / caixa inferior acoplada ao painel (ex.: rack suspenso de TV)
+    const rack = composicao?.rackPainel
+    const temRack = Boolean(rack?.ativo && rack.altura > 0 && rack.profundidade > 0)
+    const largRack = temRack
+      ? Math.min(L, rack!.largura && rack!.largura > 0 ? rack!.largura : L)
+      : 0
+    const altRack = temRack ? rack!.altura : 0
+    const profRack = temRack ? rack!.profundidade : 0
+    if (temRack) {
+      const altLatRack = Math.max(50, altRack - 2 * espExt)
+      const areaTampoBase = ((largRack * profRack) / 1_000_000) * PERDA * escala
+      pecas.push(
+        criarPeca(
+          'bom-rack-tampo-base',
+          `Rack — Tampo e Base (2x) — ${largRack}×${profRack}mm`,
+          rotuloMdfExterno,
+          espExt,
+          areaTampoBase * 2,
+          'm²',
+          custoMdfExterno,
+          effectiveMarkup,
+        ),
+      )
+      const areaLatRack = ((altLatRack * profRack) / 1_000_000) * PERDA * escala
+      pecas.push(
+        criarPeca(
+          'bom-rack-laterais',
+          `Rack — Laterais (2x) — ${altLatRack}×${profRack}mm`,
+          rotuloMdfExterno,
+          espExt,
+          areaLatRack * 2,
+          'm²',
+          custoMdfExterno,
+          effectiveMarkup,
+        ),
+      )
+      perimetroFitaMmPainel += (2 * largRack + 2 * altRack + 4 * profRack) * escala
+
+      const qtdDivRack = Math.max(0, rack!.divisorias || 0)
+      if (qtdDivRack > 0) {
+        const areaDivRack = ((altLatRack * profRack) / 1_000_000) * PERDA * escala
+        pecas.push(
+          criarPeca(
+            'bom-rack-divisorias',
+            `Rack — Divisórias / Nichos (${qtdDivRack}x) — ${altLatRack}×${profRack}mm`,
+            rotuloMdfInterno,
+            espInt,
+            areaDivRack * qtdDivRack,
+            'm²',
+            custoMdfInterno,
+            effectiveMarkup,
+          ),
+        )
+        perimetroFitaMmPainel += qtdDivRack * altLatRack * escala
+      }
+
+      // Portas basculantes/de abrir do rack
+      const qtdPortasRack = Math.max(0, composicao?.portas?.qtd ?? 0)
+      if (qtdPortasRack > 0) {
+        const largPortaRack = Math.max(150, Math.round(largRack / qtdPortasRack) - 3)
+        const altPortaRack = Math.max(100, altRack - 2 * espExt - 3)
+        const areaPortasRack = ((largPortaRack * altPortaRack) / 1_000_000) * PERDA * escala
+        pecas.push(
+          criarPeca(
+            'bom-rack-portas',
+            `Rack — Portas (${qtdPortasRack}x) — ${largPortaRack}×${altPortaRack}mm`,
+            rotuloMdfExterno,
+            espExt,
+            areaPortasRack * qtdPortasRack,
+            'm²',
+            custoMdfExterno,
+            effectiveMarkup,
+          ),
+        )
+        perimetroFitaMmPainel += qtdPortasRack * 2 * (largPortaRack + altPortaRack) * escala
+        adicionarDobradicas(qtdPortasRack, altPortaRack, '-rack')
+      }
+    }
+
+    // 3c. Ripado / frisos verticais aplicados sobre o painel
+    const ripado = composicao?.ripado
+    const qtdRipas = Math.max(0, ripado?.qtd ?? 0)
+    if (qtdRipas > 0) {
+      const largRipa = Math.max(10, ripado?.largura || 40)
+      const areaRipas = ((A * largRipa) / 1_000_000) * PERDA * escala
+      pecas.push(
+        criarPeca(
+          'bom-ripado-painel',
+          `Ripas / Frisos Verticais (${qtdRipas}x) — ${A}×${largRipa}mm`,
+          rotuloMdfExterno,
+          espExt,
+          areaRipas * qtdRipas,
+          'm²',
+          custoMdfExterno,
+          effectiveMarkup,
+        ),
+      )
+      perimetroFitaMmPainel += qtdRipas * 2 * (A + largRipa) * escala
+    }
+
     // 4. Gavetas no rack/nicho suspenso acoplado (se houver)
     const qtdGavetasPainel = Math.max(0, composicao?.gavetas?.qtd ?? 0)
     if (qtdGavetasPainel > 0) {
       const profGavPainel = Math.max(250, P - 50)
-      const largFrentePainel = Math.max(200, Math.round(L / qtdGavetasPainel))
+      const largFrentePainel = Math.max(
+        200,
+        Math.round((temRack ? largRack : L) / qtdGavetasPainel),
+      )
       const altFrentePainel = 160
       const areaFrentes = ((largFrentePainel * altFrentePainel) / 1_000_000) * PERDA * escala
       pecas.push(
@@ -517,7 +745,7 @@ export function calcularBOM(
       pecas.push(
         criarPeca(
           'bom-gavetas-caixotes-painel',
-          `Caixotes de Gaveta (${qtdGavetasPainel}x internos) — MDF 15mm`,
+          `Caixotes de Gaveta (${qtdGavetasPainel}x internos) — MDF ${espInt}mm`,
           rotuloMdfInterno,
           espInt,
           areaCaixote * qtdGavetasPainel,
@@ -543,7 +771,12 @@ export function calcularBOM(
       )
 
       // Corrediças
-      const corredicaMat = findItemCatalogo(catalogoPrecos, ['corrediça', 'corredica'])
+      const corredicaMat = findItemCatalogo(
+        catalogoPrecos,
+        ['corrediça', 'corredica'],
+        'Ferragem',
+        padraoProjeto,
+      )
       const unitCostCorredica = corredicaMat ? Number(corredicaMat.preco_custo) || 95.0 : 50.0
       pecas.push({
         id: 'bom-ferragem-corredicas-painel',
@@ -562,6 +795,15 @@ export function calcularBOM(
       })
     }
 
+    // 4b. Iluminação LED do painel: acompanha as ripas (altura) ou a largura do painel
+    if (composicao?.iluminacaoLed) {
+      const metrosLedPainel =
+        qtdRipas > 0
+          ? Math.max(1, Math.round(((qtdRipas * A) / 1000) * 10) / 10)
+          : Math.max(1, Math.round((L / 1000) * 10) / 10)
+      adicionarIluminacaoLed(metrosLedPainel, '-painel')
+    }
+
     // 5. Fita de Borda para o painel
     const perimetroFitaM = perimetroFitaMmPainel / 1000
     pecas.push(
@@ -578,18 +820,26 @@ export function calcularBOM(
     )
 
     // 6. Kit de Fixação e Buchas Estruturais para Alvenaria/Drywall
+    const kitFixacaoMat =
+      findItemCatalogo(catalogoPrecos, ['kit', 'fixação'], 'Ferragem', padraoProjeto) ||
+      findItemCatalogo(catalogoPrecos, ['kit', 'fixacao'], 'Ferragem', padraoProjeto) ||
+      findItemCatalogo(catalogoPrecos, ['bucha'], 'Ferragem', padraoProjeto)
+    const unitCostKit = kitFixacaoMat ? Number(kitFixacaoMat.preco_custo) || 35.0 : 35.0
+
     pecas.push({
       id: 'bom-kit-fixacao-painel',
-      description: 'Kit de Fixação Reforçado para Painel Suspenso (Buchas 10mm + Parafusos)',
+      description: kitFixacaoMat
+        ? `Kit de Fixação Reforçado para Painel Suspenso (${kitFixacaoMat.nome_material})`
+        : 'Kit de Fixação Reforçado para Painel Suspenso (Buchas 10mm + Parafusos) — Estimado',
       material: 'Ferragem',
       metragem: 1,
       unidade: 'jogo',
-      unitCost: 35.0,
-      totalCost: 35.0,
+      unitCost: unitCostKit,
+      totalCost: unitCostKit,
       markup: effectiveMarkup,
-      salePrice: round2(35.0 * effectiveMarkup),
-      item_nao_cadastrado: false,
-      catalogo_id: null,
+      salePrice: round2(unitCostKit * effectiveMarkup),
+      item_nao_cadastrado: !kitFixacaoMat,
+      catalogo_id: kitFixacaoMat?.id || null,
     })
 
     return pecas
@@ -1025,8 +1275,13 @@ export function calcularBOM(
 
     if (tipoPorta === 'correr') {
       // Portas de correr: Kit Sistema de Correr + Trilho Superior + Trilho Inferior
-      const kitCorrerMat = findItemCatalogo(catalogoPrecos, ['correr', 'kit'])
-      const trilhoMat = findItemCatalogo(catalogoPrecos, ['trilho'])
+      const kitCorrerMat = findItemCatalogo(
+        catalogoPrecos,
+        ['correr', 'kit'],
+        'Ferragem',
+        padraoProjeto,
+      )
+      const trilhoMat = findItemCatalogo(catalogoPrecos, ['trilho'], 'Ferragem', padraoProjeto)
 
       const unitCostKit = kitCorrerMat ? Number(kitCorrerMat.preco_custo) || 190 : 190.0
       const unitCostTrilho = trilhoMat ? Number(trilhoMat.preco_custo) || 79 : 79.0
@@ -1063,25 +1318,8 @@ export function calcularBOM(
         catalogo_id: trilhoMat?.id || null,
       })
     } else {
-      // Portas de abrir ou batente: 2 dobradiças por porta (1 par por porta)
-      const dobradicaMat = findItemCatalogo(catalogoPrecos, ['dobradiça', 'dobradica'])
-      const unitCostDobradica = dobradicaMat ? Number(dobradicaMat.preco_custo) || 42.0 : 50.0
-
-      pecas.push({
-        id: 'bom-ferragem-dobradicas',
-        description: dobradicaMat
-          ? `Dobradiças com amortecedor (${qtdPortas} pares / ${qtdPortas * 2} un)`
-          : `Dobradiças com amortecedor (${qtdPortas * 2} un) — Estimado`,
-        material: 'Ferragem',
-        metragem: qtdPortas, // 1 par por porta (2 dobradiças)
-        unidade: dobradicaMat?.unidade === 'un' ? 'un' : 'par',
-        unitCost: unitCostDobradica,
-        totalCost: round2(unitCostDobradica * qtdPortas),
-        markup: effectiveMarkup,
-        salePrice: round2(unitCostDobradica * qtdPortas * effectiveMarkup),
-        item_nao_cadastrado: !dobradicaMat,
-        catalogo_id: dobradicaMat?.id || null,
-      })
+      // Portas de abrir ou batente: 2 a 5 dobradiças por porta conforme a altura da folha
+      adicionarDobradicas(qtdPortas, altPorta, '')
     }
   }
 
@@ -1148,7 +1386,12 @@ export function calcularBOM(
     )
 
     // Corrediças por gaveta (1 par por gaveta)
-    const corredicaMat = findItemCatalogo(catalogoPrecos, ['corrediça', 'corredica'])
+    const corredicaMat = findItemCatalogo(
+      catalogoPrecos,
+      ['corrediça', 'corredica'],
+      'Ferragem',
+      padraoProjeto,
+    )
     const unitCostCorredica = corredicaMat ? Number(corredicaMat.preco_custo) || 95.0 : 50.0
 
     pecas.push({
@@ -1170,7 +1413,12 @@ export function calcularBOM(
 
   // 7. Cabideiro: calculado conforme qtdCabideiros (ex: 2 corpos = 2 cabideiros)
   if (qtdCabideiros > 0) {
-    const cabideiroMat = findItemCatalogo(catalogoPrecos, ['cabideiro', 'tubo'])
+    const cabideiroMat = findItemCatalogo(
+      catalogoPrecos,
+      ['cabideiro', 'tubo'],
+      'Ferragem',
+      padraoProjeto,
+    )
     const unitCostCabideiro = cabideiroMat ? Number(cabideiroMat.preco_custo) || 50.0 : 50.0
 
     pecas.push({
@@ -1192,7 +1440,12 @@ export function calcularBOM(
 
   // 8. Sapateira
   if (temSapateira) {
-    const sapateiraMat = findItemCatalogo(catalogoPrecos, ['sapateira', 'aramado'])
+    const sapateiraMat = findItemCatalogo(
+      catalogoPrecos,
+      ['sapateira', 'aramado'],
+      'Ferragem',
+      padraoProjeto,
+    )
     const unitCostSapateira = sapateiraMat ? Number(sapateiraMat.preco_custo) || 50.0 : 50.0
 
     pecas.push({
@@ -1214,7 +1467,7 @@ export function calcularBOM(
 
   // 9. Puxadores
   if (qtdPuxadores > 0) {
-    const puxadorMat = findItemCatalogo(catalogoPrecos, ['puxador'])
+    const puxadorMat = findItemCatalogo(catalogoPrecos, ['puxador'], 'Ferragem', padraoProjeto)
     const unitCostPuxador = puxadorMat ? Number(puxadorMat.preco_custo) || 25.0 : 25.0
 
     pecas.push({
@@ -1236,33 +1489,8 @@ export function calcularBOM(
 
   // 10. Iluminação / Perfil LED (se ativado na composição)
   if (composicao.iluminacaoLed) {
-    // Busca por perfil/led nas categorias 'Iluminação' ou 'Ferragem'
-    const perfilLedMat = findItemCatalogo(
-      catalogoPrecos,
-      ['led', 'perfil'],
-      ['Iluminação', 'Ferragem'],
-    )
-    const unitCostLed = perfilLedMat ? Number(perfilLedMat.preco_custo) || 85.0 : 85.0
-    // Metragem estimada de LED baseada na largura do módulo (em metros lineares, mínimo 1m)
-    const metrosLed = Math.max(1, Math.round((L / 1000) * 10) / 10)
-
-    pecas.push({
-      id: 'bom-acessorio-led',
-      description: perfilLedMat
-        ? `Kit Iluminação LED de Embutir + Fonte Slim (${metrosLed}m)`
-        : `Kit Iluminação / Fita LED de Embutir + Fonte Slim (${metrosLed}m) — Estimado`,
-      material: perfilLedMat?.categoria || 'Iluminação',
-      metragem: metrosLed,
-      unidade: 'm',
-      unitCost: unitCostLed,
-      totalCost: round2(unitCostLed * metrosLed),
-      markup: effectiveMarkup,
-      salePrice: round2(unitCostLed * metrosLed * effectiveMarkup),
-      item_nao_cadastrado: !perfilLedMat,
-      catalogo_id: perfilLedMat?.id || null,
-    })
+    adicionarIluminacaoLed(Math.max(1, Math.round((L / 1000) * 10) / 10), '')
   }
-
   // 11. Fita de Borda consolidada para o módulo decomposto
   const perimetroFitaM = perimetroFitaMm / 1000
   pecas.push(
