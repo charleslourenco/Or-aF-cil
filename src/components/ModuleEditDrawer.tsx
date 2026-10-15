@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import {
   UploadCloud,
   Layers,
@@ -60,6 +60,9 @@ import {
   ModuloComposicao,
   calcularBOM,
   MARKUP_PADRAO,
+  RackPainel,
+  RipadoPainel,
+  PERDA_PERCENT_PADRAO,
 } from '@/lib/pricing'
 import { montarDescricaoNaturalModulo } from '@/lib/pdf'
 import { CustomerDropzone, UploadedFileState } from '@/components/CustomerDropzone'
@@ -85,6 +88,7 @@ export interface AjustesBOMModulo {
   markupModulo?: number
   overrides?: Record<string, ItemBOMOverride>
   removedIds?: string[]
+  valorUnitarioFixo?: number | null
 }
 
 export interface ModuloSalvoData {
@@ -107,17 +111,27 @@ export interface ModuloSalvoData {
   prateleiras?: number
   cabideiros?: number
   iluminacaoLed?: boolean
-  composicao?: {
-    portas?: { qtd?: number | null; tipo?: string | null } | null
-    gavetas?: { qtd?: number | null } | null
-    prateleiras?: { qtd?: number | null } | null
-    cabideiro?: boolean | number | null
-    sapateira?: boolean | null
-    iluminacaoLed?: boolean | null
-  } | null
+  composicao?: ComposicaoModuloSalva | null
   itensBOM: OrcamentoBOMItem[]
   ajustesBOM?: AjustesBOMModulo
 }
+
+/** Composição do módulo como é salva no orçamento (e recarregada para edição). */
+export interface ComposicaoModuloSalva {
+  portas?: { qtd?: number | null; tipo?: string | null } | null
+  gavetas?: { qtd?: number | null } | null
+  prateleiras?: { qtd?: number | null } | null
+  cabideiro?: boolean | number | null
+  qtdCabideiros?: number | null
+  sapateira?: boolean | null
+  iluminacaoLed?: boolean | null
+  rackPainel?: RackPainel | null
+  ripado?: RipadoPainel | null
+}
+
+const DIMENSOES_PADRAO: Dimensoes = { largura: 800, altura: 700, profundidade: 550 }
+const RACK_PADRAO: RackPainel = { ativo: false, altura: 350, profundidade: 400, divisorias: 0 }
+const RIPADO_PADRAO: RipadoPainel = { qtd: 0, largura: 40 }
 
 interface ModuleEditDrawerProps {
   open: boolean
@@ -171,6 +185,16 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   const [mdfExterno, setMdfExterno] = useState<MdfSpec>({ cor: 'Branco TX', espessura: 18 })
   const [mdfInterno, setMdfInterno] = useState<MdfSpec>({ cor: 'Branco TX', espessura: 15 })
   const [mdfFundo, setMdfFundo] = useState<string>('MDF 6mm Branco TX')
+
+  // Perfil "Aberto / Painel": rack inferior acoplado e ripado vertical
+  const [rackPainel, setRackPainel] = useState<RackPainel>(RACK_PADRAO)
+  const [ripado, setRipado] = useState<RipadoPainel>(RIPADO_PADRAO)
+  // true quando o markup veio do módulo salvo ou foi digitado; enquanto false, o campo
+  // acompanha o markup da engenharia (que pode carregar depois de o modal abrir)
+  const markupDefinidoRef = useRef(false)
+  // Valor unitário fixado: ao reabrir um módulo o catálogo pode ter mudado de preço;
+  // o usuário pode manter o valor que já foi salvo/enviado ao cliente.
+  const [valorUnitarioFixo, setValorUnitarioFixo] = useState<number | null>(null)
 
   // Seletores numéricos e alternadores da Aba 2
   const [portasCount, setPortasCount] = useState<number>(2)
@@ -261,6 +285,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       setIaIdentifiedTemplate(null)
       setIsMatchConfirmed(false)
       setUploadedFiles([])
+      setValorUnitarioFixo(null)
 
       if (initialData) {
         // Modo Edição: preserva o nome salvo e demais atributos
@@ -287,9 +312,9 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         if (initialData.mdfInterno) {
           setMdfInterno(initialData.mdfInterno)
         }
-        if (initialData.mdfFundo) {
-          setMdfFundo(initialData.mdfFundo)
-        }
+        setMdfFundo(initialData.mdfFundo || 'MDF 6mm Branco TX')
+        setRackPainel({ ...RACK_PADRAO, ...(initialData.composicao?.rackPainel || {}) })
+        setRipado({ ...RIPADO_PADRAO, ...(initialData.composicao?.ripado || {}) })
         const initialPortas =
           initialData.portas ??
           (initialData.composicao?.portas?.qtd !== undefined
@@ -310,6 +335,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
           1
         const initialCabideiros =
           initialData.cabideiros ??
+          initialData.composicao?.qtdCabideiros ??
           (typeof initialData.composicao?.cabideiro === 'number'
             ? initialData.composicao.cabideiro
             : initialData.composicao?.cabideiro
@@ -328,8 +354,10 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         // Restaura markup do módulo e camada de ajustes da BOM
         const savedMarkupModulo = initialData.ajustesBOM?.markupModulo
         if (typeof savedMarkupModulo === 'number' && savedMarkupModulo > 0) {
+          markupDefinidoRef.current = true
           setMarkupModuloInput(savedMarkupModulo.toFixed(2))
         } else {
+          markupDefinidoRef.current = false
           // Fallback para o markup padrão da engenharia
           const padrao =
             configEngenharia?.markup_padrao && typeof configEngenharia.markup_padrao === 'number'
@@ -349,6 +377,9 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         } else {
           setRemovedBomIds([])
         }
+
+        const fixo = initialData.ajustesBOM?.valorUnitarioFixo
+        setValorUnitarioFixo(typeof fixo === 'number' && fixo > 0 ? fixo : null)
 
         // Carrega em manualItems os itens de initialData.itensBOM que sejam manuais/avulsos
         // (ID com prefixo manual-/catalog-/avulso- ou não gerados pela BOM paramétrica que usa prefixo bom-)
@@ -388,6 +419,14 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         setNomeModulo('')
         setDescricaoManual('')
         setSelectedTemplateId('')
+        setDimensoes(DIMENSOES_PADRAO)
+        setPerfilConstrutivo('Fechado Envelopado')
+        setPadraoProjeto('comercial')
+        setMdfExterno({ cor: 'Branco TX', espessura: 18 })
+        setMdfInterno({ cor: 'Branco TX', espessura: 15 })
+        setMdfFundo('MDF 6mm Branco TX')
+        setRackPainel(RACK_PADRAO)
+        setRipado(RIPADO_PADRAO)
         setQuantidade(1)
         setPortasCount(2)
         setGavetasCount(0)
@@ -398,6 +437,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         setBomOverrides({})
         setRemovedBomIds([])
 
+        markupDefinidoRef.current = false
         // Inicia markup com o padrão da engenharia do banco (fallback MARKUP_PADRAO)
         const padrao =
           configEngenharia?.markup_padrao && typeof configEngenharia.markup_padrao === 'number'
@@ -425,6 +465,35 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         m.nome_material.toLowerCase().includes('mdf'),
     )
   }, [catalogoMateriais])
+
+  // Ajusta o MDF escolhido para um item real do catálogo quando o nome salvo não existe nele
+  // (padrão "Branco TX" ou formato antigo "Branco TX (18mm)"), mantendo a espessura.
+  useEffect(() => {
+    if (!open || opcoesMdf.length === 0) return
+    const espessuraDe = (m: CatalogoMaterial): number | null => {
+      const txt = `${m.nome_material} ${m.categoria || ''}`
+      if (/18\s*mm|mdf\s*18/i.test(txt)) return 18
+      if (/15\s*mm|mdf\s*15/i.test(txt)) return 15
+      return null
+    }
+    const ajustar = (spec: MdfSpec): MdfSpec | null => {
+      if (opcoesMdf.some((m) => m.nome_material === spec.cor)) return null
+      const cor = (spec.cor || '')
+        .replace(/\(.*?\)/g, '')
+        .replace(/mdf|\d+\s*mm/gi, '')
+        .trim()
+        .toLowerCase()
+      const mesmaEspessura = opcoesMdf.filter((m) => espessuraDe(m) === spec.espessura)
+      const escolhido =
+        (cor && mesmaEspessura.find((m) => m.nome_material.toLowerCase().includes(cor))) ||
+        mesmaEspessura[0]
+      return escolhido ? { cor: escolhido.nome_material, espessura: spec.espessura } : null
+    }
+    const novoExt = ajustar(mdfExterno)
+    if (novoExt) setMdfExterno(novoExt)
+    const novoInt = ajustar(mdfInterno)
+    if (novoInt) setMdfInterno(novoInt)
+  }, [open, opcoesMdf, mdfExterno, mdfInterno])
 
   // Template selecionado atualmente
   const selectedTemplate = useMemo(() => {
@@ -534,18 +603,6 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
           (primeiro.perfil_construcao_sugerido as PerfilConstrutivo) ||
           (foundInTemplates?.perfil_construtivo as PerfilConstrutivo) ||
           'Fechado Envelopado'
-
-        if (isCustom || !foundInTemplates) {
-          // Se for customizado ou não achou na biblioteca, limpa selectedTemplateId e adota perfil da IA
-          setSelectedTemplateId('')
-          setPerfilConstrutivo(perfilRetornoIA)
-        } else {
-          // Se achou na biblioteca legítima
-          setSelectedTemplateId(foundInTemplates.id)
-          setPerfilConstrutivo(
-            (foundInTemplates.perfil_construtivo as PerfilConstrutivo) || perfilRetornoIA,
-          )
-        }
 
         const matched: TemplateEngenharia = foundInTemplates || {
           id: 'mod-custom',
@@ -764,6 +821,12 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     return MARKUP_PADRAO
   }, [configEngenharia])
 
+  useEffect(() => {
+    if (open && !markupDefinidoRef.current) {
+      setMarkupModuloInput(markupEngenhariaPadrao.toFixed(2))
+    }
+  }, [open, markupEngenhariaPadrao])
+
   // Markup efetivo do módulo (sobrescrevível pelo marceneiro)
   const markupModuloEfetivo = useMemo(() => {
     const parsed = parseFloat(markupModuloInput.replace(',', '.'))
@@ -779,12 +842,12 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   // Fator de perda de material configurado (default 20%)
   const fatorPerdaMaterial = useMemo(() => {
     if (
-      configEngenharia?.perda_material_percent &&
-      typeof configEngenharia.perda_material_percent === 'number'
+      typeof configEngenharia?.perda_material_percent === 'number' &&
+      configEngenharia.perda_material_percent >= 0
     ) {
       return configEngenharia.perda_material_percent
     }
-    return 20.0
+    return PERDA_PERCENT_PADRAO
   }, [configEngenharia])
 
   // Cálculo da lista técnica interna (Aba 3: Engenharia & Peças) - Base geométrica do motor
@@ -805,6 +868,8 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       cabideiro: cabideirosCount > 0,
       qtdCabideiros: cabideirosCount,
       iluminacaoLed: iluminacaoLed,
+      rackPainel: perfilConstrutivo === 'Aberto / Painel' ? rackPainel : null,
+      ripado: perfilConstrutivo === 'Aberto / Painel' ? ripado : null,
     }
 
     const catalogoEfetivo = catalogoMateriais.length > 0 ? catalogoMateriais : undefined
@@ -820,6 +885,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       markupModuloEfetivo,
       1.0,
       composicao,
+      fatorPerdaMaterial,
     )
   }, [
     selectedTemplateId,
@@ -837,6 +903,9 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     prateleirasCount,
     cabideirosCount,
     iluminacaoLed,
+    rackPainel,
+    ripado,
+    fatorPerdaMaterial,
   ])
 
   // Lista consolidada de peças técnicas e itens manuais com aplicação da camada de ajustes (Aba 3)
@@ -882,7 +951,19 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     return listaConsolidadaBOM.reduce((acc, p) => acc + (p.salePrice || 0), 0)
   }, [listaConsolidadaBOM])
 
-  // Handlers para adicionar itens do catálogo ou avulso com ID único garantido
+  // Valor unitário que vai para a linha comercial: o fixado pelo usuário ou o recalculado
+  const valorUnitarioEfetivo =
+    valorUnitarioFixo !== null && valorUnitarioFixo > 0
+      ? valorUnitarioFixo
+      : Math.round(totalVendaSugerido * 100) / 100
+
+  // Ao reabrir um módulo salvo, avisa se o recálculo (catálogo/markup atuais) mudou o valor
+  const valorSalvoAnterior = initialData?.valorUnitario || 0
+  const recalculoDivergente =
+    Boolean(initialData) &&
+    valorSalvoAnterior > 0 &&
+    valorUnitarioFixo === null &&
+    Math.abs(Math.round(totalVendaSugerido * 100) / 100 - valorSalvoAnterior) >= 0.01
   const handleAddManualItem = (item: BudgetItem) => {
     const uniqueItem: BudgetItem = {
       ...item,
@@ -920,6 +1001,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   const handleResetAjustesBOM = () => {
     setRemovedBomIds([])
     setBomOverrides({})
+    markupDefinidoRef.current = false
     const padrao =
       configEngenharia?.markup_padrao && typeof configEngenharia.markup_padrao === 'number'
         ? configEngenharia.markup_padrao
@@ -1045,7 +1127,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       nomeModulo.trim() ||
       (selectedTemplateId && selectedTemplate ? selectedTemplate.nome_template : '') ||
       'Módulo Sob Medida (Personalizado)'
-    const unitPrice = totalVendaSugerido > 0 ? Math.round(totalVendaSugerido * 100) / 100 : 0
+    const unitPrice = valorUnitarioEfetivo > 0 ? valorUnitarioEfetivo : 0
     const total = Math.round(unitPrice * quantidade * 100) / 100
 
     // Descrição comercial rica com características selecionadas
@@ -1067,6 +1149,26 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         `${manualItems.length} ${manualItems.length === 1 ? 'acessório' : 'acessórios'}`,
       )
 
+    const isPainel = perfilConstrutivo === 'Aberto / Painel'
+    const composicaoSalva: ComposicaoModuloSalva = {
+      portas: { qtd: portasCount, tipo: portasCount > 0 ? 'abrir' : 'nenhum' },
+      gavetas: { qtd: gavetasCount },
+      prateleiras: { qtd: prateleirasCount },
+      cabideiro: cabideirosCount > 0,
+      qtdCabideiros: cabideirosCount,
+      iluminacaoLed,
+      rackPainel: isPainel && rackPainel.ativo ? rackPainel : null,
+      ripado: isPainel && ripado.qtd > 0 ? ripado : null,
+    }
+    if (isPainel && rackPainel.ativo) {
+      detalhesAba2.push(
+        `rack ${rackPainel.largura || dimensoes.largura}×${rackPainel.altura}×${rackPainel.profundidade}mm`,
+      )
+    }
+    if (isPainel && ripado.qtd > 0) {
+      detalhesAba2.push(`${ripado.qtd} ${ripado.qtd === 1 ? 'ripa' : 'ripas'}`)
+    }
+
     // Converte listaConsolidadaBOM para OrcamentoBOMItem[] repassando todos os itens
     const todosItensConvertidos: OrcamentoBOMItem[] = listaConsolidadaBOM.map((p) => ({
       id: p.id,
@@ -1083,14 +1185,6 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       catalogo_id: p.catalogo_id,
     }))
 
-    const composicaoSalva = {
-      portas: { qtd: portasCount, tipo: portasCount > 0 ? 'abrir' : 'nenhum' },
-      gavetas: { qtd: gavetasCount },
-      prateleiras: { qtd: prateleirasCount },
-      cabideiro: cabideirosCount > 0,
-      iluminacaoLed,
-    }
-
     const descManualLimpa = descricaoManual.trim()
 
     // Ajustes persistidos junto ao módulo (payload jsonb e draft)
@@ -1098,6 +1192,8 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       markupModulo: markupModuloEfetivo,
       overrides: Object.keys(bomOverrides).length > 0 ? bomOverrides : undefined,
       removedIds: removedBomIds.length > 0 ? removedBomIds : undefined,
+      valorUnitarioFixo:
+        valorUnitarioFixo !== null && valorUnitarioFixo > 0 ? valorUnitarioFixo : null,
     }
 
     onSaveModulo({
@@ -1275,19 +1371,34 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                       variant="outline"
                       className="text-[10px] font-bold border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700"
                     >
-                      {iaIdentifiedTemplate.confianca}% match
+                      {iaIdentifiedTemplate.isLibraryMatch
+                        ? `Confiança ${iaIdentifiedTemplate.confiancaNivel === 'alta' ? 'alta' : iaIdentifiedTemplate.confiancaNivel === 'media' ? 'média' : 'baixa'}`
+                        : 'Sem correspondência na biblioteca'}
                     </Badge>
+                  </div>
+
+                  {/* Aviso de medidas estimadas da foto */}
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <p className="leading-relaxed">
+                      As medidas sugeridas são estimadas pela foto, que não tem escala. Confira a
+                      largura, a altura e a profundidade reais na aba 2 antes de salvar.
+                    </p>
                   </div>
 
                   {/* Informações do Módulo Identificado */}
                   <div className="space-y-2">
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                        Módulo da Biblioteca Identificado
+                        {iaIdentifiedTemplate.isLibraryMatch
+                          ? 'Módulo da Biblioteca Identificado'
+                          : 'Nenhum módulo da biblioteca corresponde — será calculado sob medida'}
                       </span>
-                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                        {iaIdentifiedTemplate.template.nome_template}
-                      </p>
+                      {iaIdentifiedTemplate.isLibraryMatch && (
+                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {iaIdentifiedTemplate.template.nome_template}
+                        </p>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs pt-1">
@@ -1380,7 +1491,15 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                       )}
                     >
                       <Check className="w-3.5 h-3.5" />
-                      <span>{isMatchConfirmed ? 'Match Confirmado ✓' : 'Confirmar Match'}</span>
+                      <span>
+                        {iaIdentifiedTemplate.isLibraryMatch
+                          ? isMatchConfirmed
+                            ? 'Match Confirmado ✓'
+                            : 'Confirmar Match'
+                          : isMatchConfirmed
+                            ? 'Sugestões Aplicadas ✓'
+                            : 'Aplicar Sugestões da IA'}
+                      </span>
                     </Button>
                   </div>
                 </div>
@@ -1768,6 +1887,151 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                   </div>
                 </div>
 
+                {/* Perfil "Aberto / Painel": Rack / Caixa Inferior Acoplada e Ripado Vertical */}
+                {perfilConstrutivo === 'Aberto / Painel' && (
+                  <div className="p-4 rounded-2xl bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/60 space-y-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <Label
+                          htmlFor="rackPainelAtivoSwitch"
+                          className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Box className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                          <span>Rack / Caixa Inferior Acoplada</span>
+                        </Label>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Tampo, base, laterais e nichos do rack. Portas e gavetas acima entram no
+                          rack.
+                        </p>
+                      </div>
+                      <Switch
+                        id="rackPainelAtivoSwitch"
+                        checked={rackPainel.ativo}
+                        onCheckedChange={(checked) =>
+                          setRackPainel((r) => ({ ...r, ativo: checked }))
+                        }
+                      />
+                    </div>
+
+                    {rackPainel.ativo && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-amber-200/70 dark:border-amber-900/40">
+                        <div className="space-y-1">
+                          <Label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                            Largura (0 = painel)
+                          </Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={10}
+                            value={rackPainel.largura ?? 0}
+                            onChange={(e) =>
+                              setRackPainel((r) => ({
+                                ...r,
+                                largura: Math.max(0, Number(e.target.value) || 0),
+                              }))
+                            }
+                            className="h-9 text-xs font-mono rounded-lg bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                            Altura (mm)
+                          </Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={10}
+                            value={rackPainel.altura}
+                            onChange={(e) =>
+                              setRackPainel((r) => ({
+                                ...r,
+                                altura: Math.max(0, Number(e.target.value) || 0),
+                              }))
+                            }
+                            className="h-9 text-xs font-mono rounded-lg bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                            Profundidade (mm)
+                          </Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={10}
+                            value={rackPainel.profundidade}
+                            onChange={(e) =>
+                              setRackPainel((r) => ({
+                                ...r,
+                                profundidade: Math.max(0, Number(e.target.value) || 0),
+                              }))
+                            }
+                            className="h-9 text-xs font-mono rounded-lg bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                            Divisórias / nichos
+                          </Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={rackPainel.divisorias}
+                            onChange={(e) =>
+                              setRackPainel((r) => ({
+                                ...r,
+                                divisorias: Math.max(0, Number(e.target.value) || 0),
+                              }))
+                            }
+                            className="h-9 text-xs font-mono rounded-lg bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-200/70 dark:border-amber-900/40">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Ripas / frisos verticais (qtd)
+                        </Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={ripado.qtd}
+                          onChange={(e) =>
+                            setRipado((r) => ({
+                              ...r,
+                              qtd: Math.max(0, Number(e.target.value) || 0),
+                            }))
+                          }
+                          className="h-9 text-xs font-mono rounded-lg bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Largura de cada ripa (mm)
+                        </Label>
+                        <Input
+                          type="number"
+                          min={10}
+                          step={5}
+                          value={ripado.largura}
+                          onChange={(e) => {
+                            const val = Number(e.target.value)
+                            setRipado((r) => ({
+                              ...r,
+                              largura: Number.isNaN(val) || val <= 0 ? 40 : Math.max(10, val),
+                            }))
+                          }}
+                          className="h-9 text-xs font-mono rounded-lg bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Barra de ações para adicionar itens do catálogo ou avulso ao módulo */}
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                   <div className="space-y-0.5">
@@ -1986,7 +2250,10 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                         min="0.1"
                         max="20"
                         value={markupModuloInput}
-                        onChange={(e) => setMarkupModuloInput(e.target.value)}
+                        onChange={(e) => {
+                          markupDefinidoRef.current = true
+                          setMarkupModuloInput(e.target.value)
+                        }}
                         placeholder={markupEngenhariaPadrao.toFixed(2)}
                         className="h-8 w-24 text-xs font-bold font-mono pr-6 text-center rounded-lg bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700"
                       />
@@ -2344,6 +2611,43 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
           onAddItem={handleAddManualItem}
         />
 
+        {/* Avisos de divergência de recálculo ou valor unitário fixado */}
+        {recalculoDivergente && (
+          <div className="px-6 py-2.5 border-t text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+            <span>
+              Valor recalculado com os preços atuais: {formatCurrency(valorSalvoAnterior)} →{' '}
+              {formatCurrency(totalVendaSugerido)} por unidade.
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setValorUnitarioFixo(valorSalvoAnterior)}
+              className="h-7 px-3 text-[11px] font-semibold rounded-lg bg-white dark:bg-slate-900 border-amber-300 dark:border-amber-800 hover:bg-amber-100/50 shrink-0 self-start sm:self-auto"
+            >
+              Manter {formatCurrency(valorSalvoAnterior)}
+            </Button>
+          </div>
+        )}
+
+        {valorUnitarioFixo !== null && (
+          <div className="px-6 py-2.5 border-t text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0 border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-200">
+            <span>
+              Valor unitário fixado em {formatCurrency(valorUnitarioFixo)}. As peças continuam sendo
+              recalculadas, mas o preço de venda não muda.
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setValorUnitarioFixo(null)}
+              className="h-7 px-3 text-[11px] font-semibold rounded-lg bg-white dark:bg-slate-900 border-sky-300 dark:border-sky-800 hover:bg-sky-100/50 shrink-0 self-start sm:self-auto"
+            >
+              Usar valor recalculado ({formatCurrency(totalVendaSugerido)})
+            </Button>
+          </div>
+        )}
+
         {/* Rodapé fixo com o botão pedido: 'Salvar Módulo no Ambiente' */}
         <DialogFooter className="px-6 py-4 border-t border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3 sm:space-x-0">
           <div className="flex items-center gap-2 text-xs text-slate-500 w-full sm:w-auto justify-between sm:justify-start">
@@ -2357,7 +2661,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
             <span>
               Total previsto:{' '}
               <strong className="font-mono text-slate-900 dark:text-slate-100 font-bold">
-                {formatCurrency(totalVendaSugerido * quantidade)}
+                {formatCurrency(valorUnitarioEfetivo * quantidade)}
               </strong>
             </span>
           </div>
