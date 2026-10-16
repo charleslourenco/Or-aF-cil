@@ -648,7 +648,9 @@ export function ParametricModuleCalculatorModal({
               asChild
               className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold"
             >
-              <a href={`/orcamento-v2?modulo=${modulo.id}`}>
+              <a
+                href={`/orcamento-v2?template=${encodeURIComponent(modulo.id)}&l=${largura}&a=${altura}&p=${profundidade}`}
+              >
                 Usar no Orçamento
                 <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
               </a>

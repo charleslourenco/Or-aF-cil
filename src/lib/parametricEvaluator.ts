@@ -1,4 +1,4 @@
-import { evaluate } from 'mathjs'
+import { avaliarFormulaSegura } from '@/lib/parametrico'
 
 export type SlotMaterial = 'caixaria_interna' | 'frentes_externas' | 'fundo' | string
 
@@ -69,58 +69,7 @@ export interface ResultadoCalculoParametrico {
   avisos: string[]
 }
 
-/**
- * Normaliza uma expressão matemática escrita com caracteres especiais
- * (ex: travessão ao invés de hífen, x ao invés de *, vírgula decimal, etc).
- */
-function normalizarExpressao(expr: string | number): string {
-  if (typeof expr === 'number') return expr.toString()
-  if (!expr || typeof expr !== 'string') return '0'
-
-  return expr
-    .trim()
-    .replace(/[–—−]/g, '-') // travessões tipográficos para hífen menos
-    .replace(/×/g, '*') // sinal de multiplicação unicode
-    .replace(/\s+/g, ' ')
-}
-
-/**
- * Avalia de forma segura uma expressão matemática com mathjs,
- * injetando o escopo com as variáveis dimensionais.
- * Nunca utiliza eval ou Function.
- */
-export function avaliarFormulaSegura(
-  expr: string | number,
-  scope: Record<string, number>,
-): { valor: number; erro?: string } {
-  try {
-    const raw = normalizarExpressao(expr)
-
-    // Se já for numérico puro (ex: "150" ou 150)
-    const numDirect = Number(raw)
-    if (!isNaN(numDirect) && raw.trim() !== '') {
-      return { valor: Math.max(0, Math.round(numDirect * 100) / 100) }
-    }
-
-    // Avalia via math.js em escopo isolado
-    const resultado = evaluate(raw, scope)
-
-    if (typeof resultado === 'number' && !isNaN(resultado) && isFinite(resultado)) {
-      return { valor: Math.max(0, Math.round(resultado * 100) / 100) }
-    }
-
-    return {
-      valor: 0,
-      erro: `Resultado inválido (${resultado}) para expressão "${expr}"`,
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return {
-      valor: 0,
-      erro: `Erro na fórmula "${expr}": ${msg}`,
-    }
-  }
-}
+export { avaliarFormulaSegura }
 
 export interface MateriaisPrecoMap {
   caixaria_interna?: { nome: string; precoM2: number }

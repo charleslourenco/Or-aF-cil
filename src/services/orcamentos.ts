@@ -141,6 +141,8 @@ export interface ModuloOrcamento {
   quantidade?: number
   valor_unitario?: number
   ajustes_bom?: unknown
+  template_parametrico_id?: string | null
+  espessura_caixaria?: number | null
 }
 
 export interface AmbienteOrcamento {

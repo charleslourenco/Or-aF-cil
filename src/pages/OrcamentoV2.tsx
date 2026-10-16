@@ -120,6 +120,8 @@ export interface ModuloComercialV2 {
   composicao?: ComposicaoModuloSalva | null
   itensBOM?: OrcamentoBOMItem[]
   ajustesBOM?: AjustesBOMModulo
+  template_parametrico_id?: string | null
+  espessura_caixaria?: number | null
 }
 
 export interface AmbienteV2 {
@@ -471,6 +473,8 @@ export default function OrcamentoV2() {
                         composicao: m.composicao || null,
                         itensBOM: m.itens || [],
                         ajustesBOM: m.ajustes_bom || m.ajustesBOM || undefined,
+                        template_parametrico_id: m.template_parametrico_id ?? null,
+                        espessura_caixaria: m.espessura_caixaria ?? null,
                       }
                     })
                   : [],
@@ -1226,6 +1230,8 @@ export default function OrcamentoV2() {
       composicao: mod.composicao || null,
       itensBOM: mod.itensBOM || [],
       ajustesBOM: mod.ajustesBOM,
+      template_parametrico_id: mod.template_parametrico_id ?? null,
+      espessura_caixaria: (mod.espessura_caixaria as 15 | 18 | null) ?? null,
     }
     setEditingModuloData(dataToEdit)
     setIsDrawerOpen(true)
@@ -1274,6 +1280,8 @@ export default function OrcamentoV2() {
                 composicao: moduloData.composicao || null,
                 itensBOM: moduloData.itensBOM,
                 ajustesBOM: moduloData.ajustesBOM,
+                template_parametrico_id: moduloData.template_parametrico_id ?? null,
+                espessura_caixaria: moduloData.espessura_caixaria ?? null,
               }
             }),
           }
@@ -1299,6 +1307,8 @@ export default function OrcamentoV2() {
         composicao: moduloData.composicao || null,
         itensBOM: moduloData.itensBOM,
         ajustesBOM: moduloData.ajustesBOM,
+        template_parametrico_id: moduloData.template_parametrico_id ?? null,
+        espessura_caixaria: moduloData.espessura_caixaria ?? null,
       }
 
       setAmbientes((prev) =>
@@ -1402,6 +1412,8 @@ export default function OrcamentoV2() {
               : undefined,
             itens: mod.itensBOM || [],
             ajustes_bom: mod.ajustesBOM,
+            template_parametrico_id: mod.template_parametrico_id ?? null,
+            espessura_caixaria: mod.espessura_caixaria ?? null,
           } as any
         })
 
@@ -2505,6 +2517,11 @@ export default function OrcamentoV2() {
                                         <div className="flex items-center gap-2">
                                           <Box className="w-4 h-4 text-slate-500 shrink-0" />
                                           <span>{mod.modulo}</span>
+                                          {mod.template_parametrico_id && (
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-100 text-sky-800 border border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800">
+                                              Paramétrico
+                                            </span>
+                                          )}
                                           <button
                                             type="button"
                                             onClick={() => handleOpenEditModuloDrawer(amb.id, mod)}
