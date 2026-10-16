@@ -59,6 +59,13 @@ import {
   PERFIS_CONSTRUTIVOS_INFO,
 } from '@/services/templates'
 import {
+  fetchTemplatesEngenhariaParametricos,
+  type TemplateEngenhariaParametrico,
+} from '@/services/templatesParametricos'
+import { fetchFerragensVinculos, type VinculoComDetalhes } from '@/services/ferragensVinculos'
+import { GerenciarFerragensModal } from '@/components/GerenciarFerragensModal'
+import { ParametricModuleCalculatorModal } from '@/components/ParametricModuleCalculatorModal'
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -155,11 +162,34 @@ export default function LibraryPage() {
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos')
-  const [modulos, setModulos] = useState<TemplateEngenharia[]>([])
+  const [selectedTagFilter, setSelectedTagFilter] = useState<string>('Todos')
+  const [onlyPromob, setOnlyPromob] = useState(false)
+
+  // Tabela antiga TemplatesEngenharia (7 módulos)
+  const [modulosAntigos, setModulosAntigos] = useState<TemplateEngenharia[]>([])
+
+  // Tabela nova templatesengenharia (~736 módulos paramétricos)
+  const [modulosParametricos, setModulosParametricos] = useState<TemplateEngenhariaParametrico[]>(
+    [],
+  )
+  const [pageParametricos, setPageParametricos] = useState(0)
+  const [hasMoreParametricos, setHasMoreParametricos] = useState(true)
+  const [totalParametricos, setTotalParametricos] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
+
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // Estado do modal de detalhes do módulo
+  // Vínculos de Ferragens
+  const [vinculosMap, setVinculosMap] = useState<Map<string, VinculoComDetalhes>>(new Map())
+  const [modalFerragensOpen, setModalFerragensOpen] = useState(false)
+  const [ferragemParaVincular, setFerragemParaVincular] = useState<string | null>(null)
+
+  // Modal interativo de cálculo paramétrico
+  const [moduloParametricoSelecionado, setModuloParametricoSelecionado] =
+    useState<TemplateEngenhariaParametrico | null>(null)
+
+  // Estado do modal de detalhes do módulo clássico
   const [detailModalId, setDetailModalId] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -195,27 +225,83 @@ export default function LibraryPage() {
   const [previewPerfil, setPreviewPerfil] = useState<PerfilConstrutivo>('Fechado Envelopado')
   const [previewCategoria, setPreviewCategoria] = useState('Cozinha')
 
-  // FETCH REAL DO SUPABASE — catálogo de módulos da tabela TemplatesEngenharia.
+  // Carrega vínculos de ferragens
+  const loadVinculos = useCallback(async () => {
+    const res = await fetchFerragensVinculos()
+    if (!res.error) {
+      setVinculosMap(res.mapVinculos)
+    }
+  }, [])
+
+  // Carrega módulos antigos (TemplatesEngenharia - uppercase) e primeira página dos paramétricos
   const loadModules = useCallback(async () => {
     setLoading(true)
     setErrorMsg(null)
-    const { data, error } = await fetchTemplatesEngenharia()
-    if (error) {
-      setErrorMsg(error)
-      setModulos([])
-    } else {
-      setModulos(data)
+
+    try {
+      const [antigosRes, parametricosRes, _] = await Promise.all([
+        fetchTemplatesEngenharia(),
+        fetchTemplatesEngenhariaParametricos({
+          termo: searchTerm,
+          ambiente: selectedCategory,
+          tipoTag: selectedTagFilter,
+          page: 0,
+          pageSize: 24,
+        }),
+        loadVinculos(),
+      ])
+
+      if (antigosRes.error) {
+        console.warn('Erro ao buscar TemplatesEngenharia:', antigosRes.error)
+      }
+      setModulosAntigos(antigosRes.data ?? [])
+
+      if (parametricosRes.error) {
+        console.warn('Erro ao buscar templatesengenharia:', parametricosRes.error)
+      }
+      setModulosParametricos(parametricosRes.data ?? [])
+      setTotalParametricos(parametricosRes.total ?? 0)
+      setHasMoreParametricos(parametricosRes.hasMore ?? false)
+      setPageParametricos(0)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setErrorMsg(msg)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-  }, [])
+  }, [searchTerm, selectedCategory, selectedTagFilter, loadVinculos])
 
   useEffect(() => {
     loadModules()
   }, [loadModules])
 
-  const selectedDetailModule = modulos.find((m) => m.id === detailModalId) || null
+  // Carregar mais módulos paramétricos (paginação / rolagem)
+  const handleLoadMoreParametricos = async () => {
+    if (loadingMore || !hasMoreParametricos) return
+    setLoadingMore(true)
+    const nextPage = pageParametricos + 1
 
-  const filteredModules = modulos.filter((m) => {
+    const res = await fetchTemplatesEngenhariaParametricos({
+      termo: searchTerm,
+      ambiente: selectedCategory,
+      tipoTag: selectedTagFilter,
+      page: nextPage,
+      pageSize: 24,
+    })
+
+    if (!res.error) {
+      setModulosParametricos((prev) => [...prev, ...res.data])
+      setPageParametricos(nextPage)
+      setHasMoreParametricos(res.hasMore)
+      setTotalParametricos(res.total)
+    }
+    setLoadingMore(false)
+  }
+
+  const selectedDetailModule = modulosAntigos.find((m) => m.id === detailModalId) || null
+
+  // Filtra módulos antigos da tabela TemplatesEngenharia
+  const filteredModulosAntigos = modulosAntigos.filter((m) => {
     const term = searchTerm.toLowerCase()
     const tags = (m.assinatura_visual ?? []).join(' ').toLowerCase()
     const matchesSearch =
@@ -226,9 +312,20 @@ export default function LibraryPage() {
       tags.includes(term)
     const matchesCat =
       selectedCategory === 'Todos' ||
-      (m.categoria ?? '').toLowerCase().includes(selectedCategory.toLowerCase())
-    return matchesSearch && matchesCat
+      (m.categoria ?? '').toLowerCase().includes(selectedCategory.toLowerCase()) ||
+      tags.includes(selectedCategory.toLowerCase())
+    const matchesTag =
+      selectedTagFilter === 'Todos' || tags.includes(selectedTagFilter.toLowerCase())
+    const matchesPromob = !onlyPromob || tags.includes('promob')
+    return matchesSearch && matchesCat && matchesTag && matchesPromob
   })
+
+  // Filtra módulos paramétricos em memória se houver checkbox Promob
+  const displayParametricos = onlyPromob
+    ? modulosParametricos.filter((p) =>
+        p.assinatura_visual.some((t) => t.toLowerCase().includes('promob')),
+      )
+    : modulosParametricos
 
   // --- Handlers do Modal de Criação / Edição Padrão ---
   const openCreate = () => {
@@ -378,7 +475,9 @@ export default function LibraryPage() {
     }
 
     // Atualiza estado local imediatamente
-    setModulos((prev) => prev.map((m) => (m.id === id ? { ...m, nome_template: trimmed } : m)))
+    setModulosAntigos((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, nome_template: trimmed } : m)),
+    )
     setEditingCardId(null)
     setEditingCardName('')
 
@@ -881,37 +980,90 @@ export default function LibraryPage() {
         <div className="flex flex-wrap items-center gap-2.5">
           <Button
             variant="outline"
-            onClick={openImportModal}
-            className="border-slate-700 text-slate-800 hover:bg-slate-100 font-semibold shadow-xs"
+            onClick={() => setModalFerragensOpen(true)}
+            className="border-slate-300 text-slate-800 hover:bg-slate-100 font-semibold shadow-xs text-xs"
           >
-            <FileUp className="w-4 h-4 mr-2 text-slate-700" />+ Importar Módulo (PDF Promob/Ficha
-            Técnica)
+            <Wrench className="w-3.5 h-3.5 mr-1.5 text-slate-700" />
+            Vincular Ferragens (
+            {vinculosMap.size > 0
+              ? Array.from(vinculosMap.values()).filter((v) => v.catalogo_material_id).length
+              : 0}
+            )
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={openImportModal}
+            className="border-slate-700 text-slate-800 hover:bg-slate-100 font-semibold shadow-xs text-xs"
+          >
+            <FileUp className="w-3.5 h-3.5 mr-1.5 text-slate-700" />
+            Importar PDF Promob
           </Button>
 
           <Button
             onClick={openCreate}
-            className="bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm"
+            className="bg-slate-800 hover:bg-slate-900 text-white font-semibold shadow-xs text-xs"
           >
-            <PlusCircle className="w-4 h-4 mr-2" />
+            <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
             Novo Módulo
           </Button>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <Input
-            placeholder="Buscar por nome, material, tag..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 h-9 text-xs"
-          />
+      {/* Filter and Search Bar com Filtro de Tags e Filtro Promob */}
+      <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
+              placeholder="Buscar por nome, tag ou perfil..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 h-9 text-xs"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-end flex-wrap">
+            {/* Filtro específico por Tipo de Módulo / Tag de Assinatura Visual */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-slate-500">Tipo:</span>
+              <select
+                value={selectedTagFilter}
+                onChange={(e) => setSelectedTagFilter(e.target.value)}
+                className="h-8 text-xs bg-slate-50 border border-slate-200 rounded-lg px-2 text-slate-800 focus:outline-hidden"
+              >
+                <option value="Todos">Todos os Tipos</option>
+                <option value="altos">Altos</option>
+                <option value="inferiores">Inferiores</option>
+                <option value="ilhas">Ilhas</option>
+                <option value="balcoes">Balcões</option>
+                <option value="gaveteiros">Gaveteiros</option>
+                <option value="despenseiros">Despenseiros</option>
+                <option value="torres">Torres</option>
+                <option value="sup-altos">Sup-Altos</option>
+                <option value="sup-medios">Sup-Médios</option>
+                <option value="sup-baixos">Sup-Baixos</option>
+                <option value="cantoneiras">Cantoneiras</option>
+                <option value="fechamentos">Fechamentos</option>
+              </select>
+            </div>
+
+            {/* Selo/Filtro Promob */}
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 cursor-pointer bg-slate-50 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200 select-none">
+              <input
+                type="checkbox"
+                checked={onlyPromob}
+                onChange={(e) => setOnlyPromob(e.target.checked)}
+                className="rounded border-slate-300 text-orange-600 focus:ring-orange-500 h-3.5 w-3.5"
+              />
+              <span className="text-orange-600 font-bold uppercase text-[10px]">Promob</span>
+              <span className="text-[11px] text-slate-600">Apenas Promob</span>
+            </label>
+          </div>
         </div>
 
-        {/* Abas fixas de ambiente */}
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+        {/* Abas de ambiente */}
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full pb-1 pt-1 border-t border-slate-100">
           {AMBIENTE_TABS.map((aba) => (
             <button
               key={aba}
@@ -919,7 +1071,7 @@ export default function LibraryPage() {
               onClick={() => setSelectedCategory(aba)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
                 selectedCategory === aba
-                  ? 'bg-slate-700 text-white shadow-2xs'
+                  ? 'bg-slate-800 text-white shadow-2xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -929,7 +1081,7 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      {/* Content area */}
+      {/* Content area: Módulos Paramétricos e Módulos Antigos */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -965,273 +1117,433 @@ export default function LibraryPage() {
             Tentar novamente
           </Button>
         </div>
-      ) : modulos.length === 0 ? (
+      ) : displayParametricos.length === 0 && filteredModulosAntigos.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 p-8 shadow-2xs">
-          <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center mb-4 text-slate-700 shadow-2xs">
-            <Package className="w-8 h-8" />
-          </div>
-          <h3 className="text-lg font-bold text-slate-900">Sua biblioteca de módulos está vazia</h3>
-          <p className="text-sm text-slate-500 mt-1.5 max-w-md">
-            Faça o upload das fichas técnicas em PDF ou imagem para povoar seu catálogo oficial de
-            fábrica.
+          <Boxes className="w-12 h-12 text-slate-300 mb-3" />
+          <h3 className="text-lg font-bold text-slate-900">Nenhum módulo encontrado</h3>
+          <p className="text-sm text-slate-500 mt-1 max-w-md">
+            Ajuste os filtros de busca ou ambiente para visualizar os módulos da engenharia.
           </p>
-          <Button
-            onClick={openImportModal}
-            className="mt-6 bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-sm h-10 px-5"
-          >
-            <FileUp className="w-4 h-4 mr-2" />+ Importar Primeiro Módulo
-          </Button>
-        </div>
-      ) : filteredModules.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Boxes className="w-10 h-10 text-slate-300 mb-3" />
-          <p className="text-sm font-semibold text-slate-700">
-            Nenhum módulo encontrado com os filtros atuais.
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            Ajuste a busca ou crie um novo módulo para o catálogo.
-          </p>
-          <Button onClick={openCreate} className="mt-4 bg-slate-700 hover:bg-slate-800">
+          <Button onClick={openCreate} className="mt-4 bg-slate-800 hover:bg-slate-900 text-white">
             <PlusCircle className="w-4 h-4 mr-2" />
             Criar novo módulo
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredModules.map((mod) => {
-            // Contagem segura de peças de MDF com suporte a pecas_mdf e composicao_mdf
-            const pecasArr =
-              (Array.isArray(mod.pecas_mdf) && mod.pecas_mdf.length > 0
-                ? mod.pecas_mdf
-                : Array.isArray((mod as any).composicao_mdf)
-                  ? (mod as any).composicao_mdf
-                  : null) ?? (Array.isArray(mod.pecas_mdf) ? mod.pecas_mdf : null)
-            const pecasCount = pecasArr ? pecasArr.length : 0
-
-            // Contagem segura de ferragens
-            const ferragensArr =
-              (Array.isArray(mod.ferragens) && mod.ferragens.length > 0
-                ? mod.ferragens
-                : Array.isArray((mod as any).ferragens_itens)
-                  ? (mod as any).ferragens_itens
-                  : null) ?? (Array.isArray(mod.ferragens) ? mod.ferragens : null)
-            const ferragensCount = ferragensArr ? ferragensArr.length : 0
-
-            // Extrai iniciais do nome se não houver código
-            const codigoDisplay =
-              mod.codigo && mod.codigo.trim().length > 0
-                ? mod.codigo.trim()
-                : mod.nome_template
-                    .split(/\s+/)
-                    .filter(Boolean)
-                    .slice(0, 3)
-                    .map((w) => w[0]?.toUpperCase())
-                    .join('') || 'MOD'
-
-            return (
-              <div
-                key={mod.id}
-                onClick={() => setDetailModalId(mod.id)}
-                className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-slate-400 transition-all overflow-hidden flex flex-col group cursor-pointer"
-              >
-                {/* Cabeçalho do card: Imagem real do módulo com fallback técnico */}
-                <div className="relative w-full h-48 bg-slate-100 flex items-center justify-center overflow-hidden border-b border-slate-100 rounded-t-2xl">
-                  {mod.imagem_url ? (
-                    <img
-                      src={mod.imagem_url}
-                      alt={mod.nome_template}
-                      className="w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
-                      onError={(e) => {
-                        // Fallback se a imagem falhar ao carregar
-                        ;(e.target as HTMLImageElement).style.display = 'none'
-                        const parent = (e.target as HTMLElement).parentElement
-                        const fallback = parent?.querySelector('.image-fallback-container')
-                        if (fallback) {
-                          ;(fallback as HTMLElement).style.display = 'flex'
-                        }
-                      }}
-                    />
-                  ) : null}
-
-                  {/* Fallback técnico blueprint quando não há imagem ou em caso de erro */}
-                  <div
-                    className={`image-fallback-container w-full h-full flex flex-col items-center justify-center p-4 bg-slate-100 text-slate-400 ${
-                      mod.imagem_url ? 'hidden' : 'flex'
-                    }`}
-                  >
-                    <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center text-slate-500 mb-2 group-hover:border-slate-400 group-hover:text-slate-700 transition-colors">
-                      <Compass className="w-7 h-7" />
-                    </div>
-                    <span className="text-[11px] font-mono font-bold text-slate-600 tracking-wider">
-                      {codigoDisplay}
-                    </span>
-                    <span className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5 font-medium">
-                      Planta Técnica
-                    </span>
-                  </div>
-
-                  {/* Badges flutuantes no topo da imagem */}
-                  <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
-                    <span className="px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-xs text-slate-500 font-mono text-xs font-bold border border-slate-700/60 shadow-xs">
-                      {codigoDisplay}
-                    </span>
-                    {mod.categoria && (
-                      <Badge
-                        variant="secondary"
-                        className="bg-white/90 backdrop-blur-xs text-slate-800 border-slate-200/80 text-[10px] font-semibold uppercase tracking-wider shadow-xs"
-                      >
-                        {mod.categoria}
-                      </Badge>
-                    )}
-                  </div>
+        <div className="space-y-8">
+          {/* SEÇÃO 1: Módulos Paramétricos da tabela templatesengenharia (~736 módulos com math.js) */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
+                  ⚡
                 </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    Módulos Paramétricos de Engenharia
+                    <Badge
+                      variant="secondary"
+                      className="bg-slate-100 text-slate-700 font-mono text-xs"
+                    >
+                      {totalParametricos} módulos disponíveis
+                    </Badge>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Cálculo automático de MDF e ferragens vinculadas com fórmulas em tempo real.
+                  </p>
+                </div>
+              </div>
+            </div>
 
-                {/* Corpo do card */}
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <div className="space-y-3">
-                    {/* Título do módulo com edição inline */}
-                    {editingCardId === mod.id ? (
-                      <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                        <Input
-                          value={editingCardName}
-                          onChange={(e) => setEditingCardName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              handleSaveRename(e, mod.id)
-                            } else if (e.key === 'Escape') {
-                              e.preventDefault()
-                              handleCancelRename()
-                            }
-                          }}
-                          autoFocus
-                          disabled={savingCardName}
-                          className="h-8 text-xs font-semibold bg-white border-slate-300 focus:border-slate-600 rounded-lg"
-                          placeholder="Nome do módulo"
-                        />
-                        <div className="flex items-center gap-1.5">
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={savingCardName}
-                            onClick={(e) => handleSaveRename(e, mod.id)}
-                            className="h-7 px-2.5 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
-                          >
-                            {savingCardName ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Check className="w-3 h-3" />
+            {displayParametricos.length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-xs text-slate-500">
+                Nenhum módulo paramétrico encontrado para os filtros selecionados.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {displayParametricos.map((mod) => {
+                  const isPromob = mod.assinatura_visual?.some((t) =>
+                    t.toLowerCase().includes('promob'),
+                  )
+                  const regras = mod.regras_json || {}
+                  const numPecas = Array.isArray(regras.componentes) ? regras.componentes.length : 0
+                  const numFerragens = Array.isArray(regras.ferragens) ? regras.ferragens.length : 0
+
+                  return (
+                    <div
+                      key={mod.id}
+                      onClick={() => setModuloParametricoSelecionado(mod)}
+                      className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-slate-400 transition-all overflow-hidden flex flex-col group cursor-pointer"
+                    >
+                      {/* Topo do card com Blueprint e Badges */}
+                      <div className="relative w-full h-44 bg-linear-to-b from-slate-100 to-slate-200 flex items-center justify-center overflow-hidden border-b border-slate-100 rounded-t-2xl">
+                        <div className="flex flex-col items-center justify-center p-4 text-slate-500 group-hover:scale-105 transition-transform duration-300">
+                          <div className="w-14 h-14 rounded-2xl bg-white/90 border border-slate-200/80 shadow-2xs flex items-center justify-center text-slate-700 mb-2">
+                            <Layers className="w-7 h-7 text-slate-700" />
+                          </div>
+                          <span className="text-[11px] font-mono font-bold text-slate-700 tracking-wider">
+                            PARAMÉTRICO
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {numPecas} peças • {numFerragens} ferragens
+                          </span>
+                        </div>
+
+                        {/* Badges Flutuantes */}
+                        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
+                          <div className="flex items-center gap-1.5">
+                            {isPromob && (
+                              <Badge className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-[10px] tracking-wider uppercase shadow-xs">
+                                Promob
+                              </Badge>
                             )}
-                            Salvar
-                          </Button>
+                            <Badge
+                              variant="secondary"
+                              className="bg-white/90 backdrop-blur-xs text-slate-800 border-slate-200 text-[10px] font-semibold shadow-xs"
+                            >
+                              Fórmulas Ativas
+                            </Badge>
+                          </div>
+
+                          {mod.perfil_construtivo && (
+                            <Badge
+                              variant="outline"
+                              className="bg-sky-50/95 backdrop-blur-xs text-sky-800 border-sky-300 text-[10px] font-semibold shadow-xs"
+                            >
+                              ⚙️ {mod.perfil_construtivo}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Corpo do card */}
+                      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                        <div className="space-y-3">
+                          <h3 className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug group-hover:text-slate-800 transition-colors">
+                            {mod.nome_template}
+                          </h3>
+
+                          {/* Tags de Assinatura Visual */}
+                          <div className="flex flex-wrap items-center gap-1 text-xs">
+                            {mod.assinatura_visual
+                              .filter((t) => t.toLowerCase() !== 'promob')
+                              .slice(0, 4)
+                              .map((tag, tIdx) => (
+                                <Badge
+                                  key={tIdx}
+                                  variant="outline"
+                                  className="bg-slate-50 text-slate-600 border-slate-200 text-[10px] capitalize"
+                                >
+                                  {tag}
+                                </Badge>
+                              ))}
+                            {mod.assinatura_visual.length > 5 && (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                +{mod.assinatura_visual.length - 4}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Resumo Técnico */}
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+                            <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                              <span className="text-sm">📐</span>
+                              <span className="font-medium text-[11px] text-slate-800">
+                                {numPecas} peças fórmulas
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                              <span className="text-sm">🔩</span>
+                              <span className="font-medium text-[11px] text-slate-800">
+                                {numFerragens} ferragens
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Botões de Ação */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
                           <Button
                             type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={savingCardName}
-                            onClick={handleCancelRename}
-                            className="h-7 px-2 text-[11px] rounded-lg text-slate-500 hover:text-slate-800"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setModuloParametricoSelecionado(mod)
+                            }}
+                            className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-colors"
                           >
-                            <X className="w-3 h-3 mr-0.5" />
-                            Cancelar
+                            <Ruler className="w-3.5 h-3.5 mr-1.5" />
+                            Calcular Peças & Custo
                           </Button>
                         </div>
                       </div>
-                    ) : (
-                      <div className="flex items-start justify-between gap-1.5 group/title">
-                        <h3 className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug group-hover:text-slate-800 transition-colors flex-1">
-                          {mod.nome_template}
-                        </h3>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => handleStartRename(e, mod)}
-                          title="Renomear módulo"
-                          className="h-7 w-7 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg shrink-0 opacity-80 group-hover:opacity-100"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* Tags em linha */}
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                      {mod.categoria && (
-                        <Badge
-                          variant="outline"
-                          className="bg-slate-100 text-slate-800 border-slate-300 text-[10px] font-semibold"
-                        >
-                          {mod.categoria}
-                        </Badge>
-                      )}
-                      {mod.perfil_construtivo && (
-                        <Badge
-                          variant="outline"
-                          className="bg-sky-50 text-sky-800 border-sky-300 text-[10px] font-semibold"
-                          title="Perfil Construtivo"
-                        >
-                          ⚙️ {mod.perfil_construtivo}
-                        </Badge>
-                      )}
-                      {mod.dimensoes && (
-                        <Badge
-                          variant="outline"
-                          className="border-slate-200 bg-slate-50 text-slate-700 text-[10px] font-mono flex items-center gap-1"
-                        >
-                          <Ruler className="w-3 h-3 text-slate-700" />
-                          {mod.dimensoes}
-                        </Badge>
-                      )}
-                      {mod.material && (
-                        <Badge
-                          variant="outline"
-                          className="border-slate-200 bg-slate-50 text-slate-700 text-[10px] flex items-center gap-1 max-w-[170px] truncate"
-                          title={mod.material}
-                        >
-                          <Boxes className="w-3 h-3 text-slate-700" />
-                          <span className="truncate">{mod.material}</span>
-                        </Badge>
-                      )}
                     </div>
+                  )
+                })}
+              </div>
+            )}
 
-                    {/* Resumo técnico com contadores reais de MDF e Ferragens */}
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
-                      <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
-                        <span className="text-sm">🧱</span>
-                        <span className="font-medium text-[11px] text-slate-800">
-                          {pecasCount} peças de MDF
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
-                        <span className="text-sm">🔩</span>
-                        <span className="font-medium text-[11px] text-slate-800">
-                          {ferragensCount} ferragens/acessórios
-                        </span>
-                      </div>
-                    </div>
+            {/* Botão de Paginação / Carregar Mais */}
+            {hasMoreParametricos && (
+              <div className="pt-4 flex justify-center">
+                <Button
+                  onClick={handleLoadMoreParametricos}
+                  disabled={loadingMore}
+                  variant="outline"
+                  className="px-6 py-2 border-slate-300 text-slate-800 hover:bg-slate-100 font-semibold text-xs shadow-xs"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+                      Carregando mais módulos...
+                    </>
+                  ) : (
+                    `Carregar mais módulos (${displayParametricos.length} de ${totalParametricos})`
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
 
-                    {mod.descricao && (
-                      <p className="text-xs text-slate-500 line-clamp-2 pt-1">{mod.descricao}</p>
-                    )}
+          {/* SEÇÃO 2: Módulos Originais da tabela TemplatesEngenharia (permanecem intactos) */}
+          {filteredModulosAntigos.length > 0 && (
+            <div className="space-y-4 pt-6 border-t border-slate-200">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-bold">
+                    📁
                   </div>
-                  {/* Ações no rodapé do card */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
-                    <Button
-                      asChild
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-full bg-slate-900 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl transition-colors"
-                    >
-                      <Link to={`/orcamento-v2?modulo=${mod.id}`}>
-                        Usar no Orçamento
-                        <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-                      </Link>
-                    </Button>
-                  </div>{' '}
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      Módulos Padrões Clássicos
+                      <Badge
+                        variant="outline"
+                        className="bg-slate-50 text-slate-600 font-mono text-xs"
+                      >
+                        {filteredModulosAntigos.length} módulos
+                      </Badge>
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Módulos com fichas técnicas e planos de corte clássicos (tabela
+                      TemplatesEngenharia).
+                    </p>
+                  </div>
                 </div>
               </div>
-            )
-          })}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredModulosAntigos.map((mod) => {
+                  const pecasArr =
+                    (Array.isArray(mod.pecas_mdf) && mod.pecas_mdf.length > 0
+                      ? mod.pecas_mdf
+                      : Array.isArray((mod as any).composicao_mdf)
+                        ? (mod as any).composicao_mdf
+                        : null) ?? (Array.isArray(mod.pecas_mdf) ? mod.pecas_mdf : null)
+                  const pecasCount = pecasArr ? pecasArr.length : 0
+
+                  const ferragensArr =
+                    (Array.isArray(mod.ferragens) && mod.ferragens.length > 0
+                      ? mod.ferragens
+                      : Array.isArray((mod as any).ferragens_itens)
+                        ? (mod as any).ferragens_itens
+                        : null) ?? (Array.isArray(mod.ferragens) ? mod.ferragens : null)
+                  const ferragensCount = ferragensArr ? ferragensArr.length : 0
+
+                  const codigoDisplay =
+                    mod.codigo && mod.codigo.trim().length > 0
+                      ? mod.codigo.trim()
+                      : mod.nome_template
+                          .split(/\s+/)
+                          .filter(Boolean)
+                          .slice(0, 3)
+                          .map((w) => w[0]?.toUpperCase())
+                          .join('') || 'MOD'
+
+                  return (
+                    <div
+                      key={mod.id}
+                      onClick={() => setDetailModalId(mod.id)}
+                      className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-slate-400 transition-all overflow-hidden flex flex-col group cursor-pointer"
+                    >
+                      {/* Cabeçalho do card: Imagem real do módulo com fallback técnico */}
+                      <div className="relative w-full h-44 bg-slate-100 flex items-center justify-center overflow-hidden border-b border-slate-100 rounded-t-2xl">
+                        {mod.imagem_url ? (
+                          <img
+                            src={mod.imagem_url}
+                            alt={mod.nome_template}
+                            className="w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+                            onError={(e) => {
+                              ;(e.target as HTMLImageElement).style.display = 'none'
+                              const parent = (e.target as HTMLElement).parentElement
+                              const fallback = parent?.querySelector('.image-fallback-container')
+                              if (fallback) {
+                                ;(fallback as HTMLElement).style.display = 'flex'
+                              }
+                            }}
+                          />
+                        ) : null}
+
+                        <div
+                          className={`image-fallback-container w-full h-full flex flex-col items-center justify-center p-4 bg-slate-100 text-slate-400 ${
+                            mod.imagem_url ? 'hidden' : 'flex'
+                          }`}
+                        >
+                          <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center text-slate-500 mb-2 group-hover:border-slate-400 group-hover:text-slate-700 transition-colors">
+                            <Compass className="w-7 h-7" />
+                          </div>
+                          <span className="text-[11px] font-mono font-bold text-slate-600 tracking-wider">
+                            {codigoDisplay}
+                          </span>
+                          <span className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5 font-medium">
+                            Planta Técnica
+                          </span>
+                        </div>
+
+                        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-xs text-white font-mono text-xs font-bold border border-slate-700/60 shadow-xs">
+                            {codigoDisplay}
+                          </span>
+                          {mod.categoria && (
+                            <Badge
+                              variant="secondary"
+                              className="bg-white/90 backdrop-blur-xs text-slate-800 border-slate-200/80 text-[10px] font-semibold uppercase tracking-wider shadow-xs"
+                            >
+                              {mod.categoria}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Corpo do card */}
+                      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                        <div className="space-y-3">
+                          {editingCardId === mod.id ? (
+                            <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                              <Input
+                                value={editingCardName}
+                                onChange={(e) => setEditingCardName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    handleSaveRename(e, mod.id)
+                                  } else if (e.key === 'Escape') {
+                                    e.preventDefault()
+                                    handleCancelRename()
+                                  }
+                                }}
+                                autoFocus
+                                disabled={savingCardName}
+                                className="h-8 text-xs font-semibold bg-white border-slate-300 focus:border-slate-600 rounded-lg"
+                                placeholder="Nome do módulo"
+                              />
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={savingCardName}
+                                  onClick={(e) => handleSaveRename(e, mod.id)}
+                                  className="h-7 px-2.5 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                                >
+                                  {savingCardName ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Check className="w-3 h-3" />
+                                  )}
+                                  Salvar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={savingCardName}
+                                  onClick={handleCancelRename}
+                                  className="h-7 px-2 text-[11px] rounded-lg text-slate-500 hover:text-slate-800"
+                                >
+                                  <X className="w-3 h-3 mr-0.5" />
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-start justify-between gap-1.5 group/title">
+                              <h3 className="font-bold text-slate-900 text-sm line-clamp-2 leading-snug group-hover:text-slate-800 transition-colors flex-1">
+                                {mod.nome_template}
+                              </h3>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => handleStartRename(e, mod)}
+                                title="Renomear módulo"
+                                className="h-7 w-7 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg shrink-0 opacity-80 group-hover:opacity-100"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                            {mod.categoria && (
+                              <Badge
+                                variant="outline"
+                                className="bg-slate-100 text-slate-800 border-slate-300 text-[10px] font-semibold"
+                              >
+                                {mod.categoria}
+                              </Badge>
+                            )}
+                            {mod.perfil_construtivo && (
+                              <Badge
+                                variant="outline"
+                                className="bg-sky-50 text-sky-800 border-sky-300 text-[10px] font-semibold"
+                              >
+                                ⚙️ {mod.perfil_construtivo}
+                              </Badge>
+                            )}
+                            {mod.dimensoes && (
+                              <Badge
+                                variant="outline"
+                                className="border-slate-200 bg-slate-50 text-slate-700 text-[10px] font-mono flex items-center gap-1"
+                              >
+                                <Ruler className="w-3 h-3 text-slate-700" />
+                                {mod.dimensoes}
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+                            <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                              <span className="text-sm">🧱</span>
+                              <span className="font-medium text-[11px] text-slate-800">
+                                {pecasCount} peças de MDF
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                              <span className="text-sm">🔩</span>
+                              <span className="font-medium text-[11px] text-slate-800">
+                                {ferragensCount} ferragens
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                          <Button
+                            asChild
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl transition-colors"
+                          >
+                            <Link to={`/orcamento-v2?modulo=${mod.id}`}>
+                              Usar no Orçamento
+                              <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2118,6 +2430,31 @@ export default function LibraryPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Cálculo Paramétrico e Engenharia (math.js) */}
+      <ParametricModuleCalculatorModal
+        open={moduloParametricoSelecionado !== null}
+        onOpenChange={(open) => {
+          if (!open) setModuloParametricoSelecionado(null)
+        }}
+        modulo={moduloParametricoSelecionado}
+        vinculosMap={vinculosMap}
+        onOpenVincularFerragem={(nome) => {
+          setFerragemParaVincular(nome || null)
+          setModalFerragensOpen(true)
+        }}
+      />
+
+      {/* Modal de Gestão e Vínculo Global de Ferragens com CatalogoMateriais */}
+      <GerenciarFerragensModal
+        open={modalFerragensOpen}
+        onOpenChange={(open) => {
+          setModalFerragensOpen(open)
+          if (!open) setFerragemParaVincular(null)
+        }}
+        onVinculosUpdated={loadVinculos}
+        ferragemInicial={ferragemParaVincular}
+      />
     </div>
   )
 }
