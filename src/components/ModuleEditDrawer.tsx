@@ -76,6 +76,18 @@ import type { BudgetItem } from '@/data/mockData'
 import { AddFromCatalogModal } from '@/components/AddFromCatalogModal'
 import { AddCustomItemModal } from '@/components/AddCustomItemModal'
 import { ensureUniqueBudgetItemId } from '@/lib/budgetItemUtils'
+import { calcularBOMParametrico } from '@/lib/parametrico'
+import {
+  fetchTemplatesEngenhariaParametricos,
+  fetchTemplateParametricoById,
+  type TemplateEngenhariaParametrico,
+} from '@/services/templatesParametricos'
+import {
+  fetchFerragensVinculos,
+  type FerragemVinculo,
+  type VinculoComDetalhes,
+} from '@/services/ferragensVinculos'
+import { GerenciarFerragensModal } from '@/components/GerenciarFerragensModal'
 
 export interface ItemBOMOverride {
   description?: string
@@ -114,6 +126,8 @@ export interface ModuloSalvoData {
   composicao?: ComposicaoModuloSalva | null
   itensBOM: OrcamentoBOMItem[]
   ajustesBOM?: AjustesBOMModulo
+  template_parametrico_id?: string | null
+  espessura_caixaria?: 15 | 18 | null
 }
 
 /** Composição do módulo como é salva no orçamento (e recarregada para edição). */
@@ -139,6 +153,7 @@ interface ModuleEditDrawerProps {
   ambienteNome: string
   initialData?: ModuloSalvoData | null
   configEngenharia?: ConfigEngenharia | null
+  initialTemplateParametrico?: TemplateEngenhariaParametrico | null
   onSaveModulo: (modulo: ModuloSalvoData) => void
 }
 
@@ -154,6 +169,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   ambienteNome,
   initialData = null,
   configEngenharia: configEngenhariaProp,
+  initialTemplateParametrico = null,
   onSaveModulo,
 }) => {
   const [activeTab, setActiveTab] = useState<'foto-ia' | 'medidas-materiais' | 'engenharia-pecas'>(
@@ -165,6 +181,19 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   const [catalogoMateriais, setCatalogoMateriais] = useState<CatalogoMaterial[]>([])
   const [configEngenhariaLocal, setConfigEngenhariaLocal] = useState<ConfigEngenharia | null>(null)
   const [loadingData, setLoadingData] = useState(false)
+
+  // Módulos Paramétricos e Vínculos de Ferragens (templatesengenharia)
+  const [templateParametrico, setTemplateParametrico] =
+    useState<TemplateEngenhariaParametrico | null>(null)
+  const [templatesParametricosLista, setTemplatesParametricosLista] = useState<
+    TemplateEngenhariaParametrico[]
+  >([])
+  const [vinculosFerragens, setVinculosFerragens] = useState<VinculoComDetalhes[]>([])
+  const [filtroBuscaParametrico, setFiltroBuscaParametrico] = useState('')
+  const [filtroAmbienteParametrico, setFiltroAmbienteParametrico] = useState('Todos')
+  const [filtroTipoParametrico, setFiltroTipoParametrico] = useState('Todos')
+  const [isGerenciarFerragensModalOpen, setIsGerenciarFerragensModalOpen] = useState(false)
+  const [ferragensSemVinculoCount, setFerragensSemVinculoCount] = useState(0)
 
   // Usa config de engenharia passada via props (centralizada no OrcamentoV2) ou fallback local
   const configEngenharia = configEngenhariaProp ?? configEngenhariaLocal
@@ -237,43 +266,71 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
   } | null>(null)
   const [isMatchConfirmed, setIsMatchConfirmed] = useState(false)
 
-  // Carrega catálogo e templates quando o drawer abre pela primeira vez.
-  // Engenharia vem centralizada via props (OrcamentoV2); só busca se não vier via props.
+  // Carrega catálogo, templates clássicos, templates paramétricos e vínculos de ferragens quando o drawer abre
   useEffect(() => {
-    if (open && templates.length === 0) {
-      setLoadingData(true)
-      const promises: [
-        ReturnType<typeof fetchTemplatesEngenharia>,
-        ReturnType<typeof fetchCatalogoMateriais>,
-        Promise<any>,
-      ] = [
-        fetchTemplatesEngenharia(),
-        fetchCatalogoMateriais(6000),
-        configEngenhariaProp
-          ? Promise.resolve({ config: configEngenhariaProp })
-          : fetchConfigEngenharia(),
-      ]
+    if (open) {
+      if (templates.length === 0 || catalogoMateriais.length === 0) {
+        setLoadingData(true)
+        const promises: [
+          ReturnType<typeof fetchTemplatesEngenharia>,
+          ReturnType<typeof fetchCatalogoMateriais>,
+          Promise<any>,
+        ] = [
+          fetchTemplatesEngenharia(),
+          fetchCatalogoMateriais(6000),
+          configEngenhariaProp
+            ? Promise.resolve({ config: configEngenhariaProp })
+            : fetchConfigEngenharia(),
+        ]
 
-      Promise.all(promises)
-        .then(([tplRes, matRes, engRes]) => {
-          if (tplRes.data && tplRes.data.length > 0) {
-            setTemplates(tplRes.data)
-            // Correção 1.a: No modo de módulo novo, selectedTemplateId deve iniciar null/''
-            // NADA de selecionar o primeiro template automaticamente (evita injetar o móvel curvo).
-          }
-          if (matRes) {
-            setCatalogoMateriais(matRes)
-          }
-          if (!configEngenhariaProp && engRes?.config) {
-            setConfigEngenhariaLocal(engRes.config)
-          }
-        })
-        .catch((err) => {
-          console.error('Erro ao carregar dados do módulo:', err)
-        })
-        .finally(() => setLoadingData(false))
+        Promise.all(promises)
+          .then(([tplRes, matRes, engRes]) => {
+            if (tplRes.data && tplRes.data.length > 0) {
+              setTemplates(tplRes.data)
+            }
+            if (matRes) {
+              setCatalogoMateriais(matRes)
+            }
+            if (!configEngenhariaProp && engRes?.config) {
+              setConfigEngenhariaLocal(engRes.config)
+            }
+          })
+          .catch((err) => {
+            console.error('Erro ao carregar dados do módulo:', err)
+          })
+          .finally(() => setLoadingData(false))
+      }
+
+      // Carrega lista de templates paramétricos (templatesengenharia) uma vez
+      if (templatesParametricosLista.length === 0) {
+        fetchTemplatesEngenhariaParametricos({ pageSize: 1000 })
+          .then((res) => {
+            if (res.data) {
+              setTemplatesParametricosLista(res.data)
+            }
+          })
+          .catch((err) => console.error('Erro ao carregar templates paramétricos:', err))
+      }
+
+      // Carrega vínculos de ferragens uma vez ao abrir o drawer
+      if (vinculosFerragens.length === 0) {
+        fetchFerragensVinculos()
+          .then((res) => {
+            if (res.data) {
+              setVinculosFerragens(res.data)
+            }
+          })
+          .catch((err) => console.error('Erro ao carregar vínculos de ferragens:', err))
+      }
     }
-  }, [open, templates.length, configEngenhariaProp])
+  }, [
+    open,
+    templates.length,
+    catalogoMateriais.length,
+    templatesParametricosLista.length,
+    vinculosFerragens.length,
+    configEngenhariaProp,
+  ])
 
   // Inicialização / Reset de estado quando o drawer abre:
   // - Se for NOVO módulo: campo 'Nome do Módulo' SEMPRE vazio, reseta seletores e tabs
@@ -381,6 +438,20 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         const fixo = initialData.ajustesBOM?.valorUnitarioFixo
         setValorUnitarioFixo(typeof fixo === 'number' && fixo > 0 ? fixo : null)
 
+        // Restaura template paramétrico se o módulo salvo tiver template_parametrico_id
+        if (initialData.template_parametrico_id) {
+          fetchTemplateParametricoById(initialData.template_parametrico_id).then((res) => {
+            if (res.data) {
+              setTemplateParametrico(res.data)
+              if (res.data.perfil_construtivo) {
+                setPerfilConstrutivo(res.data.perfil_construtivo as PerfilConstrutivo)
+              }
+            }
+          })
+        } else {
+          setTemplateParametrico(null)
+        }
+
         // Carrega em manualItems os itens de initialData.itensBOM que sejam manuais/avulsos
         // (ID com prefixo manual-/catalog-/avulso- ou não gerados pela BOM paramétrica que usa prefixo bom-)
         if (initialData.itensBOM && Array.isArray(initialData.itensBOM)) {
@@ -436,6 +507,14 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         setManualItems([])
         setBomOverrides({})
         setRemovedBomIds([])
+        if (initialTemplateParametrico) {
+          setTemplateParametrico(initialTemplateParametrico)
+          if (initialTemplateParametrico.perfil_construtivo) {
+            setPerfilConstrutivo(initialTemplateParametrico.perfil_construtivo as PerfilConstrutivo)
+          }
+        } else {
+          setTemplateParametrico(null)
+        }
 
         markupDefinidoRef.current = false
         // Inicia markup com o padrão da engenharia do banco (fallback MARKUP_PADRAO)
@@ -874,6 +953,27 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
 
     const catalogoEfetivo = catalogoMateriais.length > 0 ? catalogoMateriais : undefined
 
+    // Se o módulo vier de um template paramétrico de templatesengenharia, usa o motor paramétrico
+    if (templateParametrico) {
+      const espessuraCaixariaCalc: 15 | 18 = (mdfInterno.espessura === 18 ? 18 : 15) as 15 | 18
+      const entradaParametrica = {
+        template: templateParametrico,
+        largura: dimensoes.largura,
+        altura: dimensoes.altura,
+        profundidade: dimensoes.profundidade,
+        espessura_caixaria: espessuraCaixariaCalc,
+        mdf_externo: mdfExterno,
+        mdf_interno: mdfInterno,
+        mdf_fundo: mdfFundo,
+        padrao_projeto: padraoProjeto,
+        catalogo: catalogoMateriais,
+        vinculos: vinculosFerragens,
+        markup_padrao: markupModuloEfetivo,
+        fator_perda_mdf: fatorPerdaMaterial,
+      }
+      return calcularBOMParametrico(entradaParametrica)
+    }
+
     return calcularBOM(
       moduloPayload,
       dimensoes,
@@ -888,6 +988,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       fatorPerdaMaterial,
     )
   }, [
+    templateParametrico,
     selectedTemplateId,
     nomeModulo,
     perfilConstrutivo,
@@ -897,6 +998,7 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
     mdfFundo,
     padraoProjeto,
     catalogoMateriais,
+    vinculosFerragens,
     markupModuloEfetivo,
     portasCount,
     gavetasCount,
@@ -941,6 +1043,12 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         }
       })
   }, [pecasBOM, manualItems, removedBomIds, bomOverrides, markupModuloEfetivo])
+
+  // Atualiza contador de ferragens sem vínculo a partir da lista consolidada da BOM
+  useEffect(() => {
+    const semVinculo = listaConsolidadaBOM.filter((it) => it.item_nao_cadastrado).length
+    setFerragensSemVinculoCount(semVinculo)
+  }, [listaConsolidadaBOM])
 
   // Custo técnico consolidado e valor de venda consolidado somando a lista inteira
   const totalCustoTecnico = useMemo(() => {
@@ -1196,6 +1304,12 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
         valorUnitarioFixo !== null && valorUnitarioFixo > 0 ? valorUnitarioFixo : null,
     }
 
+    const espessuraCaixariaSalva: 15 | 18 | null = templateParametrico
+      ? mdfInterno.espessura === 18
+        ? 18
+        : 15
+      : null
+
     onSaveModulo({
       moduloId: selectedTemplateId || undefined,
       nome: nomeLimpo,
@@ -1218,6 +1332,8 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
       composicao: composicaoSalva,
       itensBOM: todosItensConvertidos,
       ajustesBOM: ajustesBOMPayload,
+      template_parametrico_id: templateParametrico ? templateParametrico.id : null,
+      espessura_caixaria: espessuraCaixariaSalva,
     })
 
     onOpenChange(false)
@@ -1294,6 +1410,210 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   Nome comercial que aparecerá na proposta do ambiente "{ambienteNome}".
                 </p>
+              </div>
+
+              {/* Seletor de Módulo da Biblioteca Paramétrica (templatesengenharia) */}
+              <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs">
+                      ⚡
+                    </div>
+                    <Label className="text-xs font-bold uppercase tracking-wide text-slate-800 dark:text-slate-200">
+                      Módulo da Biblioteca Paramétrica
+                    </Label>
+                  </div>
+                  {templateParametrico && (
+                    <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 text-[10px] font-bold">
+                      Paramétrico Ativo
+                    </Badge>
+                  )}
+                </div>
+
+                {templateParametrico ? (
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block">
+                          Template Vinculado
+                        </span>
+                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {templateParametrico.nome_template}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setTemplateParametrico(null)
+                          toast({
+                            title: 'Template removido',
+                            description: 'O módulo voltou para o cálculo padrão.',
+                          })
+                        }}
+                        className="h-8 px-2.5 text-xs text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-800 dark:hover:bg-rose-950/40"
+                      >
+                        Remover template
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs">
+                      <div>
+                        <span className="text-[10px] font-medium text-slate-400 block">
+                          Perfil Construtivo
+                        </span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300 text-[11px]">
+                          {templateParametrico.perfil_construtivo || 'Não especificado'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-medium text-slate-400 block">Origem</span>
+                        <span className="font-mono text-slate-600 dark:text-slate-400 text-[11px]">
+                          templatesengenharia
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Vincule um gabarito paramétrico com fórmulas matemáticas em tempo real para
+                      peças e ferragens vinculadas ao catálogo.
+                    </p>
+
+                    {/* Barra de Busca + Filtros por Tags */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="sm:col-span-1">
+                        <Input
+                          placeholder="Buscar template..."
+                          value={filtroBuscaParametrico}
+                          onChange={(e) => setFiltroBuscaParametrico(e.target.value)}
+                          className="h-9 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <select
+                          value={filtroAmbienteParametrico}
+                          onChange={(e) => setFiltroAmbienteParametrico(e.target.value)}
+                          className="w-full h-9 text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2 text-slate-800 dark:text-slate-200 focus:outline-hidden"
+                        >
+                          <option value="Todos">Ambiente: Todos</option>
+                          <option value="Cozinha">Cozinha</option>
+                          <option value="Quarto">Quarto</option>
+                          <option value="Sala">Sala</option>
+                          <option value="Banheiro">Banheiro</option>
+                        </select>
+                      </div>
+                      <div>
+                        <select
+                          value={filtroTipoParametrico}
+                          onChange={(e) => setFiltroTipoParametrico(e.target.value)}
+                          className="w-full h-9 text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2 text-slate-800 dark:text-slate-200 focus:outline-hidden"
+                        >
+                          <option value="Todos">Tipo: Todos</option>
+                          <option value="altos">Altos</option>
+                          <option value="inferiores">Inferiores</option>
+                          <option value="ilhas">Ilhas</option>
+                          <option value="balcoes">Balcões</option>
+                          <option value="gaveteiros">Gaveteiros</option>
+                          <option value="despenseiros">Despenseiros</option>
+                          <option value="torres">Torres</option>
+                          <option value="sup-altos">Sup-Altos</option>
+                          <option value="sup-medios">Sup-Médios</option>
+                          <option value="sup-baixos">Sup-Baixos</option>
+                          <option value="cantoneiras">Cantoneiras</option>
+                          <option value="fechamentos">Fechamentos</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Lista scrollável de templates filtrados */}
+                    <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 divide-y divide-slate-100 dark:divide-slate-800">
+                      {templatesParametricosLista
+                        .filter((t) => {
+                          const busca = filtroBuscaParametrico.trim().toLowerCase()
+                          const tagsStr = (t.assinatura_visual || []).join(' ').toLowerCase()
+                          const nomeMatch =
+                            !busca ||
+                            t.nome_template.toLowerCase().includes(busca) ||
+                            tagsStr.includes(busca)
+                          const ambMatch =
+                            filtroAmbienteParametrico === 'Todos' ||
+                            tagsStr.includes(filtroAmbienteParametrico.toLowerCase())
+                          const tipoMatch =
+                            filtroTipoParametrico === 'Todos' ||
+                            tagsStr.includes(filtroTipoParametrico.toLowerCase())
+                          return t.ativo && nomeMatch && ambMatch && tipoMatch
+                        })
+                        .slice(0, 30)
+                        .map((tpl) => {
+                          const isPromob = (tpl.assinatura_visual || []).some((tag) =>
+                            tag.toLowerCase().includes('promob'),
+                          )
+                          return (
+                            <div
+                              key={tpl.id}
+                              className="p-2.5 flex items-center justify-between gap-3 hover:bg-white dark:hover:bg-slate-900 transition-colors"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-xs text-slate-900 dark:text-slate-100 truncate">
+                                    {tpl.nome_template}
+                                  </span>
+                                  {isPromob && (
+                                    <Badge className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-[9px] uppercase px-1.5 py-0 h-4">
+                                      Promob
+                                    </Badge>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
+                                  {tpl.perfil_construtivo} •{' '}
+                                  {(tpl.assinatura_visual || []).slice(0, 3).join(', ')}
+                                </span>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setTemplateParametrico(tpl)
+                                  if (tpl.perfil_construtivo) {
+                                    setPerfilConstrutivo(
+                                      tpl.perfil_construtivo as PerfilConstrutivo,
+                                    )
+                                  }
+                                  // Preenche o nome do módulo SEM o sufixo [PRM-...] SOMENTE se o nome ainda estiver vazio
+                                  if (!nomeModulo.trim()) {
+                                    const nomeSemSufixo = tpl.nome_template
+                                      .replace(/\s*\[PRM-\d+\]\s*/i, '')
+                                      .trim()
+                                    setNomeModulo(nomeSemSufixo)
+                                  }
+                                  // Se tiver a tag promob, pré-seleciona MDF interno 18mm mantendo a cor
+                                  if (isPromob) {
+                                    setMdfInterno((prev) => ({ ...prev, espessura: 18 }))
+                                  }
+                                  toast({
+                                    title: 'Template paramétrico selecionado',
+                                    description: `"${tpl.nome_template}" ativo para este módulo.`,
+                                  })
+                                }}
+                                className="h-7 text-xs font-semibold px-2.5 shrink-0 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              >
+                                Usar este
+                              </Button>
+                            </div>
+                          )
+                        })}
+                      {templatesParametricosLista.length === 0 && (
+                        <div className="p-4 text-center text-xs text-slate-500">
+                          Carregando biblioteca paramétrica...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Banner instrutivo de 1 móvel por vez */}
@@ -2212,6 +2532,33 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
               value="engenharia-pecas"
               className="mt-0 space-y-4 focus-visible:outline-none"
             >
+              {/* Aviso de ferragens sem vínculo no catálogo (item 1g) */}
+              {ferragensSemVinculoCount > 0 && (
+                <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">
+                        {ferragensSemVinculoCount}{' '}
+                        {ferragensSemVinculoCount === 1
+                          ? 'ferragem sem vínculo'
+                          : 'ferragens sem vínculo'}{' '}
+                        no catálogo:
+                      </span>{' '}
+                      o custo delas está zerado.
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsGerenciarFerragensModalOpen(true)}
+                    className="h-8 px-3 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white shrink-0 self-start sm:self-auto shadow-xs"
+                  >
+                    Vincular Ferragens
+                  </Button>
+                </div>
+              )}
+
               {/* Banner informativo de uso técnico com controle do Markup do Módulo */}
               <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -2609,6 +2956,25 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
           onClose={() => setIsCustomModalOpen(false)}
           markupEngenharia={markupEfetivo}
           onAddItem={handleAddManualItem}
+        />
+
+        {/* Modal para gerenciar vínculos de ferragens quando houver item não cadastrado */}
+        <GerenciarFerragensModal
+          open={isGerenciarFerragensModalOpen}
+          onOpenChange={(isOpen) => {
+            setIsGerenciarFerragensModalOpen(isOpen)
+            if (!isOpen) {
+              // Recarrega os vínculos ao fechar o modal para recalcular
+              fetchFerragensVinculos()
+                .then((res) => {
+                  if (res.data) {
+                    setVinculosFerragens(res.data)
+                  }
+                })
+                .catch((err) => console.error('Erro ao recarregar vínculos de ferragens:', err))
+            }
+          }}
+          catalogoMateriais={catalogoMateriais}
         />
 
         {/* Avisos de divergência de recálculo ou valor unitário fixado */}

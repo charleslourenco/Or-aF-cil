@@ -94,6 +94,10 @@ import {
 } from '@/components/ImportarProjetoPdfModal'
 import { fetchCatalogoMateriais, CatalogoMaterial } from '@/services/catalogo'
 import { fetchTemplatesEngenharia, TemplateEngenharia } from '@/services/templates'
+import {
+  fetchTemplateParametricoById,
+  type TemplateEngenhariaParametrico,
+} from '@/services/templatesParametricos'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
@@ -306,6 +310,8 @@ export default function OrcamentoV2() {
   const [targetAmbienteId, setTargetAmbienteId] = useState<string | null>(null)
   const [editingModuloData, setEditingModuloData] = useState<ModuloSalvoData | null>(null)
   const [editingModuloId, setEditingModuloId] = useState<string | null>(null)
+  const [initialTemplateParametrico, setInitialTemplateParametrico] =
+    useState<TemplateEngenhariaParametrico | null>(null)
 
   // Estados de engenharia financeira e dados da empresa
   const [perfilEmpresa, setPerfilEmpresa] = useState<PerfilEmpresa | null>(null)
@@ -411,6 +417,111 @@ export default function OrcamentoV2() {
   }
 
   const prevOrcamentoIdParamRef = useRef<string | null>(orcamentoIdParam)
+
+  // Abertura via URL com template paramétrico (?template=<id>&l=<largura>&a=<altura>&p=<profundidade>)
+  const templateParam = searchParams.get('template')
+  const larguraParam = searchParams.get('l')
+  const alturaParam = searchParams.get('a')
+  const profundidadeParam = searchParams.get('p')
+  const hasHandledTemplateParamRef = useRef(false)
+
+  useEffect(() => {
+    if (!templateParam || hasHandledTemplateParamRef.current) return
+    // Se estiver aguardando carga de orçamento por id, espera terminar
+    if (isLoadingOrcamento) return
+
+    hasHandledTemplateParamRef.current = true
+
+    fetchTemplateParametricoById(templateParam).then((res) => {
+      if (!res.data) {
+        toast({
+          title: 'Template não encontrado',
+          description: 'Não foi possível carregar o template paramétrico indicado na URL.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      const tpl = res.data
+      const larg = Number(larguraParam) || 800
+      const alt = Number(alturaParam) || 720
+      const prof = Number(profundidadeParam) || 550
+
+      // Se não houver nenhum ambiente, cria "Ambiente 1"
+      let targetAmbId: string
+      setAmbientes((prevAmbientes) => {
+        if (prevAmbientes.length === 0) {
+          const novoAmb: AmbienteV2 = {
+            id: novoIdLocal('amb'),
+            nome: 'Ambiente 1',
+            modulos: [],
+          }
+          targetAmbId = novoAmb.id
+          setActiveAmbienteId(novoAmb.id)
+          setExpandedAmbientes([novoAmb.id])
+          return [novoAmb]
+        } else {
+          // Se já houver ambiente, usa o ambiente ativo ou o primeiro
+          const ambAlvo = activeAmbienteId
+            ? prevAmbientes.find((a) => a.id === activeAmbienteId) || prevAmbientes[0]
+            : prevAmbientes[0]
+          targetAmbId = ambAlvo.id
+          setActiveAmbienteId(ambAlvo.id)
+          if (!expandedAmbientes.includes(ambAlvo.id)) {
+            setExpandedAmbientes((cur) => [...cur, ambAlvo.id])
+          }
+          return prevAmbientes
+        }
+      })
+
+      // Prepara os dados iniciais do módulo com template e medidas
+      const isPromob = (tpl.assinatura_visual || []).some((tag) =>
+        tag.toLowerCase().includes('promob'),
+      )
+      const nomeSemSufixo = tpl.nome_template.replace(/\s*\[PRM-\d+\]\s*/i, '').trim()
+
+      const initialModuloParam: ModuloSalvoData = {
+        nome: nomeSemSufixo,
+        descricaoTipo: tpl.perfil_construtivo || 'Módulo Paramétrico',
+        quantidade: 1,
+        valorUnitario: 0,
+        valorTotal: 0,
+        dimensoes: { largura: larg, altura: alt, profundidade: prof },
+        perfilConstrutivo: (tpl.perfil_construtivo as any) || 'Fechado Envelopado',
+        padraoProjeto: 'comercial',
+        mdfExterno: { cor: 'Branco TX', espessura: 18 },
+        mdfInterno: { cor: 'Branco TX', espessura: isPromob ? 18 : 15 },
+        mdfFundo: 'MDF 6mm Branco TX',
+        itensBOM: [],
+        template_parametrico_id: tpl.id,
+        espessura_caixaria: isPromob ? 18 : 15,
+      }
+
+      setTargetAmbienteId(targetAmbId!)
+      setEditingModuloId(null)
+      setEditingModuloData(initialModuloParam)
+      setInitialTemplateParametrico(tpl)
+      setIsDrawerOpen(true)
+
+      // Limpa os parâmetros da URL para não reabrir ao recarregar a página
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete('template')
+      nextParams.delete('l')
+      nextParams.delete('a')
+      nextParams.delete('p')
+      setSearchParams(nextParams, { replace: true })
+    })
+  }, [
+    templateParam,
+    larguraParam,
+    alturaParam,
+    profundidadeParam,
+    isLoadingOrcamento,
+    searchParams,
+    setSearchParams,
+    activeAmbienteId,
+    expandedAmbientes,
+  ])
 
   // Carregar orçamento existente se vier ID na URL (tem precedência sobre o rascunho de sessionStorage)
   useEffect(() => {
@@ -1201,6 +1312,7 @@ export default function OrcamentoV2() {
     setTargetAmbienteId(ambienteId)
     setEditingModuloId(null)
     setEditingModuloData(null)
+    setInitialTemplateParametrico(null)
     setIsDrawerOpen(true)
   }
 

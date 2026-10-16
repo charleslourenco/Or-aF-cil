@@ -14,6 +14,9 @@ export interface BudgetItem {
   /** Flag para itens de estimativa que não estão cadastrados no catálogo */
   item_nao_cadastrado?: boolean
   catalogo_id?: string | null
+  /** Flag para peças cuja fórmula do template paramétrico falhou na avaliação */
+  erro_formula?: boolean
+  template_parametrico_id?: string | null
 }
 
 export interface QuoteRecord {

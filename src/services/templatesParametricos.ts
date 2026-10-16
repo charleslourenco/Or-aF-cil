@@ -128,6 +128,44 @@ export async function fetchTemplatesEngenhariaParametricos(
 /**
  * Busca todas as tags únicas de assinatura_visual e nomes de ferragens dos módulos paramétricos.
  */
+/**
+ * Busca um único template paramétrico pelo seu ID.
+ */
+export async function fetchTemplateParametricoById(
+  id: string,
+): Promise<{ data: TemplateEngenhariaParametrico | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase
+      .from('templatesengenharia')
+      .select('id, nome_template, perfil_construtivo, assinatura_visual, regras_json, ativo')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (error) {
+      return { data: null, error: error.message }
+    }
+
+    if (!data) {
+      return { data: null, error: 'Template não encontrado' }
+    }
+
+    const item: TemplateEngenhariaParametrico = {
+      id: data.id,
+      nome_template: data.nome_template || 'Módulo Paramétrico Sem Nome',
+      perfil_construtivo: data.perfil_construtivo || 'Fechado Envelopado',
+      assinatura_visual: normalizarAssinaturaVisual(data.assinatura_visual),
+      regras_json: data.regras_json && typeof data.regras_json === 'object' ? data.regras_json : {},
+      ativo: Boolean(data.ativo),
+      origem_tabela: 'templatesengenharia',
+    }
+
+    return { data: item, error: null }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { data: null, error: msg }
+  }
+}
+
 export async function fetchMetadadosParametricos(): Promise<{
   tags: string[]
   ferragensNomes: string[]
