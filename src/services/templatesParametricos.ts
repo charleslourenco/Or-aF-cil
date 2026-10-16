@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabase/client'
 import type { PerfilConstrutivo } from '@/services/templates'
 import type { RegrasParametricasJson } from '@/lib/parametricEvaluator'
 
+export type { RegrasParametricasJson }
+
 export interface TemplateEngenhariaParametrico {
   id: string
   nome_template: string
