@@ -154,7 +154,10 @@ export async function fetchTemplateParametricoById(
       nome_template: data.nome_template || 'Módulo Paramétrico Sem Nome',
       perfil_construtivo: data.perfil_construtivo || 'Fechado Envelopado',
       assinatura_visual: normalizarAssinaturaVisual(data.assinatura_visual),
-      regras_json: data.regras_json && typeof data.regras_json === 'object' ? data.regras_json : {},
+      regras_json:
+        data.regras_json && typeof data.regras_json === 'object' && !Array.isArray(data.regras_json)
+          ? (data.regras_json as RegrasParametricasJson)
+          : {},
       ativo: Boolean(data.ativo),
       origem_tabela: 'templatesengenharia',
     }

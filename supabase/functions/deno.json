@@ -1,9 +1,9 @@
 {
   "_versions": {
     "smart-action": 4,
-    "analisar-imagem": 156,
-    "importar-pdf-modulo": 102,
-    "admin-create-user": 133,
+    "analisar-imagem": 158,
+    "importar-pdf-modulo": 104,
+    "admin-create-user": 135,
     "analisar-projeto-pdf": 4,
     "sincronizar-estoque-bender": 1
   }

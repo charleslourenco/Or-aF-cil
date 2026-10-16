@@ -955,21 +955,23 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
 
     // Se o módulo vier de um template paramétrico de templatesengenharia, usa o motor paramétrico
     if (templateParametrico) {
-      const espessuraCaixariaCalc: 15 | 18 = (mdfInterno.espessura === 18 ? 18 : 15) as 15 | 18
+      const espessuraCaixariaCalc: 15 | 18 = mdfInterno.espessura === 18 ? 18 : 15
       const entradaParametrica = {
         template: templateParametrico,
-        largura: dimensoes.largura,
-        altura: dimensoes.altura,
-        profundidade: dimensoes.profundidade,
-        espessura_caixaria: espessuraCaixariaCalc,
-        mdf_externo: mdfExterno,
-        mdf_interno: mdfInterno,
-        mdf_fundo: mdfFundo,
-        padrao_projeto: padraoProjeto,
+        dimensoes: {
+          largura: dimensoes.largura,
+          altura: dimensoes.altura,
+          profundidade: dimensoes.profundidade,
+        },
+        espessuraCaixaria: espessuraCaixariaCalc,
+        mdfExterno,
+        mdfInterno,
+        mdfFundo,
+        padraoProjeto,
         catalogo: catalogoMateriais,
         vinculos: vinculosFerragens,
-        markup_padrao: markupModuloEfetivo,
-        fator_perda_mdf: fatorPerdaMaterial,
+        markup: markupModuloEfetivo,
+        perdaPercent: fatorPerdaMaterial,
       }
       return calcularBOMParametrico(entradaParametrica)
     }
@@ -2974,7 +2976,6 @@ export const ModuleEditDrawer: React.FC<ModuleEditDrawerProps> = ({
                 .catch((err) => console.error('Erro ao recarregar vínculos de ferragens:', err))
             }
           }}
-          catalogoMateriais={catalogoMateriais}
         />
 
         {/* Avisos de divergência de recálculo ou valor unitário fixado */}
